@@ -73,7 +73,7 @@
 
 ## External Systems
 
-### PortOne V2 payment lookup [UNVERIFIED]
+### PortOne V2 payment lookup
 
 - The Package relies on PortOne returning, for a payment ID, the payment status.
 - The Package relies on PortOne returning the total paid amount when the payment status is paid.
