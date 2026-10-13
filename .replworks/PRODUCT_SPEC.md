@@ -221,6 +221,7 @@
   - EL-028: script file resources/js/portone-checkout.js. Purpose: run the payment sequence in the browser. User action: edit.
   - EL-029: controller file app/Http/Controllers/PortOneCheckoutController.php with the actions show, prepare, complete. Purpose: connect EL-025 and EL-028 to EL-004 and EL-005. User action: edit.
   - EL-030: route file routes/portone.php with the routes portone.checkout (GET), portone.checkout.prepare (POST), portone.checkout.complete (POST). Purpose: expose the actions of EL-029. User action: include in the routes of the Application.
+- EL-025 MUST load EL-028 when rendered; the Payer must not need to edit another view or layout to activate the checkout flow.
 - States of EL-025:
   - Initial: EL-026 enabled; EL-027 shows the idle state.
   - Loading: EL-026 disabled; EL-027 shows the in-progress state.

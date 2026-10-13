@@ -51,6 +51,7 @@
 - Configuration values MUST be read through config().
 - The stub script MUST be an ES module.
 - The stub script MUST import PortOne from @portone/browser-sdk/v2 (verify).
+- The published checkout view MUST load the stub script with Laravel Vite; the Application is responsible for building its published resources/js/portone-checkout.js entry.
 - JavaScript formatting and linting MUST be produced by Biome.
 - The stub view MUST use Blade only.
 

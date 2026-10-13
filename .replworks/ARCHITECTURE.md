@@ -240,6 +240,7 @@
   - Contain the start-payment button (EL-026) and the status slot (EL-027) (FR-044).
   - Render states: Initial (button enabled, idle), Loading (button disabled, in-progress), Success (button disabled, paid), Error (button enabled, error). Error caused by ERR-013 keeps the button disabled.
   - Hand the store ID and channel key to Checkout Script.
+  - Load Checkout Script as part of the rendered page.
 - Inputs: values and a missing-configuration flag from Checkout Controller; state changes from Checkout Script.
 - Outputs: what the Payer sees.
 - Owns: presentation of the four states; placeholder status text, which the Developer replaces.
@@ -517,7 +518,7 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-14 (owner-confirmed): Ambiguous: a listener throws. Decided: the exception propagates; CMP-10 does not catch it and does not respond 200. Why: PortOne can redeliver.
 - RD-15: Ambiguous: who reacts to an absent configuration value. Decided: each consumer at its point of use: CMP-08 for ERR-001, CMP-10 for ERR-002, CMP-11 for ERR-013. CMP-01 only reports absence.
 - RD-16: Ambiguous: whether CMP-07 reads the clock. Decided: CMP-07 supplies the time to CMP-06. Why: CMP-06 stays pure.
-- RD-17: Ambiguous: PRODUCT_SPEC names only two ways CMP-13 ends (no error code -> complete -> PAID; complete error). Silent: `prepare` fails, the SDK throws instead of returning, `complete` responds without an error but with a status other than PAID (for example, the record is already CANCELLED). Decided: Success only when `complete` responds with status PAID; every other outcome sets Error. Why: a terminal state is required and Success must imply PAID. **Gap-filling beyond the explicit text; to confirm.**
+- RD-17 (owner-confirmed): Ambiguous: PRODUCT_SPEC names only two ways CMP-13 ends (no error code -> complete -> PAID; complete error). Silent: `prepare` fails, the SDK throws instead of returning, `complete` responds without an error but with a status other than PAID (for example, the record is already CANCELLED). Decided: Success only when `complete` responds with status PAID; every other outcome sets Error. Why: a terminal state is required and Success must imply PAID.
 - RD-18: Ambiguous: ERR-014 and ERR-015 list only some exceptions for `complete`. Decided: CMP-11 maps exactly those; every other exception (for example a persistence failure) propagates unmodified to the host's error handling, and CMP-13 shows Error by RD-17. **Gap-filling; to confirm.**
 - RD-19: Ambiguous: repeated preparation for the same order. Decided: each preparation creates a new Payment record; nothing de-duplicates or expires PENDING records (FLOW-005 step 6 already leaves PENDING records behind).
 - RD-20: Ambiguous: duplicate webhook deliveries. Decided: one event per verified request, no de-duplication.

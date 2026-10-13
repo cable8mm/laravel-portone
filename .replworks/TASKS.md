@@ -197,7 +197,7 @@
     - An unauthenticated POST does not reach the controller action and changes no record (FR-042, AC-041).
     - Unit tests for the above pass.
 
-- [ ] T-015 Browser checkout flow against the live PG payment window
+- [X] T-015 Browser checkout flow against the live PG payment window
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-025 to EL-028), FR-048 to FR-052, FR-055, FR-056, FLOW-005; AC-045 to AC-049, AC-051, AC-052
   - External boundary: yes
   - Acceptance criteria:
