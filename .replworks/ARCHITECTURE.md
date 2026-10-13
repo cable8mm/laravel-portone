@@ -524,4 +524,4 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-21: Ambiguous: ownership of published stub files. Decided: transfer to the Application on publishing; the Package keeps no link.
 - RD-22: Ambiguous: who may hold secrets. Decided: the api secret only for CMP-08; the webhook secret for CMP-10 and, as an input, CMP-09.
 - RD-23: Ambiguous: where currency lives. Decided: only in CMP-13 as a constant; the Core handles plain integer amounts.
-- RD-24: PRODUCT_SPEC marks PortOne lookup, cancellation, the browser SDK, and the checkout stubs as [UNVERIFIED]. Decided: the assumptions are isolated to CMP-08 and CMP-13, so verification results can change only those two components.
+- RD-24: PRODUCT_SPEC marks PortOne lookup, cancellation, and the browser SDK as [UNVERIFIED]. Decided: the assumptions are isolated to CMP-08 and CMP-13, so verification results can change only those two components.

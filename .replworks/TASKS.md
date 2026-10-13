@@ -85,7 +85,7 @@
     - EL-008 returns null for an unknown Payment ID and for another model's Payment ID (AC-027).
     - Unit tests for the above pass.
 
-- [ ] T-008 Publish checkout stubs and render the checkout page
+- [X] T-008 Publish checkout stubs and render the checkout page
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-024 to EL-027, EL-029, EL-030), FR-040 to FR-044, ERR-013; AC-039, AC-040, AC-041 (checkout route), AC-042, AC-052 (Initial state), AC-053
   - External boundary: no
   - Acceptance criteria:
