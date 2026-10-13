@@ -55,7 +55,7 @@ class PaymentLedger
     }
 
     /**
-     * @param  array{status: string, paid_at: Carbon}  $values
+     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}  $values
      */
     public function update(Payment $payment, array $values): Payment
     {

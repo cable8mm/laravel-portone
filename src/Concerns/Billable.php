@@ -37,6 +37,11 @@ trait Billable
         return app(PaymentOperations::class)->complete($this, $paymentId);
     }
 
+    public function refund(string $paymentId, string $reason, ?int $amount = null): Payment
+    {
+        return app(PaymentOperations::class)->refund($this, $paymentId, $reason, $amount);
+    }
+
     /**
      * @return MorphMany<Payment, $this>
      */

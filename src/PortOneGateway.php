@@ -28,4 +28,22 @@ class PortOneGateway implements PaymentGateway
 
         return new GatewayPayment($payment->variant, $totalAmount);
     }
+
+    public function cancel(string $paymentId, string $reason, ?int $amount): void
+    {
+        $apiSecret = config('portone.api_secret');
+
+        if (! is_string($apiSecret) || $apiSecret === '') {
+            throw new ConfigurationException('The PortOne API secret is not configured.');
+        }
+
+        $baseUrl = config('portone.base_url');
+        $baseUrl = is_string($baseUrl) && $baseUrl !== '' ? $baseUrl : 'https://api.portone.io';
+        $client = new PortOneClient($apiSecret, new PortOneRequestExecutor($apiSecret, $baseUrl));
+        $client->payment->cancelPayment(
+            paymentId: $paymentId,
+            amount: $amount,
+            reason: $reason,
+        );
+    }
 }
