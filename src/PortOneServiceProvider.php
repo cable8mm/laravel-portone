@@ -22,6 +22,7 @@ class PortOneServiceProvider extends ServiceProvider
 
             $this->publishesMigrations([
                 __DIR__.'/../database/migrations/2026_10_13_000000_create_portone_customers_table.php' => $this->app->databasePath('migrations/2026_10_13_000000_create_portone_customers_table.php'),
+                __DIR__.'/../database/migrations/2026_10_13_000001_create_portone_payments_table.php' => $this->app->databasePath('migrations/2026_10_13_000001_create_portone_payments_table.php'),
             ], 'portone-migrations');
         }
     }

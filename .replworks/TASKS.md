@@ -58,7 +58,7 @@
     - Publishing under EL-020 places the definitions that persist Customer records in the Application, and applying them yields a working store (FR-003, AC-002).
     - Unit tests for the above pass.
 
-- [ ] T-006 Prepare a payment
+- [X] T-006 Prepare a payment
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-004), SCR-002 (EL-009, EL-010), FR-013 to FR-019, ERR-004, ERR-005; AC-002, AC-007, AC-008 to AC-012, AC-025
   - External boundary: no
   - Acceptance criteria:
