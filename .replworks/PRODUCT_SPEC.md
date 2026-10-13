@@ -296,7 +296,7 @@
 - FR-038: The Package MUST respond with HTTP 200 and an empty body after dispatching WebhookReceived.
 - FR-039: The Package MUST NOT create, modify, or delete any Customer record or Payment record while handling a webhook request.
 
-### Published checkout stubs [UNVERIFIED]
+### Published checkout stubs
 
 - FR-040: The Package MUST publish EL-025, EL-028, EL-029, and EL-030 to the paths stated in SCR-006 when vendor:publish runs with EL-024.
 - FR-041: The Package MUST NOT register the routes of EL-030 automatically.
