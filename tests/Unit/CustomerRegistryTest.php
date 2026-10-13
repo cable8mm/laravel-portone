@@ -112,11 +112,14 @@ class CustomerRegistryTest extends TestCase
             '--no-interaction' => true,
         ])->assertExitCode(0);
 
-        $paths = glob($this->app->databasePath('migrations/*_create_portone_customers_table.php'));
+        $paths = glob($this->app->databasePath('migrations/*_create_portone_*_table.php'));
         $this->assertIsArray($paths);
-        $this->assertCount(1, $paths);
-        $migration = $paths[0];
-        $this->publishedMigrations[] = $migration;
+        $this->assertCount(2, $paths);
+        array_push($this->publishedMigrations, ...$paths);
+        $customerMigrations = glob($this->app->databasePath('migrations/*_create_portone_customers_table.php'));
+        $this->assertIsArray($customerMigrations);
+        $this->assertCount(1, $customerMigrations);
+        $migration = $customerMigrations[0];
 
         $this->artisan('migrate', [
             '--path' => $migration,
