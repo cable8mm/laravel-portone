@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: "8.2"
+            laravel: "12.0"
+          - php: "8.3"
+            laravel: "12.0"
+          - php: "8.4"
+            laravel: "12.0"
+          - php: "8.5"
+            laravel: "12.0"
+          - php: "8.3"
+            laravel: "13.0"
+          - php: "8.4"
+            laravel: "13.0"
+          - php: "8.5"
+            laravel: "13.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer:v2
+          extensions: dom, mbstring, sqlite3, xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12"
+          cache: npm
+      - run: composer validate --strict
+      - run: >-
+          composer update --no-interaction --prefer-dist --with-all-dependencies
+          --with="illuminate/database:^${{ matrix.laravel }}"
+          --with="illuminate/support:^${{ matrix.laravel }}"
+      - run: composer audit --no-interaction
+      - run: composer format:check
+      - run: composer analyse
+      - run: composer test
+      - run: npm ci
+      - run: npm run check
+      - run: npm test

@@ -3,21 +3,22 @@
 ## 1. Languages / runtimes / frameworks / libraries
 
 - PHP: ^8.2
-- Laravel components (illuminate/\*): ^12.0 || ^13.0 (verify)
+- Laravel components (illuminate/\*): ^12.0 || ^13.0
 - The Package MUST NOT require laravel/framework.
 - Eloquent ORM and Laravel migrations: as provided by the illuminate/\* version in use.
-- cable8mm/portone-php: ^0.3 (verify)
+- cable8mm/portone-php: ^0.4
 - Composer: PSR-4 autoload, Laravel package discovery through composer.json extra.laravel.providers
-- orchestra/testbench: ^10.0 || ^11.0 (verify), including Workbench
-- PHPUnit: ^11.5 || ^12 (verify)
-- Laravel Pint: ^1.0 (verify)
-- PHPStan: ^2.0 (verify)
-- Larastan: ^3.0 (verify)
+- orchestra/testbench: ^10.0 || ^11.0, including Workbench
+- PHPUnit: ^11.5 || ^12
+- Laravel Pint: ^1.0
+- PHPStan: ^2.0
+- Larastan: ^3.0
+- Node.js: ^22.12 || >=24
 - npm: used for JavaScript development tooling only
-- @portone/browser-sdk: current stable version (verify); the Developer installs it in the Application; the Package MUST NOT install it in the Application
-- Vitest: ^4.0 (verify)
-- jsdom: ^27.0 (verify)
-- Biome: ^2.0 (verify)
+- @portone/browser-sdk: ^0.1.13; the Developer installs it in the Application; the Package MUST NOT install it in the Application
+- Vitest: ^4.0
+- jsdom: ^27.0
+- Biome: ^2.0
 - GitHub Actions: CI
 - Packagist: distribution
 - ngrok: development-only public URL for live webhook verification
@@ -98,7 +99,7 @@
 - The first release tag MUST be v0.1.0.
 - Packagist MUST update from GitHub on each pushed tag.
 - CI MUST run on every push and every pull request.
-- CI matrix MUST cover PHP 8.2, 8.3, 8.4, 8.5 with Laravel 12, and with Laravel 13 when Laravel 13 is released (verify).
+- CI matrix MUST cover PHP 8.2, 8.3, 8.4, 8.5 with Laravel 12, and PHP 8.3, 8.4, 8.5 with Laravel 13.
 
 ## 7. Security rules tied to the chosen stack
 

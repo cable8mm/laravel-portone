@@ -1,0 +1,13 @@
+* text=auto
+
+tests export-ignore
+workbench export-ignore
+package.json export-ignore
+package-lock.json export-ignore
+vitest.config.js export-ignore
+biome.json export-ignore
+phpstan.neon.dist export-ignore
+pint.json export-ignore
+phpunit.xml.dist export-ignore
+testbench.yaml export-ignore
+.github export-ignore
