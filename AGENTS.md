@@ -279,6 +279,11 @@ Never regenerate TASKS.md from scratch.
 These rules bind the AI. The human may edit TASKS.md directly at any time.
 Human edits are authoritative.
 
+Exception: when the human explicitly requests task reordering that requires
+renumbering, the AI may approve and apply the renumbering after reviewing task
+dependencies, completion status, and references. Update every affected task ID
+reference in the same change; preserve each task's content and completion state.
+
 ---
 
 ## HUMAN_OWNED_CHANGES

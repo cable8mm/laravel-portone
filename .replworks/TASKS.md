@@ -33,20 +33,7 @@
     - Recorded observation: the PortOne default API base address in effect when no override is supplied (FR-005).
     - The recorded observation contains no secret values.
 
-- [ ] T-004 Verify PortOne payment cancellation behavior
-  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment cancellation [UNVERIFIED]" (required by FR-025, FR-026, FR-027, FR-028, ERR-011)
-  - External boundary: yes (verification task)
-  - Acceptance criteria:
-    - An executable probe performs cancellations against the live PortOne test environment through the PortOne client capability that TECH_STACK.md requires for all PortOne API calls.
-    - Recorded observation and pass/fail: a cancellation request with a Payment ID and a reason, and no amount, is accepted and cancels the full remaining amount of a paid payment. Pass only if both hold.
-    - Recorded observation and pass/fail: a cancellation request with an amount smaller than the paid amount is accepted and cancels exactly that amount. Pass only if both hold.
-    - Recorded observation and pass/fail: a following cancellation request without an amount, on the partially cancelled payment, cancels the remaining amount. Pass only if both hold.
-    - Recorded observation: the failure behavior when the requested amount exceeds the remaining amount.
-    - Recorded observation: the failure behavior when the payment is already fully cancelled.
-    - The probe uses paid payments produced as in T-002.
-    - The recorded observation contains no secret values.
-
-- [ ] T-005 Publish and read configuration
+- [ ] T-004 Publish and read configuration
   - Satisfies: PRODUCT_SPEC.md SCR-004 (EL-015 to EL-020, EL-022, EL-023), FR-001, FR-002, FR-004; AC-001, AC-056
   - External boundary: no
   - Acceptance criteria:
@@ -56,7 +43,7 @@
     - With EL-017, EL-022, EL-023 unset, each value is reported as absent.
     - Unit tests for the above pass.
 
-- [ ] T-006 Billable customer identity
+- [ ] T-005 Billable customer identity
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-001, EL-002, EL-003), FR-003, FR-007, FR-008 to FR-012; AC-002, AC-004, AC-005, AC-006, AC-007
   - External boundary: no
   - Acceptance criteria:
@@ -71,7 +58,7 @@
     - Publishing under EL-020 places the definitions that persist Customer records in the Application, and applying them yields a working store (FR-003, AC-002).
     - Unit tests for the above pass.
 
-- [ ] T-007 Prepare a payment
+- [ ] T-006 Prepare a payment
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-004), SCR-002 (EL-009, EL-010), FR-013 to FR-019, ERR-004, ERR-005; AC-002, AC-007, AC-008 to AC-012, AC-025
   - External boundary: no
   - Acceptance criteria:
@@ -87,7 +74,7 @@
     - Payment records created satisfy ARCHITECTURE.md INV-07 for status PENDING.
     - Unit tests for the above pass.
 
-- [ ] T-008 Payment history
+- [ ] T-007 Payment history
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-007, EL-008), FR-031, FR-032; AC-026, AC-027
   - External boundary: no
   - Acceptance criteria:
@@ -98,7 +85,45 @@
     - EL-008 returns null for an unknown Payment ID and for another model's Payment ID (AC-027).
     - Unit tests for the above pass.
 
-- [ ] T-009 Complete a payment against live PortOne
+- [ ] T-008 Publish checkout stubs and render the checkout page
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-024 to EL-027, EL-029, EL-030), FR-040 to FR-044, ERR-013; AC-039, AC-040, AC-041 (checkout route), AC-042, AC-052 (Initial state), AC-053
+  - External boundary: no
+  - Acceptance criteria:
+    - After publishing under EL-024, the items EL-025, EL-028, EL-029, EL-030 exist in the Application at the paths stated in SCR-006 (FR-040, AC-039).
+    - Before the Application includes EL-030, the routes portone.checkout, portone.checkout.prepare, portone.checkout.complete do not exist; after it includes EL-030, they exist (FR-041, AC-040).
+    - An unauthenticated request to portone.checkout does not reach the controller action and creates no Payment record (FR-042, AC-041).
+    - An authenticated request to portone.checkout renders EL-025 containing EL-026 and EL-027, with EL-026 enabled and EL-027 in the idle state (FR-043, FR-044, AC-042, AC-052).
+    - The values of EL-022 and EL-023 are available to EL-028 on that render (AC-042).
+    - With EL-022 or EL-023 unset or empty, EL-025 renders in the Error state with EL-026 disabled (ERR-013, AC-053).
+    - EL-027 renders the text supplied for the current state, without changing any behavior.
+    - Unit tests for the above pass.
+
+- [ ] T-009 Prepare action of the checkout stubs
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030), FR-042, FR-045, FR-046, FR-047; AC-041 (prepare route), AC-043, AC-044
+  - External boundary: no
+  - Acceptance criteria:
+    - An unauthenticated POST to portone.checkout.prepare does not reach the controller action and creates no Payment record (FR-042, AC-041).
+    - An authenticated POST creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the constants defined in EL-029, regardless of any amount or order name in the request (FR-045, FR-046, AC-043).
+    - The response body equals the array returned by EL-010 for the created record (FR-047, AC-044).
+    - No request is sent to PortOne.
+    - A failure raised by preparation propagates unmodified to the Application's error handling (ARCHITECTURE.md RD-18, Failure Boundaries).
+    - Unit tests for the above pass.
+
+- [ ] T-010 Verify PortOne payment cancellation behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment cancellation [UNVERIFIED]" (required by FR-025, FR-026, FR-027, FR-028, ERR-011)
+  - External boundary: yes (verification task)
+  - Acceptance criteria:
+    - An executable probe performs cancellations against the live PortOne test environment through the PortOne client capability that TECH_STACK.md requires for all PortOne API calls.
+    - The probe runs through Testbench Workbench using the published stubs from T-008.
+    - Recorded observation and pass/fail: a cancellation request with a Payment ID and a reason, and no amount, is accepted and cancels the full remaining amount of a paid payment. Pass only if both hold.
+    - Recorded observation and pass/fail: a cancellation request with an amount smaller than the paid amount is accepted and cancels exactly that amount. Pass only if both hold.
+    - Recorded observation and pass/fail: a following cancellation request without an amount, on the partially cancelled payment, cancels the remaining amount. Pass only if both hold.
+    - Recorded observation: the failure behavior when the requested amount exceeds the remaining amount.
+    - Recorded observation: the failure behavior when the payment is already fully cancelled.
+    - The probe uses paid payments produced as in T-002.
+    - The recorded observation contains no secret values.
+
+- [ ] T-011 Complete a payment against live PortOne
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-005), FR-005, FR-006, FR-020 to FR-024, ERR-001, ERR-003, ERR-006, ERR-007, ERR-011; AC-013 to AC-017, AC-024, AC-036, AC-037, AC-038
   - External boundary: yes
   - Acceptance criteria:
@@ -119,11 +144,11 @@
     - After every outcome the record satisfies ARCHITECTURE.md INV-05, INV-07, INV-08.
     - Unit tests for the above pass.
 
-- [ ] T-010 Refund a payment against live PortOne
+- [ ] T-012 Refund a payment against live PortOne
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-006), FR-007, FR-025 to FR-030, ERR-001, ERR-003, ERR-008 to ERR-011, FLOW-002; AC-003, AC-017 to AC-024, AC-036
   - External boundary: yes
   - Acceptance criteria:
-    - The required live behavior (full cancellation, partial cancellation, rejected cancellation, as recorded by T-004) is observed at the boundary through the Package and matches the recorded observation.
+    - The required live behavior (full cancellation, partial cancellation, rejected cancellation, as recorded by T-010) is observed at the boundary through the Package and matches the recorded observation.
     - An E2E test exercises EL-004, a live payment, EL-005, and EL-006 through live PortOne.
     - Success: EL-006 with a reason and no amount on a PAID record sends a request with the Payment ID and reason and no amount, and returns status CANCELLED with cancelled_amount equal to amount (AC-018).
     - Success: on a PAID record of amount 10000, EL-006 with refund 3000 sends a request containing 3000 and returns PARTIALLY_CANCELLED with cancelled_amount 3000 (AC-019); a following EL-006 with 7000 returns CANCELLED with cancelled_amount 10000 (AC-020).
@@ -140,7 +165,7 @@
     - After every outcome the record satisfies ARCHITECTURE.md INV-05, INV-06, INV-07.
     - Unit tests for the above pass.
 
-- [ ] T-011 Receive PortOne webhooks as events
+- [ ] T-013 Receive PortOne webhooks as events
   - Satisfies: PRODUCT_SPEC.md SCR-003 (EL-011 to EL-014), SCR-005 (EL-021), FR-033 to FR-039, ERR-002, ERR-012, FLOW-003; AC-028 to AC-035
   - External boundary: yes
   - Acceptance criteria:
@@ -157,30 +182,6 @@
     - After any webhook request, including real deliveries relating to an existing Payment record, the Customer records and Payment records are identical to their state before the request (AC-034, ARCHITECTURE.md INV-14).
     - When a listener of EL-021 throws, the exception propagates and no HTTP 200 is returned (ARCHITECTURE.md RD-14).
     - The same verified request delivered twice dispatches two events (ARCHITECTURE.md RD-20).
-    - Unit tests for the above pass.
-
-- [ ] T-012 Publish checkout stubs and render the checkout page
-  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-024 to EL-027, EL-029, EL-030), FR-040 to FR-044, ERR-013; AC-039, AC-040, AC-041 (checkout route), AC-042, AC-052 (Initial state), AC-053
-  - External boundary: no
-  - Acceptance criteria:
-    - After publishing under EL-024, the items EL-025, EL-028, EL-029, EL-030 exist in the Application at the paths stated in SCR-006 (FR-040, AC-039).
-    - Before the Application includes EL-030, the routes portone.checkout, portone.checkout.prepare, portone.checkout.complete do not exist; after it includes EL-030, they exist (FR-041, AC-040).
-    - An unauthenticated request to portone.checkout does not reach the controller action and creates no Payment record (FR-042, AC-041).
-    - An authenticated request to portone.checkout renders EL-025 containing EL-026 and EL-027, with EL-026 enabled and EL-027 in the idle state (FR-043, FR-044, AC-042, AC-052).
-    - The values of EL-022 and EL-023 are available to EL-028 on that render (AC-042).
-    - With EL-022 or EL-023 unset or empty, EL-025 renders in the Error state with EL-026 disabled (ERR-013, AC-053).
-    - EL-027 renders the text supplied for the current state, without changing any behavior.
-    - Unit tests for the above pass.
-
-- [ ] T-013 Prepare action of the checkout stubs
-  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030), FR-042, FR-045, FR-046, FR-047; AC-041 (prepare route), AC-043, AC-044
-  - External boundary: no
-  - Acceptance criteria:
-    - An unauthenticated POST to portone.checkout.prepare does not reach the controller action and creates no Payment record (FR-042, AC-041).
-    - An authenticated POST creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the constants defined in EL-029, regardless of any amount or order name in the request (FR-045, FR-046, AC-043).
-    - The response body equals the array returned by EL-010 for the created record (FR-047, AC-044).
-    - No request is sent to PortOne.
-    - A failure raised by preparation propagates unmodified to the Application's error handling (ARCHITECTURE.md RD-18, Failure Boundaries).
     - Unit tests for the above pass.
 
 - [ ] T-014 Complete action of the checkout stubs against live PortOne
