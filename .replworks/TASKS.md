@@ -1,0 +1,214 @@
+# TASKS
+
+- [ ] T-001 Project foundation
+  - Satisfies: PRODUCT_SPEC.md Constraints
+  - External boundary: no
+  - Acceptance criteria:
+    - Every constraint in TECH_STACK.md is satisfied by the repository.
+    - Every check defined in TECH_STACK.md passes.
+    - The checks pass under each runtime and framework version combination required by PRODUCT_SPEC.md Constraints.
+
+- [ ] T-002 Verify PortOne browser SDK payment-window behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne browser SDK [UNVERIFIED]" (required by FR-049, FR-050, FR-051, FR-052)
+  - External boundary: yes (verification task)
+  - Acceptance criteria:
+    - An executable probe, independent of the Package's own code, runs in a real browser runtime against the live PortOne test environment and calls the SDK payment function with the value set listed in FR-049.
+    - Recorded observation: whether the PG payment window opens for the passed values.
+    - Recorded observation and pass/fail: for a payment the Payer completes in the live PG window, the returned result carries no error code. Pass only if no error code is present.
+    - Recorded observation and pass/fail: for a payment the Payer does not complete (window closed by the Payer), the returned result carries an error code. Pass only if an error code is present.
+    - Recorded observation: what happens when the SDK call itself fails to return a result (for example, rejects or throws), if it can be provoked live; if it cannot be provoked, that fact is recorded.
+    - Recorded observation: the live-accepted identifiers for the card payment method and the Korean won currency (the initial values of FR-050).
+    - The probe can produce a paid test payment on demand; the Payment ID and paid amount of at least one such payment are recorded.
+    - The recorded observation contains no secret values.
+
+- [ ] T-003 Verify PortOne payment lookup behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment lookup [UNVERIFIED]" (required by FR-021, FR-023, ERR-006, ERR-007, ERR-011)
+  - External boundary: yes (verification task)
+  - Acceptance criteria:
+    - An executable probe performs the lookup against the live PortOne test environment through the PortOne client capability that TECH_STACK.md requires for all PortOne API calls.
+    - Recorded observation and pass/fail: for the paid payment produced by T-002, the response reports a status of paid and a total paid amount equal to the amount that was paid. Pass only if both hold.
+    - Recorded observation and pass/fail: for a payment started but not paid, the response reports a status other than paid; the actual status value is recorded.
+    - Recorded observation: the failure behavior for a Payment ID PortOne does not know.
+    - Recorded observation: the failure behavior for an invalid api secret.
+    - Recorded observation: the PortOne default API base address in effect when no override is supplied (FR-005).
+    - The recorded observation contains no secret values.
+
+- [ ] T-004 Verify PortOne payment cancellation behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment cancellation [UNVERIFIED]" (required by FR-025, FR-026, FR-027, FR-028, ERR-011)
+  - External boundary: yes (verification task)
+  - Acceptance criteria:
+    - An executable probe performs cancellations against the live PortOne test environment through the PortOne client capability that TECH_STACK.md requires for all PortOne API calls.
+    - Recorded observation and pass/fail: a cancellation request with a Payment ID and a reason, and no amount, is accepted and cancels the full remaining amount of a paid payment. Pass only if both hold.
+    - Recorded observation and pass/fail: a cancellation request with an amount smaller than the paid amount is accepted and cancels exactly that amount. Pass only if both hold.
+    - Recorded observation and pass/fail: a following cancellation request without an amount, on the partially cancelled payment, cancels the remaining amount. Pass only if both hold.
+    - Recorded observation: the failure behavior when the requested amount exceeds the remaining amount.
+    - Recorded observation: the failure behavior when the payment is already fully cancelled.
+    - The probe uses paid payments produced as in T-002.
+    - The recorded observation contains no secret values.
+
+- [ ] T-005 Publish and read configuration
+  - Satisfies: PRODUCT_SPEC.md SCR-004 (EL-015 to EL-020, EL-022, EL-023), FR-001, FR-002, FR-004; AC-001, AC-056
+  - External boundary: no
+  - Acceptance criteria:
+    - In an Application that has only installed the Package, with no manual registration step, publishing under EL-019 creates the configuration file in the Application (FR-001, FR-002, AC-001).
+    - The values of EL-015, EL-016, EL-017, EL-018, EL-022, EL-023 are available under the configuration key `portone`, and each equals its environment variable (FR-004, AC-056).
+    - With EL-018 unset, its value is `portone/webhook`.
+    - With EL-017, EL-022, EL-023 unset, each value is reported as absent.
+    - Unit tests for the above pass.
+
+- [ ] T-006 Billable customer identity
+  - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-001, EL-002, EL-003), FR-003, FR-007, FR-008 to FR-012; AC-002, AC-004, AC-005, AC-006, AC-007
+  - External boundary: no
+  - Acceptance criteria:
+    - A model that uses the Billable trait exposes EL-001, EL-002, EL-003.
+    - For a model with no Customer record, EL-001 returns false and EL-002 returns null (AC-004).
+    - EL-003 returns a non-empty string; afterwards EL-001 returns true and EL-002 returns the same string (AC-005).
+    - Two EL-003 calls return the same Customer ID and leave exactly one Customer record (AC-006).
+    - Two models of different kinds that share the same key receive different Customer IDs and separate Customer records (ARCHITECTURE.md RD-02, INV-01).
+    - Customer IDs are unique across all Customer records (ARCHITECTURE.md INV-02).
+    - When two callers ensure the Customer record of the same model concurrently, exactly one Customer record exists and both receive the same Customer ID (ARCHITECTURE.md RD-03).
+    - A Customer record is retrievable after the process restarts (FR-012, AC-007).
+    - Publishing under EL-020 places the definitions that persist Customer records in the Application, and applying them yields a working store (FR-003, AC-002).
+    - Unit tests for the above pass.
+
+- [ ] T-007 Prepare a payment
+  - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-004), SCR-002 (EL-009, EL-010), FR-013 to FR-019, ERR-004, ERR-005; AC-002, AC-007, AC-008 to AC-012, AC-025
+  - External boundary: no
+  - Acceptance criteria:
+    - EL-004 with amount 10000 and order name "Order A" returns a Payment record with status PENDING, amount 10000, order_name "Order A", cancelled_amount 0, paid_at null, and a non-empty payment_id (AC-008).
+    - The returned record's customer_id equals the model's Customer ID; for a model with no Customer record, exactly one Customer record exists afterwards and its Customer ID equals the record's customer_id (AC-009).
+    - Two EL-004 calls return different payment_id values (AC-010, ARCHITECTURE.md INV-03).
+    - EL-004 sends no request to PortOne (AC-011).
+    - EL-010 returns an array with exactly the keys paymentId, orderName, totalAmount, customerId holding the matching record values (AC-012).
+    - EL-004 with amount 0 or a negative amount fails as ERR-004, and with an empty order name fails as ERR-005; in both cases neither a Payment record nor a Customer record is created (AC-025, ARCHITECTURE.md RD-04).
+    - When creating the Payment record fails after the Customer record was ensured, no Customer record created by that call remains (ARCHITECTURE.md RD-04).
+    - A Payment record is retrievable after the process restarts (FR-018, AC-007).
+    - Publishing under EL-020 places the definitions that persist Payment records in the Application, and applying them yields a working store (AC-002).
+    - Payment records created satisfy ARCHITECTURE.md INV-07 for status PENDING.
+    - Unit tests for the above pass.
+
+- [ ] T-008 Payment history
+  - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-007, EL-008), FR-031, FR-032; AC-026, AC-027
+  - External boundary: no
+  - Acceptance criteria:
+    - EL-007 returns the model's Payment records ordered by created_at descending (AC-026).
+    - EL-007 returns zero records for a model with no Payment records (SCR-001 Empty state).
+    - EL-007 never includes records of another model, including a model of a different kind with the same key (ARCHITECTURE.md INV-01, RD-02).
+    - EL-008 returns the matching Payment record of the model (AC-027).
+    - EL-008 returns null for an unknown Payment ID and for another model's Payment ID (AC-027).
+    - Unit tests for the above pass.
+
+- [ ] T-009 Complete a payment against live PortOne
+  - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-005), FR-005, FR-006, FR-020 to FR-024, ERR-001, ERR-003, ERR-006, ERR-007, ERR-011; AC-013 to AC-017, AC-024, AC-036, AC-037, AC-038
+  - External boundary: yes
+  - Acceptance criteria:
+    - The required live behavior (paid, not paid, unknown payment, invalid credential, as recorded by T-003) is observed at the boundary through the Package and matches the recorded observation.
+    - An E2E test exercises EL-004, a live payment made with the EL-010 values, and EL-005 through live PortOne.
+    - Success: EL-005 on a PENDING record that was paid live returns status PAID with a non-null paid_at (AC-013).
+    - Success: a second EL-005 call on that record returns it unchanged and sends no request to PortOne (AC-014).
+    - Failure: EL-005 on a record whose live payment was not paid fails as ERR-006 and leaves the record unchanged (AC-015).
+    - Failure: EL-005 where the live total paid amount differs from the record's amount fails as ERR-007 and leaves the record unchanged (AC-016).
+    - Failure: with an invalid api secret, the PortOne failure surfaces unmodified, the record is unchanged, and the failure message contains no secret value (ERR-011, AC-024, TECH_STACK.md security rules).
+    - Failure: a Payment ID PortOne does not know surfaces as ERR-011 and not as ERR-006 (ARCHITECTURE.md RD-12).
+    - With EL-015 unset, EL-005 on a PENDING record fails as ERR-001, sends no request, and leaves the record unchanged (AC-036).
+    - An unknown Payment ID and another model's Payment ID fail as ERR-003 and send no request (AC-017).
+    - The order of checks follows ARCHITECTURE.md RD-09: an unknown Payment ID with EL-015 unset fails as ERR-003, and a non-PENDING record with EL-015 unset is returned unchanged.
+    - With EL-017 unset, requests go to the PortOne default API base address; with EL-017 set, requests go to its value (AC-037, AC-038).
+    - Two concurrent EL-005 calls on one PENDING record result in one PAID record and exactly one lookup request (ARCHITECTURE.md RD-10, INV-11).
+    - A local write failure after PortOne answered follows ARCHITECTURE.md RD-11: a later attempt that succeeds returns the PAID record; when all attempts fail the failure propagates unmodified and the record stays PENDING.
+    - After every outcome the record satisfies ARCHITECTURE.md INV-05, INV-07, INV-08.
+    - Unit tests for the above pass.
+
+- [ ] T-010 Refund a payment against live PortOne
+  - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-006), FR-007, FR-025 to FR-030, ERR-001, ERR-003, ERR-008 to ERR-011, FLOW-002; AC-003, AC-017 to AC-024, AC-036
+  - External boundary: yes
+  - Acceptance criteria:
+    - The required live behavior (full cancellation, partial cancellation, rejected cancellation, as recorded by T-004) is observed at the boundary through the Package and matches the recorded observation.
+    - An E2E test exercises EL-004, a live payment, EL-005, and EL-006 through live PortOne.
+    - Success: EL-006 with a reason and no amount on a PAID record sends a request with the Payment ID and reason and no amount, and returns status CANCELLED with cancelled_amount equal to amount (AC-018).
+    - Success: on a PAID record of amount 10000, EL-006 with refund 3000 sends a request containing 3000 and returns PARTIALLY_CANCELLED with cancelled_amount 3000 (AC-019); a following EL-006 with 7000 returns CANCELLED with cancelled_amount 10000 (AC-020).
+    - Success: EL-006 with no amount on a PARTIALLY_CANCELLED record cancels the remaining amount and returns CANCELLED with cancelled_amount equal to amount (FR-028, FR-029).
+    - Failure: EL-006 on a PENDING or CANCELLED record fails as ERR-008 and sends no request (AC-021).
+    - Failure: EL-006 with an empty reason fails as ERR-009 and sends no request (AC-022).
+    - Failure: EL-006 with refund 0 or greater than amount minus cancelled_amount fails as ERR-010 and sends no request (AC-023).
+    - Failure: a PortOne failure surfaces unmodified and the record is unchanged (ERR-011, AC-024).
+    - Failure: with EL-015 unset, EL-006 on a PAID record fails as ERR-001, sends no request, and leaves the record unchanged (AC-036); an unknown Payment ID and another model's Payment ID fail as ERR-003 (AC-017).
+    - The order of checks follows ARCHITECTURE.md RD-09.
+    - Two concurrent full refunds of one PAID record result in exactly one cancellation request; the second fails as ERR-008 (ARCHITECTURE.md RD-10).
+    - A local write failure after PortOne accepted the cancellation follows ARCHITECTURE.md RD-11 and the Failure Boundaries entry for refund: the write is retried without re-sending the cancellation request; when all attempts fail the failure propagates unmodified.
+    - A model that uses the Billable trait exposes EL-001 through EL-008 (AC-003).
+    - After every outcome the record satisfies ARCHITECTURE.md INV-05, INV-06, INV-07.
+    - Unit tests for the above pass.
+
+- [ ] T-011 Receive PortOne webhooks as events
+  - Satisfies: PRODUCT_SPEC.md SCR-003 (EL-011 to EL-014), SCR-005 (EL-021), FR-033 to FR-039, ERR-002, ERR-012, FLOW-003; AC-028 to AC-035
+  - External boundary: yes
+  - Acceptance criteria:
+    - The required live behavior is observed at the boundary: real webhook requests sent by PortOne, triggered by a live payment completion and a live cancellation, reach the webhook route; their headers and payload are recorded, and test doubles for this task are traced to that recording.
+    - An E2E test exercises the product through live PortOne delivery to a publicly reachable URL.
+    - Success: a real delivery from PortOne dispatches exactly one EL-021 event whose webhookId equals the webhook-id header, and the response is HTTP 200 with an empty body (AC-031).
+    - Failure: a captured live request with a tampered signature returns HTTP 400 and dispatches no event (ERR-012, AC-033).
+    - With EL-018 unset, a POST to `portone/webhook` reaches the handler; with EL-018 set to a custom path, a POST to that path reaches the handler and `portone/webhook` does not (AC-028, AC-029).
+    - A POST without authentication and without a forgery token reaches the handler (AC-030).
+    - A request with a valid signature and an unrecognized webhook type dispatches EL-021 and returns HTTP 200 (AC-032).
+    - A request with an invalid signature, a missing required header, or a timestamp outside the allowed range returns HTTP 400 and dispatches no event (AC-033).
+    - A request with a valid signature and a body that cannot be turned into a verified webhook returns HTTP 400 and dispatches no event (ARCHITECTURE.md RD-13).
+    - With EL-016 unset, a webhook request returns HTTP 500 and dispatches no event (AC-035).
+    - After any webhook request, including real deliveries relating to an existing Payment record, the Customer records and Payment records are identical to their state before the request (AC-034, ARCHITECTURE.md INV-14).
+    - When a listener of EL-021 throws, the exception propagates and no HTTP 200 is returned (ARCHITECTURE.md RD-14).
+    - The same verified request delivered twice dispatches two events (ARCHITECTURE.md RD-20).
+    - Unit tests for the above pass.
+
+- [ ] T-012 Publish checkout stubs and render the checkout page
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-024 to EL-027, EL-029, EL-030), FR-040 to FR-044, ERR-013; AC-039, AC-040, AC-041 (checkout route), AC-042, AC-052 (Initial state), AC-053
+  - External boundary: no
+  - Acceptance criteria:
+    - After publishing under EL-024, the items EL-025, EL-028, EL-029, EL-030 exist in the Application at the paths stated in SCR-006 (FR-040, AC-039).
+    - Before the Application includes EL-030, the routes portone.checkout, portone.checkout.prepare, portone.checkout.complete do not exist; after it includes EL-030, they exist (FR-041, AC-040).
+    - An unauthenticated request to portone.checkout does not reach the controller action and creates no Payment record (FR-042, AC-041).
+    - An authenticated request to portone.checkout renders EL-025 containing EL-026 and EL-027, with EL-026 enabled and EL-027 in the idle state (FR-043, FR-044, AC-042, AC-052).
+    - The values of EL-022 and EL-023 are available to EL-028 on that render (AC-042).
+    - With EL-022 or EL-023 unset or empty, EL-025 renders in the Error state with EL-026 disabled (ERR-013, AC-053).
+    - EL-027 renders the text supplied for the current state, without changing any behavior.
+    - Unit tests for the above pass.
+
+- [ ] T-013 Prepare action of the checkout stubs
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030), FR-042, FR-045, FR-046, FR-047; AC-041 (prepare route), AC-043, AC-044
+  - External boundary: no
+  - Acceptance criteria:
+    - An unauthenticated POST to portone.checkout.prepare does not reach the controller action and creates no Payment record (FR-042, AC-041).
+    - An authenticated POST creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the constants defined in EL-029, regardless of any amount or order name in the request (FR-045, FR-046, AC-043).
+    - The response body equals the array returned by EL-010 for the created record (FR-047, AC-044).
+    - No request is sent to PortOne.
+    - A failure raised by preparation propagates unmodified to the Application's error handling (ARCHITECTURE.md RD-18, Failure Boundaries).
+    - Unit tests for the above pass.
+
+- [ ] T-014 Complete action of the checkout stubs against live PortOne
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030), FR-042, FR-053, FR-054, ERR-014, ERR-015; AC-041 (complete route), AC-050, AC-054, AC-055
+  - External boundary: yes
+  - Acceptance criteria:
+    - The required live behavior (lookup outcomes recorded by T-003) is observed at the boundary through the complete route and matches the recorded observation.
+    - An E2E test exercises the prepare route, a live payment, and the complete route through live PortOne.
+    - Success: POST to portone.checkout.complete with the Payment ID of a live-paid record responds with status PAID, and the record is PAID; any amount in the request is ignored (FR-053, FR-054, AC-050).
+    - Failure: a live not-paid payment, an unknown Payment ID, another user's Payment ID, and a live amount mismatch each respond HTTP 422 with the key `error` (ERR-014, AC-054).
+    - Failure: a live PortOne failure (invalid api secret) and EL-015 unset each respond HTTP 500 with the key `error` (ERR-015, AC-055).
+    - Failure: any other exception, such as a local write failure, propagates unmodified to the Application's error handling (ARCHITECTURE.md RD-18).
+    - An unauthenticated POST does not reach the controller action and changes no record (FR-042, AC-041).
+    - Unit tests for the above pass.
+
+- [ ] T-015 Browser checkout flow against the live PG payment window
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-025 to EL-028), FR-048 to FR-052, FR-055, FR-056, FLOW-005; AC-045 to AC-049, AC-051, AC-052
+  - External boundary: yes
+  - Acceptance criteria:
+    - The required live behavior (completed payment returns no error code, non-completed payment returns an error code, as recorded by T-002) is observed in a real browser runtime through EL-028 and matches the recorded observation.
+    - An E2E test exercises the product from the Payer's click on EL-026 through live PortOne and the PG payment window to the final state of EL-025.
+    - Success: after the Payer completes the payment, EL-025 is in the Success state with EL-026 disabled, and the Payment record is PAID (FLOW-005 step 5, AC-051, AC-052).
+    - Failure: when the Payer does not complete the payment, EL-025 is in the Error state with EL-026 enabled, the complete route receives no request, and the Payment record keeps status PENDING (FLOW-005 step 6, AC-048).
+    - Clicking EL-026 requests the prepare route, disables EL-026, and shows the Loading state (FR-048, AC-045, AC-052).
+    - The SDK payment function is called with the store ID, channel key, paymentId, orderName, totalAmount, customerId, the payment method constant, and the currency constant (FR-049, AC-046).
+    - The two constants exist at the top of EL-028 with the initial values of FR-050 (AC-047).
+    - A result without an error code sends a request containing the Payment ID to the complete route (FR-052, AC-049).
+    - A complete response with status PAID sets Success; a complete response that is an error sets Error (FR-055, FR-056, AC-051).
+    - A failed prepare request, a failure of the SDK call itself, and a complete response without an error whose status is not PAID each set Error, and Success never occurs without status PAID (ARCHITECTURE.md RD-17, INV-18).
+    - EL-026 is disabled in Loading and Success and enabled in Initial and Error (AC-052).
+    - Unit tests with an SDK test double traced to the T-002 recording pass.

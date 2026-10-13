@@ -1,0 +1,119 @@
+# TECH_STACK
+
+## 1. Languages / runtimes / frameworks / libraries
+
+- PHP: ^8.2
+- Laravel components (illuminate/\*): ^12.0 || ^13.0 (verify)
+- The Package MUST NOT require laravel/framework.
+- Eloquent ORM and Laravel migrations: as provided by the illuminate/\* version in use.
+- cable8mm/portone-php: ^0.3 (verify)
+- Composer: PSR-4 autoload, Laravel package discovery through composer.json extra.laravel.providers
+- orchestra/testbench: ^10.0 || ^11.0 (verify), including Workbench
+- PHPUnit: ^11.5 || ^12 (verify)
+- Laravel Pint: ^1.0 (verify)
+- PHPStan: ^2.0 (verify)
+- Larastan: ^3.0 (verify)
+- npm: used for JavaScript development tooling only
+- @portone/browser-sdk: current stable version (verify); the Developer installs it in the Application; the Package MUST NOT install it in the Application
+- Vitest: ^4.0 (verify)
+- jsdom: ^27.0 (verify)
+- Biome: ^2.0 (verify)
+- GitHub Actions: CI
+- Packagist: distribution
+- ngrok: development-only public URL for live webhook verification
+
+## 2. Framework- or tool-mandated paths and file names only
+
+- composer.json at the repository root
+- composer.lock MUST NOT be committed and MUST be listed in .gitignore
+- phpunit.xml.dist at the repository root
+- testbench.yaml at the repository root
+- workbench/ for Testbench Workbench files
+- pint.json at the repository root
+- phpstan.neon.dist at the repository root
+- package.json and package-lock.json at the repository root; package-lock.json MUST be committed
+- vitest.config.js at the repository root
+- biome.json at the repository root
+- .github/workflows/ for GitHub Actions workflows
+- .gitattributes at the repository root
+- .env.example at the repository root
+- config/portone.php as the published configuration file name
+- LICENSE at the repository root
+
+## 3. Coding conventions specific to the chosen stack
+
+- PHP files MUST declare strict_types=1.
+- PHP formatting MUST be produced by Laravel Pint with the laravel preset.
+- PHP code MUST pass PHPStan with Larastan at level 6 with zero errors.
+- All PortOne API calls MUST go through cable8mm/portone-php.
+- Persistence MUST use Eloquent models and migrations.
+- Configuration values MUST be read through config().
+- The stub script MUST be an ES module.
+- The stub script MUST import PortOne from @portone/browser-sdk/v2 (verify).
+- JavaScript formatting and linting MUST be produced by Biome.
+- The stub view MUST use Blade only.
+
+## 4. Testing rules
+
+- PHP tests MUST use PHPUnit with an Orchestra Testbench test case.
+- PHP test class names MUST end with Test.
+- PHP test files MUST be under tests/.
+- PHP tests MUST NOT send real network requests.
+- PHP tests MUST replace PortOne client calls with test doubles.
+- JavaScript tests MUST use Vitest with jsdom.
+- JavaScript tests MUST replace @portone/browser-sdk with a mock.
+- JavaScript test file names MUST end with .test.js.
+- Live verification MUST run through Testbench Workbench using the published stubs.
+- Live webhook verification MUST use an ngrok public URL.
+- Live verification MUST NOT run in CI.
+- Coverage threshold: None.
+- Coverage tooling MUST NOT be configured.
+- CI MUST run: composer validate, Pint in check mode, PHPStan, PHPUnit, Biome check, Vitest.
+
+## 5. Configuration rules
+
+- Configuration MUST live in config/portone.php and MUST be merged by the service provider.
+- Setting names and environment variable names are defined only in PRODUCT_SPEC.md.
+- env() MUST be called only inside config/portone.php.
+- Secrets MUST be supplied through environment variables.
+- Secrets MUST NOT be hardcoded.
+- Secrets MUST NOT be committed.
+- The Package MUST NOT read .env files directly.
+- The development .env MUST be listed in .gitignore.
+- .env.example MUST list every environment variable name and MUST NOT contain values.
+
+## 6. Build, packaging, and release rules
+
+- PHP code MUST NOT have a build step.
+- Stub JavaScript MUST be published as source and MUST NOT be bundled or compiled by the Package.
+- Composer package name: cable8mm/laravel-portone
+- composer.json license MUST be MIT.
+- composer.json require MUST contain only php, illuminate/\* components, and cable8mm/portone-php.
+- composer.json require-dev MUST contain orchestra/testbench, phpunit/phpunit, laravel/pint, phpstan/phpstan, and larastan/larastan.
+- package.json MUST list Vitest, jsdom, Biome, and @portone/browser-sdk under devDependencies only.
+- Dev-only files MUST be excluded from the distribution archive with export-ignore in .gitattributes: tests/, workbench/, package.json, package-lock.json, vitest.config.js, biome.json, phpstan.neon.dist, pint.json, phpunit.xml.dist, testbench.yaml, .github/.
+- Distribution target: public GitHub repository and Packagist.
+- Versioning: SemVer.
+- Release tags MUST match vMAJOR.MINOR.PATCH.
+- The first release tag MUST be v0.1.0.
+- Packagist MUST update from GitHub on each pushed tag.
+- CI MUST run on every push and every pull request.
+- CI matrix MUST cover PHP 8.2, 8.3, 8.4, 8.5 with Laravel 12, and with Laravel 13 when Laravel 13 is released (verify).
+
+## 7. Security rules tied to the chosen stack
+
+- Webhook verification MUST use the webhook verifier of cable8mm/portone-php.
+- Custom webhook signature verification MUST NOT be implemented.
+- Webhook verification MUST run on the raw request body before JSON decoding.
+- CSRF verification MUST be excluded for the webhook route only.
+- CSRF verification MUST NOT be excluded for any other route of the Package.
+- API secret and webhook secret MUST NOT be written to logs, exception messages, or test fixtures.
+- CI MUST run composer audit.
+
+## 8. Non-goals
+
+- laravel/cashier MUST NOT be a dependency.
+- Pest MUST NOT be used.
+- Code coverage tools (PCOV, Xdebug coverage) and coverage thresholds MUST NOT be used.
+- PortOne V1 SDKs and APIs MUST NOT be used.
+- JavaScript bundlers (Vite, webpack) MUST NOT be configured in the Package.
