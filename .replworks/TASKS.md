@@ -184,7 +184,7 @@
     - The same verified request delivered twice dispatches two events (ARCHITECTURE.md RD-20).
     - Unit tests for the above pass.
 
-- [ ] T-014 Complete action of the checkout stubs against live PortOne
+- [X] T-014 Complete action of the checkout stubs against live PortOne
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030), FR-042, FR-053, FR-054, ERR-014, ERR-015; AC-041 (complete route), AC-050, AC-054, AC-055
   - External boundary: yes
   - Acceptance criteria:
