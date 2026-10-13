@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone;
 
+use Cable8mm\LaravelPortone\Http\Controllers\WebhookController;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class PortOneServiceProvider extends ServiceProvider
@@ -16,6 +18,11 @@ class PortOneServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Route::post(
+            (string) config('portone.webhook_path', 'portone/webhook'),
+            WebhookController::class,
+        )->name('portone.webhook');
+
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__.'/../config/portone.php' => $this->app->configPath('portone.php'),

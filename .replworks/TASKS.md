@@ -165,7 +165,7 @@
     - After every outcome the record satisfies ARCHITECTURE.md INV-05, INV-06, INV-07.
     - Unit tests for the above pass.
 
-- [ ] T-013 Receive PortOne webhooks as events
+- [X] T-013 Receive PortOne webhooks as events
   - Satisfies: PRODUCT_SPEC.md SCR-003 (EL-011 to EL-014), SCR-005 (EL-021), FR-033 to FR-039, ERR-002, ERR-012, FLOW-003; AC-028 to AC-035
   - External boundary: yes
   - Acceptance criteria:
