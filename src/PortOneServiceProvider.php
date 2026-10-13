@@ -19,6 +19,10 @@ class PortOneServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/portone.php' => $this->app->configPath('portone.php'),
             ], 'portone-config');
+
+            $this->publishesMigrations([
+                __DIR__.'/../database/migrations/2026_10_13_000000_create_portone_customers_table.php' => $this->app->databasePath('migrations/2026_10_13_000000_create_portone_customers_table.php'),
+            ], 'portone-migrations');
         }
     }
 }
