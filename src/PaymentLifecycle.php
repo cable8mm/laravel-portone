@@ -11,10 +11,23 @@ use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Illuminate\Support\Carbon;
 
+/**
+ * 결제 확정·환불의 상태 전이를 순수하게 계산하는 클래스.
+ *
+ * DB도 PortOne도 건드리지 않으며, 저장할 절대값만 반환한다.
+ */
 class PaymentLifecycle
 {
     /**
-     * @return array{status: string, paid_at: Carbon}
+     * 확정 결과를 계산한다. PortOne 결제 완료 + 금액 일치가 조건이다.
+     *
+     * @param  Payment  $payment  확정할 PENDING 결제 레코드
+     * @param  GatewayPayment  $gatewayPayment  PortOne 조회 결과
+     * @param  Carbon  $paidAt  paid_at에 기록할 시각
+     * @return array{status: string, paid_at: Carbon} 저장할 확정 값
+     *
+     * @throws PaymentNotPaidException PortOne 상태가 PAID가 아닐 때
+     * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
      */
     public function complete(Payment $payment, GatewayPayment $gatewayPayment, Carbon $paidAt): array
     {
@@ -33,7 +46,14 @@ class PaymentLifecycle
     }
 
     /**
-     * @return array{status: string, cancelled_amount: int}
+     * 환불 결과를 계산한다. 전액이면 CANCELLED, 일부면 PARTIALLY_CANCELLED이다.
+     *
+     * @param  Payment  $payment  환불할 결제 레코드(PAID 또는 PARTIALLY_CANCELLED)
+     * @param  int|null  $amount  환불 금액(원, null이면 전액)
+     * @return array{status: string, cancelled_amount: int} 저장할 환불 값
+     *
+     * @throws InvalidPaymentStatusException 환불 불가 상태에서 호출했을 때
+     * @throws InvalidRefundAmountException 환불 금액이 0 이하이거나 잔액을 초과할 때
      */
     public function refund(Payment $payment, ?int $amount): array
     {

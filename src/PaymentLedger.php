@@ -14,13 +14,20 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+/**
+ * 결제 레코드의 배타 접근과 저장을 전담하는 저장소.
+ *
+ * 결제 상태 계산은 하지 않으며, PaymentLifecycle이 계산한 값을 그대로 쓴다.
+ */
 class PaymentLedger
 {
     /**
+     * 이 모델의 결제 목록 관계(최신순)를 반환한다.
+     *
      * @template TBillable of Model
      *
-     * @param  TBillable  $billable
-     * @return MorphMany<Payment, TBillable>
+     * @param  TBillable  $billable  조회할 Billable 모델
+     * @return MorphMany<Payment, TBillable> 생성일 내림차순 결제 관계
      */
     public function payments(Model $billable): MorphMany
     {
@@ -28,6 +35,13 @@ class PaymentLedger
             ->orderByDesc('created_at');
     }
 
+    /**
+     * Billable 범위 안에서 결제 1건을 찾는다.
+     *
+     * @param  Model  $billable  소유 Billable 모델
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return Payment|null 결제 레코드, 없으면 null
+     */
     public function find(Model $billable, string $paymentId): ?Payment
     {
         return $this->payments($billable)
@@ -36,7 +50,14 @@ class PaymentLedger
     }
 
     /**
-     * @param  Closure(Payment): Payment  $operation
+     * 레코드를 잠그고 콜백을 실행한다. 범위를 벗어나면 예외가 발생한다.
+     *
+     * @param  Model  $billable  소유 Billable 모델
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @param  Closure(Payment): Payment  $operation  잠금 안에서 실행할 연산
+     * @return Payment 콜백이 반환한 결제 레코드
+     *
+     * @throws PaymentNotFoundException 내 범위에 해당 결제가 없을 때
      */
     public function withExclusiveAccess(Model $billable, string $paymentId, Closure $operation): Payment
     {
@@ -55,7 +76,11 @@ class PaymentLedger
     }
 
     /**
-     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}  $values
+     * 미리 계산된 결과 값을 레코드에 그대로 쓴다. 증가분이 아닌 절대값이다.
+     *
+     * @param  Payment  $payment  갱신할 결제 레코드
+     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}  $values  저장할 절대값
+     * @return Payment 갱신된 결제 레코드
      */
     public function update(Payment $payment, array $values): Payment
     {
@@ -67,6 +92,15 @@ class PaymentLedger
         return $payment;
     }
 
+    /**
+     * PENDING 결제 레코드를 새로 만든다. payment_id 충돌 시 다시 시도한다.
+     *
+     * @param  Model  $billable  결제를 소유할 Billable 모델
+     * @param  string  $customerId  PortOne 고객 ID
+     * @param  int  $amount  결제 금액(원)
+     * @param  string  $orderName  주문명
+     * @return Payment 생성된 PENDING 결제 레코드
+     */
     public function createPending(Model $billable, string $customerId, int $amount, string $orderName): Payment
     {
         while (true) {
@@ -96,6 +130,14 @@ class PaymentLedger
         }
     }
 
+    /**
+     * Billable 모델의 문자열 키를 반환한다.
+     *
+     * @param  Model  $billable  검사할 Billable 모델
+     * @return string 문자열로 변환한 모델 키
+     *
+     * @throws \InvalidArgumentException 키가 문자열도 정수도 아닐 때
+     */
     private function billableId(Model $billable): string
     {
         $key = $billable->getKey();
