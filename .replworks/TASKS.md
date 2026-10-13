@@ -21,8 +21,8 @@
     - The probe can produce a paid test payment on demand; the Payment ID and paid amount of at least one such payment are recorded.
     - The recorded observation contains no secret values.
 
-- [ ] T-003 Verify PortOne payment lookup behavior
-  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment lookup [UNVERIFIED]" (required by FR-021, FR-023, ERR-006, ERR-007, ERR-011)
+- [X] T-003 Verify PortOne payment lookup behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment lookup" (required by FR-021, FR-023, ERR-006, ERR-007, ERR-011)
   - External boundary: yes (verification task)
   - Acceptance criteria:
     - An executable probe performs the lookup against the live PortOne test environment through the PortOne client capability that TECH_STACK.md requires for all PortOne API calls.
