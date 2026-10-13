@@ -194,7 +194,7 @@
 - Outputs: Gateway result; cancellation acceptance; ConfigurationException or the PortOne exception.
 - Owns: the single door to PortOne and the use of the api secret.
 - Does not own: interpreting the Gateway result (Lifecycle), any record, any retry of PortOne requests.
-- Depends on unverified assumptions of PRODUCT_SPEC External Systems (lookup). Cancellation behavior was verified by T-010 and its observation is recorded.
+- Depends on lookup and cancellation assumptions at the external boundary. Lookup behavior was verified by T-003, payment completion through the Package by T-011, and cancellation by T-010; observations are recorded for each.
 
 ### CMP-09 Webhook Verifier
 
@@ -524,4 +524,4 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-21: Ambiguous: ownership of published stub files. Decided: transfer to the Application on publishing; the Package keeps no link.
 - RD-22: Ambiguous: who may hold secrets. Decided: the api secret only for CMP-08; the webhook secret for CMP-10 and, as an input, CMP-09.
 - RD-23: Ambiguous: where currency lives. Decided: only in CMP-13 as a constant; the Core handles plain integer amounts.
-- RD-24: PortOne lookup and browser SDK assumptions are isolated to CMP-08 and CMP-13. T-010 confirmed payment cancellation behavior, which is recorded in its live observation.
+- RD-24: PortOne lookup and browser SDK assumptions are isolated to CMP-08 and CMP-13. Lookup behavior was confirmed by T-003, completion through the Package by T-011, and cancellation by T-010; the observations are recorded.

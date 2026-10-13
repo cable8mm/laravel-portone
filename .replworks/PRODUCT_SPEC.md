@@ -264,7 +264,7 @@
 - FR-018: Payment records MUST persist across sessions.
 - FR-019: EL-010 MUST return an array with exactly the keys paymentId, orderName, totalAmount, customerId, holding the payment_id, order_name, amount, and customer_id of the Payment record.
 
-### Payment completion [UNVERIFIED]
+### Payment completion
 
 - FR-020: EL-005 MUST look up the Payment record by the given Payment ID only among the Payment records belonging to the Billable model.
 - FR-021: EL-005 MUST request the payment from PortOne by Payment ID when the Payment record status is PENDING.

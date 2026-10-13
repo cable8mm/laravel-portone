@@ -1,0 +1,40 @@
+{
+	"recordedAt": "2026-10-13",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"publishedStubs": true,
+	"defaultApiBaseUrl": "https://api.portone.io",
+	"packagePreparedPayment": {
+		"paymentId": "d0290aad-3183-4ccb-aff4-6208d74ce38a",
+		"totalAmount": 100,
+		"browserResult": "returned without an error code"
+	},
+	"amountMismatch": {
+		"result": "rejected by PaymentLifecycle",
+		"exception": "Cable8mm\\LaravelPortone\\Exceptions\\AmountMismatchException",
+		"recordStatus": "PENDING"
+	},
+	"invalidApiSecret": {
+		"exception": "Cable8mm\\PortonePhp\\Exception\\UnauthorizedException",
+		"httpStatus": 401,
+		"errorType": "UNAUTHORIZED",
+		"credentialInMessage": false
+	},
+	"completion": {
+		"status": "PAID",
+		"paidAtRecorded": true,
+		"secondCall": "returned unchanged"
+	},
+	"unknownPortOnePayment": {
+		"exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+		"httpStatus": 404,
+		"errorType": "PAYMENT_NOT_FOUND",
+		"recordStatus": "PENDING"
+	},
+	"secretsRecorded": false,
+	"unpaidPayment": {
+		"observedStatus": "FAILED",
+		"result": "Cable8mm\\LaravelPortone\\Exceptions\\PaymentNotPaidException",
+		"recordStatus": "PENDING",
+		"configuredApiBaseUrl": "https://api.portone.io/"
+	}
+}
