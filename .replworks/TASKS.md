@@ -98,7 +98,7 @@
     - EL-027 renders the text supplied for the current state, without changing any behavior.
     - Unit tests for the above pass.
 
-- [ ] T-009 Prepare action of the checkout stubs
+- [X] T-009 Prepare action of the checkout stubs
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030), FR-042, FR-045, FR-046, FR-047; AC-041 (prepare route), AC-043, AC-044
   - External boundary: no
   - Acceptance criteria:
