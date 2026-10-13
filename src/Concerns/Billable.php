@@ -32,6 +32,11 @@ trait Billable
         return app(PaymentOperations::class)->prepare($this, $amount, $orderName);
     }
 
+    public function completePayment(string $paymentId): Payment
+    {
+        return app(PaymentOperations::class)->complete($this, $paymentId);
+    }
+
     /**
      * @return MorphMany<Payment, $this>
      */

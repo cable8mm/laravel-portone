@@ -11,6 +11,7 @@ class PortOneServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/portone.php', 'portone');
+        $this->app->bind(PaymentGateway::class, PortOneGateway::class);
     }
 
     public function boot(): void

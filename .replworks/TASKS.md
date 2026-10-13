@@ -123,7 +123,7 @@
     - The probe uses paid payments produced as in T-002.
     - The recorded observation contains no secret values.
 
-- [ ] T-011 Complete a payment against live PortOne
+- [X] T-011 Complete a payment against live PortOne
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-005), FR-005, FR-006, FR-020 to FR-024, ERR-001, ERR-003, ERR-006, ERR-007, ERR-011; AC-013 to AC-017, AC-024, AC-036, AC-037, AC-038
   - External boundary: yes
   - Acceptance criteria:
