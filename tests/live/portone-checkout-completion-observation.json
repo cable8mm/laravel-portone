@@ -1,0 +1,21 @@
+{
+	"recordedAt": "2026-10-13T14:16:35+00:00",
+	"publishedStubs": true,
+	"prepareRoute": {
+		"status": 200,
+		"paymentStatusBeforeBrowser": "PENDING",
+		"browserResult": "returned without an error code"
+	},
+	"completeRoute": {
+		"status": 200,
+		"paymentStatus": "PAID",
+		"requestAmountIgnored": true
+	},
+	"amountMismatchStatus": 422,
+	"notPaidStatus": 422,
+	"unknownLocalPaymentStatus": 422,
+	"otherBillablePaymentStatus": 422,
+	"missingApiSecretStatus": 500,
+	"invalidApiSecretStatus": 500,
+	"secretsRecorded": false
+}
