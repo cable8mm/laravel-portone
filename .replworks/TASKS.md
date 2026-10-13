@@ -43,7 +43,7 @@
     - With EL-017, EL-022, EL-023 unset, each value is reported as absent.
     - Unit tests for the above pass.
 
-- [ ] T-005 Billable customer identity
+- [X] T-005 Billable customer identity
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-001, EL-002, EL-003), FR-003, FR-007, FR-008 to FR-012; AC-002, AC-004, AC-005, AC-006, AC-007
   - External boundary: no
   - Acceptance criteria:
