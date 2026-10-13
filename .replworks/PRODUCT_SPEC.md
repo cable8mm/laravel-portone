@@ -78,7 +78,7 @@
 - The Package relies on PortOne returning, for a payment ID, the payment status.
 - The Package relies on PortOne returning the total paid amount when the payment status is paid.
 
-### PortOne V2 payment cancellation [UNVERIFIED]
+### PortOne V2 payment cancellation
 
 - The Package relies on PortOne accepting a cancellation request containing a payment ID and a reason.
 - The Package relies on PortOne cancelling the full remaining amount when the request omits the amount.

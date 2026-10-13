@@ -1,0 +1,56 @@
+{
+	"recordedAt": "2026-10-13T12:22:07+00:00",
+	"client": "cable8mm/portone-php",
+	"environment": "PortOne test channel",
+	"publishedStubs": true,
+	"payments": {
+		"fullCancellation": {
+			"paymentId": "probe-ea1a709eae2b4a20ba0ee0db9e268b25",
+			"initialStatus": "PAID",
+			"initialAmount": 100
+		},
+		"partialCancellation": {
+			"paymentId": "probe-7f2ea6d5b4c54096ab8f8b9e40615da9",
+			"initialStatus": "PAID",
+			"initialAmount": 100
+		}
+	},
+	"secretsRecorded": false,
+	"fullCancellation": {
+		"result": "success",
+		"status": "SUCCEEDED",
+		"amount": 100
+	},
+	"alreadyCancelled": {
+		"result": "error",
+		"exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+		"httpStatus": 409,
+		"errorType": "PAYMENT_ALREADY_CANCELLED"
+	},
+	"partialCancellation": {
+		"result": "success",
+		"status": "SUCCEEDED",
+		"amount": 30
+	},
+	"partialPaymentAfterFirstCancellation": {
+		"status": "PARTIAL_CANCELLED",
+		"cancelledAmount": 30,
+		"cancellableAmount": 70
+	},
+	"amountOverRemaining": {
+		"result": "error",
+		"exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+		"httpStatus": 409,
+		"errorType": "CANCEL_AMOUNT_EXCEEDS_CANCELLABLE_AMOUNT"
+	},
+	"remainingCancellation": {
+		"result": "success",
+		"status": "SUCCEEDED",
+		"amount": 70
+	},
+	"partialPaymentAfterRemainingCancellation": {
+		"status": "CANCELLED",
+		"cancelledAmount": 100,
+		"cancellableAmount": 0
+	}
+}
