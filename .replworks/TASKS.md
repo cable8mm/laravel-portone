@@ -33,7 +33,7 @@
     - Recorded observation: the PortOne default API base address in effect when no override is supplied (FR-005).
     - The recorded observation contains no secret values.
 
-- [ ] T-004 Publish and read configuration
+- [X] T-004 Publish and read configuration
   - Satisfies: PRODUCT_SPEC.md SCR-004 (EL-015 to EL-020, EL-022, EL-023), FR-001, FR-002, FR-004; AC-001, AC-056
   - External boundary: no
   - Acceptance criteria:

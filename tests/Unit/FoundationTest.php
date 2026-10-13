@@ -17,5 +17,8 @@ class FoundationTest extends TestCase
     public function test_default_webhook_path_is_available_from_merged_configuration(): void
     {
         $this->assertSame('portone/webhook', config('portone.webhook_path'));
+        $this->assertNull(config('portone.base_url'));
+        $this->assertNull(config('portone.store_id'));
+        $this->assertNull(config('portone.channel_key'));
     }
 }
