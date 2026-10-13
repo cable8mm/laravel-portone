@@ -5,7 +5,8 @@ workbench export-ignore
 package.json export-ignore
 package-lock.json export-ignore
 vitest.config.js export-ignore
-biome.json export-ignore
+eslint.config.js export-ignore
+.prettierrc export-ignore
 phpstan.neon.dist export-ignore
 pint.json export-ignore
 phpunit.xml.dist export-ignore

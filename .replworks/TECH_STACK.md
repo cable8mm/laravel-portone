@@ -18,7 +18,8 @@
 - @portone/browser-sdk: ^0.1.13; the Developer installs it in the Application; the Package MUST NOT install it in the Application
 - Vitest: ^4.0
 - jsdom: ^27.0
-- Biome: ^2.0
+- Prettier: ^3.0
+- ESLint: ^10.0
 - GitHub Actions: CI
 - Packagist: distribution
 - ngrok: development-only public URL for live webhook verification
@@ -34,7 +35,8 @@
 - phpstan.neon.dist at the repository root
 - package.json and package-lock.json at the repository root; package-lock.json MUST be committed
 - vitest.config.js at the repository root
-- biome.json at the repository root
+- eslint.config.js at the repository root
+- .prettierrc at the repository root
 - .github/workflows/ for GitHub Actions workflows
 - .gitattributes at the repository root
 - .env.example at the repository root
@@ -52,7 +54,8 @@
 - The stub script MUST be an ES module.
 - The stub script MUST import PortOne from @portone/browser-sdk/v2 (verify).
 - The published checkout view MUST load the stub script with Laravel Vite; the Application is responsible for building its published resources/js/portone-checkout.js entry.
-- JavaScript formatting and linting MUST be produced by Biome.
+- JavaScript formatting MUST be produced by Prettier.
+- JavaScript linting MUST be produced by ESLint with the flat config format.
 - The stub view MUST use Blade only.
 
 ## 4. Testing rules
@@ -70,7 +73,7 @@
 - Live verification MUST NOT run in CI.
 - Coverage threshold: None.
 - Coverage tooling MUST NOT be configured.
-- CI MUST run: composer validate, Pint in check mode, PHPStan, PHPUnit, Biome check, Vitest.
+- CI MUST run: composer validate, Pint in check mode, PHPStan, PHPUnit, Prettier in check mode, ESLint, Vitest.
 
 ## 5. Configuration rules
 
@@ -92,8 +95,8 @@
 - composer.json license MUST be MIT.
 - composer.json require MUST contain only php, illuminate/\* components, and cable8mm/portone-php.
 - composer.json require-dev MUST contain orchestra/testbench, phpunit/phpunit, laravel/pint, phpstan/phpstan, and larastan/larastan.
-- package.json MUST list Vitest, jsdom, Biome, and @portone/browser-sdk under devDependencies only.
-- Dev-only files MUST be excluded from the distribution archive with export-ignore in .gitattributes: tests/, workbench/, package.json, package-lock.json, vitest.config.js, biome.json, phpstan.neon.dist, pint.json, phpunit.xml.dist, testbench.yaml, .github/.
+- package.json MUST list Vitest, jsdom, Prettier, ESLint, and @portone/browser-sdk under devDependencies only.
+- Dev-only files MUST be excluded from the distribution archive with export-ignore in .gitattributes: tests/, workbench/, package.json, package-lock.json, vitest.config.js, eslint.config.js, .prettierrc, phpstan.neon.dist, pint.json, phpunit.xml.dist, testbench.yaml, .github/.
 - Distribution target: public GitHub repository and Packagist.
 - Versioning: SemVer.
 - Release tags MUST match vMAJOR.MINOR.PATCH.
