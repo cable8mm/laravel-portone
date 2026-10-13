@@ -14,6 +14,7 @@ use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentLedger;
 use Cable8mm\LaravelPortone\PaymentOperations;
+use Cable8mm\PortonePhp\Exception\PortOneException;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
@@ -81,6 +82,7 @@ trait Billable
      * @throws PaymentNotPaidException PortOne에서 미결제로 조회될 때
      * @throws AmountMismatchException 서버 금액과 PortOne 실결제액이 다를 때
      * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
      */
     public function completePayment(string $paymentId): Payment
     {
@@ -100,6 +102,8 @@ trait Billable
      * @throws PaymentNotFoundException 내 범위에 해당 결제가 없을 때
      * @throws InvalidPaymentStatusException 미결제 건을 환불하려 할 때
      * @throws InvalidRefundAmountException 환불 금액이 0 이하이거나 잔액을 초과할 때
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
      * @throws \InvalidArgumentException 환불 사유가 비었을 때
      */
     public function refund(string $paymentId, string $reason, ?int $amount = null): Payment

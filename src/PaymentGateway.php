@@ -14,6 +14,8 @@ interface PaymentGateway
      *
      * @param  string  $paymentId  PortOne 결제 식별자
      * @return GatewayPayment PortOne 결제 상태와 실결제액
+     *
+     * @throws \Throwable PortOne API 호출이 실패했을 때 (원문 그대로 전달)
      */
     public function lookup(string $paymentId): GatewayPayment;
 
@@ -23,6 +25,8 @@ interface PaymentGateway
      * @param  string  $paymentId  PortOne 결제 식별자
      * @param  string  $reason  PortOne에 전달할 환불 사유
      * @param  int|null  $amount  환불 금액(원, null이면 전액)
+     *
+     * @throws \Throwable PortOne 호출 실패 시 원인을 그대로 전파
      */
     public function cancel(string $paymentId, string $reason, ?int $amount): void;
 }
