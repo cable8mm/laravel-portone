@@ -272,7 +272,7 @@
 - FR-023: EL-005 MUST set status to PAID and paid_at to the current time when the PortOne payment status is paid and the total paid amount equals the amount of the Payment record.
 - FR-024: EL-005 MUST return the Payment record after applying FR-023.
 
-### Refund [UNVERIFIED]
+### Refund
 
 - FR-025: EL-006 MUST send a cancellation request containing the Payment ID and the given reason to PortOne when the Payment record status is PAID or PARTIALLY_CANCELLED.
 - FR-026: EL-006 MUST omit the amount from the cancellation request when the given amount is null.

@@ -398,4 +398,9 @@ class CompletionConcurrencyGateway implements PaymentGateway
 
         return new GatewayPayment('PAID', 100);
     }
+
+    public function cancel(string $paymentId, string $reason, ?int $amount): void
+    {
+        throw new \LogicException('Completion concurrency must not send cancellation requests.');
+    }
 }

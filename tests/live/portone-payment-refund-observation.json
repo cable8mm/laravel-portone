@@ -1,0 +1,64 @@
+{
+	"recordedAt": "2026-10-13T12:59:46+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"publishedStubs": true,
+	"defaultApiBaseUrl": "https://api.portone.io",
+	"secretsRecorded": false,
+	"livePreparedPayments": {
+		"full": {
+			"paymentId": "d0290aad-3183-4ccb-aff4-6208d74ce38a",
+			"totalAmount": 100,
+			"origin": "T-011 live payment",
+			"browserResult": "previously returned without an error code",
+			"completionStatus": "PAID",
+			"paidAtRecorded": true
+		},
+		"partial": {
+			"paymentId": "5221b8c2-e840-4b0e-a33f-44f40ed8f506",
+			"totalAmount": 10000,
+			"origin": "package-prepared payment",
+			"browserResult": "returned without an error code",
+			"completionStatus": "PAID",
+			"paidAtRecorded": true
+		},
+		"remaining": {
+			"paymentId": "28013eed-758d-4f73-bb7c-e8c8afd87e5f",
+			"totalAmount": 10000,
+			"origin": "package-prepared payment",
+			"browserResult": "returned without an error code",
+			"completionStatus": "PAID",
+			"paidAtRecorded": true
+		}
+	},
+	"fullRefund": {
+		"paymentId": "d0290aad-3183-4ccb-aff4-6208d74ce38a",
+		"amountOmitted": true,
+		"status": "CANCELLED",
+		"cancelledAmount": 100,
+		"configuredApiBaseUrl": "https://api.portone.io/"
+	},
+	"partialRefund": {
+		"paymentId": "5221b8c2-e840-4b0e-a33f-44f40ed8f506",
+		"partialAmount": 3000,
+		"partialStatus": "PARTIALLY_CANCELLED",
+		"partialCancelledAmount": 3000,
+		"remainingAmount": 7000,
+		"finalStatus": "CANCELLED",
+		"finalCancelledAmount": 10000
+	},
+	"remainingRefund": {
+		"paymentId": "28013eed-758d-4f73-bb7c-e8c8afd87e5f",
+		"initialPartialAmount": 3000,
+		"fullRemainingAmountOmitted": true,
+		"finalStatus": "CANCELLED",
+		"finalCancelledAmount": 10000
+	},
+	"alreadyCancelled": {
+		"result": "PortOne error propagated without wrapping",
+		"exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+		"httpStatus": 409,
+		"errorType": "PAYMENT_ALREADY_CANCELLED",
+		"localStatus": "PAID",
+		"localCancelledAmount": 0
+	}
+}

@@ -60,4 +60,30 @@ class PaymentOperations
             },
         );
     }
+
+    public function refund(Model $billable, string $paymentId, string $reason, ?int $amount = null): Payment
+    {
+        return $this->payments->withExclusiveAccess(
+            $billable,
+            $paymentId,
+            function (Payment $payment) use ($paymentId, $reason, $amount): Payment {
+                if ($reason === '') {
+                    throw new \InvalidArgumentException('Payment refund reason must not be empty.');
+                }
+
+                $outcome = $this->lifecycle->refund($payment, $amount);
+                $this->gateway->cancel($paymentId, $reason, $amount);
+
+                for ($attempt = 1; ; $attempt++) {
+                    try {
+                        return $this->payments->update($payment, $outcome);
+                    } catch (Throwable $exception) {
+                        if ($attempt >= 3) {
+                            throw $exception;
+                        }
+                    }
+                }
+            },
+        );
+    }
 }

@@ -144,7 +144,7 @@
     - After every outcome the record satisfies ARCHITECTURE.md INV-05, INV-07, INV-08.
     - Unit tests for the above pass.
 
-- [ ] T-012 Refund a payment against live PortOne
+- [X] T-012 Refund a payment against live PortOne
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-006), FR-007, FR-025 to FR-030, ERR-001, ERR-003, ERR-008 to ERR-011, FLOW-002; AC-003, AC-017 to AC-024, AC-036
   - External boundary: yes
   - Acceptance criteria:
