@@ -28,6 +28,8 @@ class PortOneCheckoutController
         return view('portone.checkout', [
             'storeId' => $storeId,
             'channelKey' => $channelKey,
+            'prepareUrl' => route('portone.checkout.prepare'),
+            'completeUrl' => route('portone.checkout.complete'),
             'missingConfiguration' => $missingConfiguration,
             'state' => $missingConfiguration ? 'error' : 'initial',
             'statusText' => $missingConfiguration ? 'Error' : 'Idle',

@@ -1,0 +1,177 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { requestPayment } = vi.hoisted(() => ({
+	requestPayment: vi.fn(),
+}));
+
+vi.mock("@portone/browser-sdk/v2", () => ({
+	default: { requestPayment },
+}));
+
+const payment = {
+	paymentId: "payment-123",
+	orderName: "Order A",
+	totalAmount: 10000,
+	customerId: "customer-123",
+};
+
+const response = (body, ok = true, status = 200) => ({
+	ok,
+	status,
+	json: vi.fn().mockResolvedValue(body),
+});
+
+async function renderCheckout() {
+	document.body.innerHTML = `
+		<main
+			data-portone-checkout
+			data-store-id="store-123"
+			data-channel-key="channel-456"
+			data-prepare-url="/portone/checkout/prepare"
+			data-complete-url="/portone/checkout/complete"
+			data-csrf-token="csrf-token"
+			data-state="initial"
+		>
+			<button id="portone-checkout-button" type="button">Start payment</button>
+			<p id="portone-checkout-status" role="status">Idle</p>
+		</main>`;
+
+	vi.resetModules();
+	await import("../../stubs/resources/js/portone-checkout.js");
+
+	return {
+		root: document.querySelector("[data-portone-checkout]"),
+		button: document.querySelector("#portone-checkout-button"),
+		status: document.querySelector("#portone-checkout-status"),
+	};
+}
+
+afterEach(() => {
+	document.body.replaceChildren();
+	requestPayment.mockReset();
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+});
+
+describe("published checkout script", () => {
+	it("prepares, requests payment with the observed SDK values, and completes only as PAID", async () => {
+		const fetch = vi
+			.fn()
+			.mockResolvedValueOnce(response(payment))
+			.mockResolvedValueOnce(response({ status: "PAID" }));
+		vi.stubGlobal("fetch", fetch);
+		requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
+		const { root, button, status } = await renderCheckout();
+
+		button.click();
+
+		expect(root.dataset.state).toBe("loading");
+		expect(button.disabled).toBe(true);
+		expect(status.textContent).toBe("Loading");
+		await vi.waitFor(() => expect(root.dataset.state).toBe("success"));
+
+		expect(requestPayment).toHaveBeenCalledWith({
+			storeId: "store-123",
+			channelKey: "channel-456",
+			paymentId: payment.paymentId,
+			orderName: payment.orderName,
+			totalAmount: payment.totalAmount,
+			customer: { customerId: payment.customerId },
+			payMethod: "CARD",
+			currency: "KRW",
+		});
+		expect(fetch).toHaveBeenNthCalledWith(1, "/portone/checkout/prepare", {
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				"X-CSRF-TOKEN": "csrf-token",
+			},
+			body: "{}",
+		});
+		expect(fetch).toHaveBeenNthCalledWith(2, "/portone/checkout/complete", {
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				"X-CSRF-TOKEN": "csrf-token",
+			},
+			body: JSON.stringify({ paymentId: payment.paymentId }),
+		});
+		expect(button.disabled).toBe(true);
+		expect(status.textContent).toBe("Success");
+	});
+
+	it("returns to Error without completing when PortOne reports a cancelled payment", async () => {
+		const fetch = vi.fn().mockResolvedValueOnce(response(payment));
+		vi.stubGlobal("fetch", fetch);
+		requestPayment.mockResolvedValue({ code: "FAILURE_TYPE_PG" });
+		const { root, button, status } = await renderCheckout();
+
+		button.click();
+
+		await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(button.disabled).toBe(false);
+		expect(status.textContent).toBe("Error");
+	});
+
+	it("returns to Error when the PortOne SDK rejects", async () => {
+		const fetch = vi.fn().mockResolvedValueOnce(response(payment));
+		vi.stubGlobal("fetch", fetch);
+		requestPayment.mockRejectedValue(new Error("SDK failure"));
+		const { root, button } = await renderCheckout();
+
+		button.click();
+
+		await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(button.disabled).toBe(false);
+	});
+
+	it("returns to Error when prepare fails", async () => {
+		const fetch = vi
+			.fn()
+			.mockResolvedValueOnce(response({ error: "failed" }, false, 500));
+		vi.stubGlobal("fetch", fetch);
+		const { root, button } = await renderCheckout();
+
+		button.click();
+
+		await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
+		expect(requestPayment).not.toHaveBeenCalled();
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(button.disabled).toBe(false);
+	});
+
+	it("returns to Error when completion fails", async () => {
+		const fetch = vi
+			.fn()
+			.mockResolvedValueOnce(response(payment))
+			.mockResolvedValueOnce(response({ error: "failed" }, false, 422));
+		vi.stubGlobal("fetch", fetch);
+		requestPayment.mockResolvedValue({});
+		const { root, button } = await renderCheckout();
+
+		button.click();
+
+		await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
+		expect(fetch).toHaveBeenCalledTimes(2);
+		expect(button.disabled).toBe(false);
+	});
+
+	it("never enters Success when completion responds with a non-PAID status", async () => {
+		const fetch = vi
+			.fn()
+			.mockResolvedValueOnce(response(payment))
+			.mockResolvedValueOnce(response({ status: "PENDING" }));
+		vi.stubGlobal("fetch", fetch);
+		requestPayment.mockResolvedValue({});
+		const { root, button } = await renderCheckout();
+
+		button.click();
+
+		await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
+		expect(button.disabled).toBe(false);
+	});
+});

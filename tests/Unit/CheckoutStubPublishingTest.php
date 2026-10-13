@@ -40,6 +40,10 @@ class CheckoutStubPublishingTest extends TestCase
         $this->assertFileExists($this->publishedPath('resources/js/portone-checkout.js'));
         $this->assertFileExists($this->publishedPath('app/Http/Controllers/PortOneCheckoutController.php'));
         $this->assertFileExists($this->publishedPath('routes/portone.php'));
+        $this->assertStringContainsString(
+            "@vite('resources/js/portone-checkout.js')",
+            file_get_contents($this->publishedPath('resources/views/portone/checkout.blade.php')),
+        );
         $this->assertFalse(Route::has('portone.checkout'));
         $this->assertFalse(Route::has('portone.checkout.prepare'));
         $this->assertFalse(Route::has('portone.checkout.complete'));
@@ -70,12 +74,16 @@ class CheckoutStubPublishingTest extends TestCase
         $this->includePublishedRoutes();
         config(['portone.store_id' => 'store-123', 'portone.channel_key' => 'channel-456']);
         $this->actingAs(new GenericUser(['id' => 1]));
+        $this->withoutVite();
 
         $response = $this->get(route('portone.checkout'));
 
         $response->assertOk();
         $response->assertSee('data-store-id="store-123"', false);
         $response->assertSee('data-channel-key="channel-456"', false);
+        $response->assertSee('data-prepare-url="'.route('portone.checkout.prepare').'"', false);
+        $response->assertSee('data-complete-url="'.route('portone.checkout.complete').'"', false);
+        $response->assertSee('data-csrf-token="'.csrf_token().'"', false);
         $response->assertSee('data-state="initial"', false);
         $response->assertSee('id="portone-checkout-button"', false);
         $response->assertDontSee('type="button" disabled', false);
@@ -92,6 +100,7 @@ class CheckoutStubPublishingTest extends TestCase
         $this->loadPublishedController();
         $this->includePublishedRoutes();
         $this->actingAs(new GenericUser(['id' => 1]));
+        $this->withoutVite();
 
         foreach ([
             ['store_id' => null, 'channel_key' => 'channel-456'],
