@@ -1,6 +1,11 @@
 # Laravel PortOne
 
 [![CI](https://github.com/cable8mm/laravel-portone/actions/workflows/ci.yml/badge.svg)](https://github.com/cable8mm/laravel-portone/actions/workflows/ci.yml)
+[![update-changelog](https://github.com/cable8mm/laravel-portone/actions/workflows/update-changelog.yml/badge.svg)](https://github.com/cable8mm/laravel-portone/actions/workflows/update-changelog.yml)
+[![apidoc-to-github-pages](https://github.com/cable8mm/laravel-portone/actions/workflows/apidoc-to-github-page.yml/badge.svg)](https://github.com/cable8mm/laravel-portone/actions/workflows/apidoc-to-github-page.yml)
+[![PHP Version](https://img.shields.io/packagist/php-v/cable8mm/laravel-portone.svg)](https://packagist.org/packages/cable8mm/laravel-portone)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/cable8mm/laravel-portone.svg)](https://packagist.org/packages/cable8mm/laravel-portone)
+[![License](https://img.shields.io/github/license/cable8mm/laravel-portone.svg)](https://github.com/cable8mm/laravel-portone/blob/main/LICENSE)
 
 한국의 PG사 **포트원(PortOne) V2 단건 결제**를 위한 Laravel 패키지입니다.
 Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결제 기능을 붙일 수 있습니다.

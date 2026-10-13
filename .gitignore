@@ -8,3 +8,5 @@
 /.phpunit.result.cache
 /storage/
 /workbench/database/database.sqlite
+/build/
+/cache/
