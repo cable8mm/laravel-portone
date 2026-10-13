@@ -74,7 +74,7 @@
     - Payment records created satisfy ARCHITECTURE.md INV-07 for status PENDING.
     - Unit tests for the above pass.
 
-- [ ] T-007 Payment history
+- [X] T-007 Payment history
   - Satisfies: PRODUCT_SPEC.md SCR-001 (EL-007, EL-008), FR-031, FR-032; AC-026, AC-027
   - External boundary: no
   - Acceptance criteria:

@@ -6,12 +6,32 @@ namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Models\Payment;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class PaymentLedger
 {
+    /**
+     * @template TBillable of Model
+     *
+     * @param  TBillable  $billable
+     * @return MorphMany<Payment, TBillable>
+     */
+    public function payments(Model $billable): MorphMany
+    {
+        return $billable->morphMany(Payment::class, 'billable')
+            ->orderByDesc('created_at');
+    }
+
+    public function find(Model $billable, string $paymentId): ?Payment
+    {
+        return $this->payments($billable)
+            ->where('payment_id', $paymentId)
+            ->first();
+    }
+
     public function createPending(Model $billable, string $customerId, int $amount, string $orderName): Payment
     {
         while (true) {

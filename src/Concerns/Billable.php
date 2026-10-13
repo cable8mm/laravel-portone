@@ -6,7 +6,9 @@ namespace Cable8mm\LaravelPortone\Concerns;
 
 use Cable8mm\LaravelPortone\CustomerRegistry;
 use Cable8mm\LaravelPortone\Models\Payment;
+use Cable8mm\LaravelPortone\PaymentLedger;
 use Cable8mm\LaravelPortone\PaymentOperations;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 trait Billable
 {
@@ -28,5 +30,18 @@ trait Billable
     public function preparePayment(int $amount, string $orderName): Payment
     {
         return app(PaymentOperations::class)->prepare($this, $amount, $orderName);
+    }
+
+    /**
+     * @return MorphMany<Payment, $this>
+     */
+    public function payments(): MorphMany
+    {
+        return app(PaymentLedger::class)->payments($this);
+    }
+
+    public function findPayment(string $paymentId): ?Payment
+    {
+        return app(PaymentLedger::class)->find($this, $paymentId);
     }
 }
