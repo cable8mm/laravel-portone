@@ -8,6 +8,7 @@ use Cable8mm\LaravelPortone\Concerns\Billable;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Dotenv\Dotenv;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
 use Orchestra\Testbench\TestCase;
 
@@ -130,7 +131,7 @@ class PortOneCheckoutFlowTest extends TestCase
         $this->publishStubs();
         $this->includePublishedRoutes();
         $this->migratePackageTables();
-        \Illuminate\Support\Facades\Route::get('/login', static fn () => response('login'))->name('login');
+        Route::get('/login', static fn () => response('login'))->name('login');
         URL::forceRootUrl('http://127.0.0.1:8765');
         $this->withoutVite();
 
