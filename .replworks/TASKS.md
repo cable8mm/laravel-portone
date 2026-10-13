@@ -1,6 +1,6 @@
 # TASKS
 
-- [ ] T-001 Project foundation
+- [X] T-001 Project foundation
   - Satisfies: PRODUCT_SPEC.md Constraints
   - External boundary: no
   - Acceptance criteria:
@@ -8,8 +8,8 @@
     - Every check defined in TECH_STACK.md passes.
     - The checks pass under each runtime and framework version combination required by PRODUCT_SPEC.md Constraints.
 
-- [ ] T-002 Verify PortOne browser SDK payment-window behavior
-  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne browser SDK [UNVERIFIED]" (required by FR-049, FR-050, FR-051, FR-052)
+- [X] T-002 Verify PortOne browser SDK payment-window behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne browser SDK" (required by FR-049, FR-050, FR-051, FR-052)
   - External boundary: yes (verification task)
   - Acceptance criteria:
     - An executable probe, independent of the Package's own code, runs in a real browser runtime against the live PortOne test environment and calls the SDK payment function with the value set listed in FR-049.

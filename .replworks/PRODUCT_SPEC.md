@@ -89,7 +89,7 @@
 - The Package relies on PortOne sending HTTP POST requests with the headers webhook-id, webhook-signature, webhook-timestamp.
 - The Package relies on PortOne signing each request with the webhook secret.
 
-### PortOne browser SDK [UNVERIFIED]
+### PortOne browser SDK
 
 - The Package relies on the SDK function requestPayment opening the PG payment window for the values passed to it.
 - The Package relies on requestPayment returning a result that carries an error code when the payment did not complete.
