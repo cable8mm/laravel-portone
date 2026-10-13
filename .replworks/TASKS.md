@@ -109,8 +109,8 @@
     - A failure raised by preparation propagates unmodified to the Application's error handling (ARCHITECTURE.md RD-18, Failure Boundaries).
     - Unit tests for the above pass.
 
-- [ ] T-010 Verify PortOne payment cancellation behavior
-  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment cancellation [UNVERIFIED]" (required by FR-025, FR-026, FR-027, FR-028, ERR-011)
+- [X] T-010 Verify PortOne payment cancellation behavior
+  - Satisfies: PRODUCT_SPEC.md External Systems, "PortOne V2 payment cancellation" (required by FR-025, FR-026, FR-027, FR-028, ERR-011)
   - External boundary: yes (verification task)
   - Acceptance criteria:
     - An executable probe performs cancellations against the live PortOne test environment through the PortOne client capability that TECH_STACK.md requires for all PortOne API calls.
