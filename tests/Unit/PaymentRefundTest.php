@@ -62,19 +62,19 @@ class PaymentRefundTest extends TestCase
             'status' => 'PARTIALLY_CANCELLED',
             'cancelled_amount' => 3000,
         ])->save();
+        $expectedCalls = [
+            [$payment->payment_id, 'Customer request', 3000],
+            [$payment->payment_id, 'Customer request', 7000],
+            [$anotherPayment->payment_id, 'Customer request', null],
+        ];
+        $callIndex = 0;
         $gateway->expects($this->exactly(3))
             ->method('cancel')
-            ->willReturnCallback(function (string $paymentId, string $reason, ?int $amount) use ($payment, $anotherPayment): void {
-                static $expected = [
-                    [$payment->payment_id, 'Customer request', 3000],
-                    [$payment->payment_id, 'Customer request', 7000],
-                    [$anotherPayment->payment_id, 'Customer request', null],
-                ];
-                static $index = 0;
-                $this->assertSame($expected[$index][0], $paymentId);
-                $this->assertSame($expected[$index][1], $reason);
-                $this->assertSame($expected[$index][2], $amount);
-                $index++;
+            ->willReturnCallback(function (string $paymentId, string $reason, ?int $amount) use ($expectedCalls, &$callIndex): void {
+                $this->assertSame($expectedCalls[$callIndex][0], $paymentId);
+                $this->assertSame($expectedCalls[$callIndex][1], $reason);
+                $this->assertSame($expectedCalls[$callIndex][2], $amount);
+                $callIndex++;
             });
 
         $partial = $billable->refund($payment->payment_id, 'Customer request', 3000);
