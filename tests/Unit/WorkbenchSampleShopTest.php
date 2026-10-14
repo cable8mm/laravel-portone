@@ -39,6 +39,7 @@ class WorkbenchSampleShopTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
         $app['config']->set('auth.providers.users.model', User::class);
     }
 

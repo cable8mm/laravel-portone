@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Workbench\App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -14,9 +13,11 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $emoji
  * @property int $price
  */
-#[Fillable(['name', 'description', 'emoji', 'price'])]
 class Product extends Model
 {
+    /** @var list<string> */
+    protected $fillable = ['name', 'description', 'emoji', 'price'];
+
     /**
      * @return array<string, string>
      */
