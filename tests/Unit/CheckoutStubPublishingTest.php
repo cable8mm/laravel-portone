@@ -67,7 +67,7 @@ class CheckoutStubPublishingTest extends TestCase
         $this->assertSame(['auth'], Route::getRoutes()->getByName('portone.checkout.complete')->gatherMiddleware());
     }
 
-    public function test_authenticated_checkout_renders_initial_state_and_configuration(): void
+    public function test_authenticated_checkout_renders_the_product_initial_state_and_configuration(): void
     {
         $this->publishStubs();
         $this->loadPublishedController();
@@ -84,6 +84,9 @@ class CheckoutStubPublishingTest extends TestCase
         $response->assertSee('data-prepare-url="'.route('portone.checkout.prepare').'"', false);
         $response->assertSee('data-complete-url="'.route('portone.checkout.complete').'"', false);
         $response->assertSee('data-csrf-token="'.csrf_token().'"', false);
+        $response->assertSee('data-product="1"', false);
+        $response->assertSee('<h1>Order A</h1>', false);
+        $response->assertSee('<p>10,000 KRW</p>', false);
         $response->assertSee('data-state="initial"', false);
         $response->assertSee('id="portone-checkout-button"', false);
         $response->assertDontSee('type="button" disabled', false);

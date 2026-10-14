@@ -48,21 +48,42 @@ PHP 테스트는 **Orchestra Testbench** 위에서 돕니다. Testbench은 패�
 > 사용자가 `vendor:publish --tag=portone-stubs`로 받는 파일이 실제로 도는지까지
 > 오프라인에서 확인합니다.
 
-### 1.2 실제 서버로 띄워 보기 (`composer serve`)
+### 1.2 워크벤치 샘플 상점 (`composer serve`)
 
-브라우저 e2e(§2) 없이 **실제 Laravel HTTP 서버**를 띄워 수동으로 찔러볼 수 있습니다.
+패키지를 설치한 Laravel 앱이 실제로 어떻게 동작하는지 **SQLite 위에서 그대로 체험**하는 샘플 상점입니다.
+개발자가 코드를 보면서 결제창을 직접 조작하는 수동 E2E 도구이기도 합니다.
 
 ```bash
-composer serve   # testbench workbench:build + testbench serve (기본 http://127.0.0.1:8000)
+npm ci           # 처음 한 번 (Vite·Tailwind CSS v4·@portone/browser-sdk)
+composer serve   # composer build(에셋 + DB) 후 testbench serve (기본 http://127.0.0.1:8000)
 ```
 
-- 이 서버는 `workbench/`의 워크벤치 앱(`Workbench\App\Models\User`,
-  `WorkbenchServiceProvider`)을 띄웁니다. 패키지가 **자동 등록**하는 라우트 — 예:
-  `POST /portone/webhook` — 를 curl 등으로 바로 확인하기 좋습니다.
-- 체크아웃 스텁 라우트는 스텁이 워크벤치 앱에 발행돼 있을 때만 포함됩니다
-  (`workbench/routes/web.php`). live 테스트(§2)는 매 테스트마다 스텁을 발행하고 끝나면
-  지웁니다. `composer serve`는 웹훅처럼 자동 등록되는 경로를 빠르게 확인하는 용도입니다.
-- 워크벤치가 꼬이면 `composer build`로 워크벤치를 다시 빌드하세요.
+- `composer build`는 두 가지를 합니다.
+  - `npm run workbench:build`: `workbench/vite.config.js`로 Tailwind CSS v4와 체크아웃 스크립트를 빌드해
+    Testbench 스켈레톤의 `public/build`에 넣습니다. 화면을 고치면서 보려면 `npm run workbench:dev`를 함께 띄우세요.
+  - `workbench:build`: SQLite DB를 만들고 기본·패키지·워크벤치 마이그레이션을 돌린 뒤
+    사용자 `test@example.com`과 샘플 상품을 시드합니다.
+- `/`는 **개발자 안내** 페이지입니다. 자동 로그인하지 않습니다. `PORTONE_*` 설정 여부(값은 표시하지 않음),
+  라우트, 결제 흐름, 테스트 명령을 보여 주고, **실제 구현 체험하기**를 누르면 시드된 사용자로 로그인해
+  상점(`/shop`)으로 이동합니다.
+- 상점 흐름: 상품 목록 → 상품 상세(아무것도 저장하지 않음) → **주문서**(체크아웃 스텁 `show`) →
+  **결제하기**(`prepare`가 PENDING 생성) → 포트원 결제창(사람이 조작) → `complete` → 결제 내역·상세 →
+  **전액 취소** / **부분 취소**(여러 번 나눠서). 검증된 웹훅은 **웹훅 로그**에 쌓입니다(로컬에서는 ngrok 필요, §2.5).
+- 패키지의 모든 기능을 상점에서 해 볼 수 있습니다. 안내 페이지의 **패키지 기능 지도**가 기능별 위치를 보여 줍니다.
+  - 포트원 고객(`hasPortOneId`·`portOneId`·`createOrGetPortOneCustomerId`): **고객** 화면
+  - 결제 대기 건 다시 확인(`completePayment`): 결제 상세의 **포트원에서 결제 확인**
+    (결제창에서 결제했는데 브라우저가 닫혀 완료 처리가 안 된 경우)
+  - 전액·부분 취소(`refund`): 결제 상세
+- 모든 화면 아래의 **이 화면의 코드** 패널이 그 화면을 만드는 파일과 핵심 호출을 보여 줍니다.
+- 주문서는 발행되는 체크아웃 스텁의 **워크벤치 사본**입니다(`workbench/app/Http/Controllers/PortOneCheckoutController.php`,
+  `workbench/routes/portone.php`, `workbench/resources/js/portone-checkout.js`). 스텁과 다른 곳은 컨트롤러의
+  `product()` 본문(`Product::findOrFail(...)`)과 namespace, 그리고 뷰의 레이아웃·스타일뿐이며,
+  `WorkbenchSampleShopTest`가 이 차이를 강제합니다.
+- 스텁을 앱에 직접 발행해 두면(`vendor:publish --tag=portone-stubs`) 워크벤치 사본 대신 발행본이 쓰입니다.
+  PHPUnit 실행(live 테스트 포함)에서는 워크벤치 사본이 등록되지 않으므로, 테스트는 항상 발행본을 검증합니다.
+- 이 서버는 live 테스트(§2)와 같은 루트 `.env`의 `PORTONE_*`를 읽습니다. PHPUnit 실행(`APP_ENV=testing`)에서는
+  읽지 않습니다.
+- 워크벤치가 꼬이면 `composer build`로 다시 빌드하세요.
 
 ---
 

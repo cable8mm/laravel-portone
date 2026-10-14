@@ -219,7 +219,7 @@
   - EL-026: start-payment button inside EL-025. Purpose: start a payment. User action: click.
   - EL-027: status slot inside EL-025, placed after EL-026. Purpose: show the current state. User action: read.
   - EL-028: script file resources/js/portone-checkout.js. Purpose: run the payment sequence in the browser. User action: edit.
-  - EL-029: controller file app/Http/Controllers/PortOneCheckoutController.php with the actions show, prepare, complete. Purpose: connect EL-025 and EL-028 to EL-004 and EL-005. User action: edit.
+  - EL-029: controller file app/Http/Controllers/PortOneCheckoutController.php with the actions show, prepare, complete and one product lookup (FR-045a). Purpose: connect EL-025 and EL-028 to EL-004 and EL-005. User action: edit.
   - EL-030: route file routes/portone.php with the routes portone.checkout (GET), portone.checkout.prepare (POST), portone.checkout.complete (POST). Purpose: expose the actions of EL-029. User action: include in the routes of the Application.
 - EL-025 MUST load EL-028 when rendered; the Payer must not need to edit another view or layout to activate the checkout flow.
 - States of EL-025:
@@ -302,12 +302,13 @@
 - FR-040: The Package MUST publish EL-025, EL-028, EL-029, and EL-030 to the paths stated in SCR-006 when vendor:publish runs with EL-024.
 - FR-041: The Package MUST NOT register the routes of EL-030 automatically.
 - FR-042: Every route of EL-030 MUST require an authenticated user.
-- FR-043: The show action MUST render EL-025 and make the values of EL-022 and EL-023 available to EL-028.
+- FR-043: The show action MUST render EL-025 with the name and price of the product returned by the product lookup of EL-029, and make the values of EL-022 and EL-023 and the product identifier available to EL-028.
 - FR-044: EL-025 MUST contain EL-026 and EL-027.
-- FR-045: The prepare action MUST call EL-004 on the authenticated user with an amount and an order name defined as constants in EL-029.
-- FR-046: The prepare action MUST NOT read the amount or the order name from the request.
+- FR-045: The prepare action MUST call EL-004 on the authenticated user with the price as the amount and the name as the order name of the product returned by the product lookup of EL-029.
+- FR-045a: EL-029 MUST contain one product lookup used by the show and prepare actions; in the published stub it returns a sample product object with an identifier, a name, and a price, defined under a comment that tells the Developer to replace it with a product lookup from the database.
+- FR-046: The prepare action MUST NOT read the amount or the order name from the request; the product lookup MAY read a product identifier from the request.
 - FR-047: The prepare action MUST respond with JSON containing the array returned by EL-010.
-- FR-048: When EL-026 is clicked, EL-028 MUST request the prepare route and set the Loading state.
+- FR-048: When EL-026 is clicked, EL-028 MUST request the prepare route with the product identifier and set the Loading state.
 - FR-049: EL-028 MUST call requestPayment with the store ID from EL-022, the channel key from EL-023, paymentId, orderName, totalAmount, and customerId from the prepare response, a payment method constant, and a currency constant.
 - FR-050: EL-028 MUST define the payment method constant and the currency constant at the top of the file, with initial values of the PortOne card payment method and the PortOne Korean won currency.
 - FR-051: When requestPayment returns a result with an error code, EL-028 MUST set the Error state and MUST NOT request the complete route.
@@ -420,8 +421,8 @@
 - AC-039: After vendor:publish with EL-024, the four files of SCR-006 exist at their stated paths (FR-040).
 - AC-040: Before the Developer includes EL-030, the routes portone.checkout, portone.checkout.prepare, and portone.checkout.complete do not exist (FR-041).
 - AC-041: An unauthenticated request to each route of EL-030 does not reach the controller action and creates no Payment record (FR-042).
-- AC-042: portone.checkout renders EL-025 containing EL-026 and EL-027, and the values of EL-022 and EL-023 are available to EL-028 (FR-043, FR-044).
-- AC-043: The prepare action creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the constants of EL-029, regardless of any amount or order name in the request (FR-045, FR-046).
+- AC-042: portone.checkout renders EL-025 containing EL-026 and EL-027 and the name and price of the looked-up product, and the values of EL-022 and EL-023 and the product identifier are available to EL-028 (FR-043, FR-044).
+- AC-043: The prepare action creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the price and name of the looked-up product, regardless of any amount or order name in the request (FR-045, FR-045a, FR-046).
 - AC-044: The prepare response JSON equals the array returned by EL-010 for the created Payment record (FR-047).
 - AC-045: Clicking EL-026 sends a request to the prepare route, disables EL-026, and shows the Loading state (FR-048, SCR-006).
 - AC-046: requestPayment is called with the store ID, channel key, paymentId, orderName, totalAmount, customerId, the payment method constant, and the currency constant (FR-049).

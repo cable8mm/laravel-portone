@@ -103,7 +103,7 @@
   - External boundary: no
   - Acceptance criteria:
     - An unauthenticated POST to portone.checkout.prepare does not reach the controller action and creates no Payment record (FR-042, AC-041).
-    - An authenticated POST creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the constants defined in EL-029, regardless of any amount or order name in the request (FR-045, FR-046, AC-043).
+    - An authenticated POST creates exactly one Payment record with status PENDING for the authenticated user, with amount and order_name equal to the constants defined in EL-029, regardless of any amount or order name in the request (FR-045, FR-046, AC-043). (Superseded by T-020: amount and order_name now come from the EL-029 product lookup.)
     - The response body equals the array returned by EL-010 for the created record (FR-047, AC-044).
     - No request is sent to PortOne.
     - A failure raised by preparation propagates unmodified to the Application's error handling (ARCHITECTURE.md RD-18, Failure Boundaries).
@@ -259,3 +259,17 @@
     - Re-verification is scheduled for any observation whose external behavior may have changed.
     - Findings are reported; no code change is required unless a traceable-source violation is found.
 
+- [X] T-020 Workbench sample shop and product lookup in the checkout stubs
+  - Satisfies: PRODUCT_SPEC.md FR-043, FR-045, FR-045a, FR-046, FR-048, AC-042, AC-043; TECH_STACK.md §1 (Vite, laravel-vite-plugin, Tailwind CSS v4 for workbench/), §4 (composer serve developer guide and sample shop; the served Workbench app reads the local .env, PHPUnit runs do not), §6 (package.json is dev-only), §8 (bundlers allowed for tests/ and workbench/)
+  - External boundary: yes (the changed stub script runs in the browser against live PortOne)
+  - Acceptance criteria:
+    - The checkout stub controller has one product lookup used by show and prepare; the published lookup returns a sample product object (identifier, name, price) under a comment telling the Developer to replace it with a database lookup.
+    - The checkout view shows the looked-up product's name and price; the stub script sends the product identifier to the prepare route; the amount and order name never come from the request.
+    - composer serve builds the Workbench assets with Vite and Tailwind CSS v4, builds the SQLite database with the default, Package, and Workbench migrations, and seeds the Workbench user and sample products.
+    - / shows a developer guide without signing anyone in: setting status without values, routes, sample code locations, test commands, and a link that signs in the Workbench user and opens the sample shop.
+    - The sample shop works against SQLite like a real service: product list, product detail (no side effects), order sheet from the checkout stub, payment through the PG window operated by a human, payment history and detail, full and partial refund, and a webhook log.
+    - Every Package feature can be tried in the sample shop and is listed on the developer guide: the PortOne customer (EL-001 to EL-003), payment preparation (EL-004, EL-010), completion including re-confirming a PENDING payment (EL-005), full and partial cancellation (EL-006), payment history (EL-007, EL-008), the webhook route and WebhookReceived event, and the publish tags.
+    - The Workbench copy of the checkout stubs differs from the published stubs only in the product lookup body, the namespace, and the view layout and styling; a unit test enforces the controller difference.
+    - The served Workbench app reads PORTONE_* settings from the local .env; PHPUnit runs (APP_ENV=testing) do not.
+    - Unit tests for the stubs and the sample shop pass; composer live passes with the changed stub script.
+    - docs/TESTING.md §1.2 describes the developer guide, the sample shop, and the build.

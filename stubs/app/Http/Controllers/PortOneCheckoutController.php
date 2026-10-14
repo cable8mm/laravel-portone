@@ -15,17 +15,15 @@ use Illuminate\Http\Request;
 
 class PortOneCheckoutController
 {
-    private const AMOUNT = 10000;
-
-    private const ORDER_NAME = 'Order A';
-
-    public function show(): View
+    public function show(Request $request): View
     {
+        $product = $this->product($request);
         $storeId = config('portone.store_id');
         $channelKey = config('portone.channel_key');
         $missingConfiguration = blank($storeId) || blank($channelKey);
 
         return view('portone.checkout', [
+            'product' => $product,
             'storeId' => $storeId,
             'channelKey' => $channelKey,
             'prepareUrl' => route('portone.checkout.prepare'),
@@ -36,9 +34,10 @@ class PortOneCheckoutController
         ]);
     }
 
-    public function prepare(): JsonResponse
+    public function prepare(Request $request): JsonResponse
     {
-        $payment = auth()->user()->preparePayment(self::AMOUNT, self::ORDER_NAME);
+        $product = $this->product($request);
+        $payment = auth()->user()->preparePayment($product->price, $product->name);
 
         return response()->json($payment->checkoutParameters());
     }
@@ -54,5 +53,15 @@ class PortOneCheckoutController
         }
 
         return response()->json(['status' => $payment->status]);
+    }
+
+    /**
+     * The product being paid for; the amount and order name always come from here, never from the request.
+     */
+    private function product(Request $request): object
+    {
+        // Replace this sample product with your product from the database,
+        // e.g. return Product::findOrFail($request->input('product'));
+        return (object) ['id' => 1, 'name' => 'Order A', 'price' => 10000];
     }
 }

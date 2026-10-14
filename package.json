@@ -6,17 +6,23 @@
   },
   "scripts": {
     "check": "npm run format:check && npm run lint",
-    "format:check": "prettier --check stubs tests/js vitest.config.js eslint.config.js",
-    "format": "prettier --write stubs tests/js vitest.config.js eslint.config.js",
-    "lint": "eslint stubs tests/js vitest.config.js eslint.config.js",
-    "test": "vitest run --passWithNoTests"
+    "format:check": "prettier --check stubs tests/js workbench/vite.config.js workbench/resources/js vitest.config.js eslint.config.js",
+    "format": "prettier --write stubs tests/js workbench/vite.config.js workbench/resources/js vitest.config.js eslint.config.js",
+    "lint": "eslint stubs tests/js workbench/vite.config.js workbench/resources/js vitest.config.js eslint.config.js",
+    "test": "vitest run --passWithNoTests",
+    "workbench:build": "vite build --config workbench/vite.config.js",
+    "workbench:dev": "vite --config workbench/vite.config.js"
   },
   "devDependencies": {
     "@portone/browser-sdk": "^0.1.13",
+    "@tailwindcss/vite": "^4.3.3",
     "eslint": "^10.12.0",
     "globals": "^16.5.0",
     "jsdom": "^27.0",
+    "laravel-vite-plugin": "^3.2.0",
     "prettier": "^3.9.10",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4",
     "vitest": "^4.0"
   },
   "allowScripts": {

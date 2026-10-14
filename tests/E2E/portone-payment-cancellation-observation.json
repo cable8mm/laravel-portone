@@ -1,16 +1,16 @@
 {
-	"recordedAt": "2026-10-14T02:38:56+00:00",
+	"recordedAt": "2026-10-14T11:52:45+00:00",
 	"client": "cable8mm/portone-php",
 	"environment": "PortOne test channel",
 	"publishedStubs": true,
 	"payments": {
 		"fullCancellation": {
-			"paymentId": "28142614-cf36-4c9a-b0f9-7b46d8ae5ae4",
+			"paymentId": "1fd1b220-e0ea-4cc1-8bd9-0bb6f77ef942",
 			"initialStatus": "PAID",
 			"initialAmount": 100
 		},
 		"partialCancellation": {
-			"paymentId": "8c53e1c2-fd2a-4ed8-b01b-a537eb681675",
+			"paymentId": "9151799a-0ade-497b-89ce-82c6ab681a13",
 			"initialStatus": "PAID",
 			"initialAmount": 100
 		}

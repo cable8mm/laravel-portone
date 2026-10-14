@@ -29,6 +29,7 @@ async function renderCheckout() {
 			data-channel-key="channel-456"
 			data-prepare-url="/portone/checkout/prepare"
 			data-complete-url="/portone/checkout/complete"
+			data-product="1"
 			data-csrf-token="csrf-token"
 			data-state="initial"
 		>
@@ -54,7 +55,7 @@ afterEach(() => {
 });
 
 describe("published checkout script", () => {
-  it("prepares, requests payment with the observed SDK values, and completes only as PAID", async () => {
+  it("prepares the product, requests payment with the observed SDK values, and completes only as PAID", async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response(payment))
@@ -87,7 +88,7 @@ describe("published checkout script", () => {
         "Content-Type": "application/json",
         "X-CSRF-TOKEN": "csrf-token",
       },
-      body: "{}",
+      body: JSON.stringify({ product: "1" }),
     });
     expect(fetch).toHaveBeenNthCalledWith(2, "/portone/checkout/complete", {
       method: "POST",

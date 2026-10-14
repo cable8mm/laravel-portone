@@ -103,7 +103,7 @@ php artisan vendor:publish --tag=portone-stubs
 | ---------------------------------------------------- | ----------------------------------------------------------------------- |
 | `resources/views/portone/checkout.blade.php`         | 결제 버튼 + 상태 표시 뷰                                                |
 | `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트           |
-| `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션 (샘플 금액 10,000원, 주문명 `Order A`) |
+| `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
 | `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                   |
 
 발행한 파일을 애플리케이션에 연결합니다.
@@ -143,20 +143,29 @@ PORTONE_CHANNEL_KEY=
 
 체크아웃 흐름:
 
-1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare` → `PENDING` 레코드 생성
+1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare`(상품 ID만 전송) → `PENDING` 레코드 생성
 2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (storeId, channelKey, paymentId, orderName, totalAmount, customerId, `CARD`, `KRW`)
 3. 에러 코드 없이 반환되면 `POST portone.checkout.complete` (`paymentId`만 전송)
 4. `PAID` 응답이면 `Success`, 그 외(준비 실패·SDK 실패·미결제·금액 불일치 등)는 `Error`
 
 ### 5. 화면 커스터마이징
 
-발행된 파일은 이제 애플리케이션 것이므로 자유롭게 고칩니다. 샘플 금액·주문명은 컨트롤러 상수이니 실제 상품에 맞게 바꾸세요.
+발행된 파일은 이제 애플리케이션 것이므로 자유롭게 고칩니다. 주문서(`show`)와 결제 준비(`prepare`)는
+컨트롤러의 `product()` 하나에서 상품을 가져옵니다. 주석이 달린 샘플 상품을 데이터베이스 조회로 바꾸면 됩니다.
 
 ```php
 // app/Http/Controllers/PortOneCheckoutController.php
-private const AMOUNT = 10000;
-private const ORDER_NAME = 'Order A';
+private function product(Request $request): object
+{
+    // Replace this sample product with your product from the database,
+    // e.g. return Product::findOrFail($request->input('product'));
+    return (object) ['id' => 1, 'name' => 'Order A', 'price' => 10000];
+}
 ```
+
+상품 상세 화면에서 `route('portone.checkout', ['product' => $product->id])`로 링크하면 주문서가 그 상품을 보여 주고,
+`Start payment` 클릭 시 상품 ID만 `prepare`로 전송됩니다. 금액·주문명은 언제나 서버의 상품에서 정해집니다.
+`composer serve`의 워크벤치 샘플 상점이 이 한 곳만 고친 예시입니다([docs/TESTING.md](docs/TESTING.md) §1.2).
 
 > `complete` 액션은 요청의 금액을 무시하고 서버 레코드 기준으로 검증하므로, 클라이언트 값을 조작해도 안전합니다.
 
