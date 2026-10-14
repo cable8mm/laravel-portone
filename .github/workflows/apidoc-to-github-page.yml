@@ -18,6 +18,8 @@ concurrency:
 
 jobs:
     deploy:
+        # Forks have no GitHub Pages site for this repository.
+        if: github.repository == 'cable8mm/laravel-portone'
         environment:
             name: github-pages
             url: ${{ steps.deployment.outputs.page_url }}

@@ -12,6 +12,9 @@ on:
 
 jobs:
   claude-review:
+    # GitHub withholds secrets from pull requests opened from forks, and forks
+    # have no Claude secret of their own, so review only same-repository PRs here.
+    if: github.repository == 'cable8mm/laravel-portone' && github.event.pull_request.head.repo.full_name == github.repository
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
