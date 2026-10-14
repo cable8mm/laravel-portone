@@ -9,7 +9,7 @@ use Cable8mm\LaravelPortone\GatewayPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
-use Cable8mm\PortonePhp\Exception\PortOneException;
+use Cable8mm\PortonePhp\Exception\UnauthorizedException;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\TestCase;
@@ -121,7 +121,7 @@ class CheckoutCompleteActionTest extends TestCase
         $gateway = $this->gatewayMock();
         $gateway->expects($this->once())
             ->method('lookup')
-            ->willThrowException(new PortOneException('PortOne request failed.', 401));
+            ->willThrowException(new UnauthorizedException('PortOne request failed.', 401, null, null, 'UNAUTHORIZED'));
         config(['portone.api_secret' => 'configured-for-test']);
 
         $this->post(route('portone.checkout.complete'), ['paymentId' => $payment->payment_id])

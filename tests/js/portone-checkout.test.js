@@ -150,7 +150,7 @@ describe("published checkout script", () => {
       .mockResolvedValueOnce(response(payment))
       .mockResolvedValueOnce(response({ error: "failed" }, false, 422));
     vi.stubGlobal("fetch", fetch);
-    requestPayment.mockResolvedValue({});
+    requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
     const { root, button } = await renderCheckout();
 
     button.click();
@@ -166,7 +166,7 @@ describe("published checkout script", () => {
       .mockResolvedValueOnce(response(payment))
       .mockResolvedValueOnce(response({ status: "PENDING" }));
     vi.stubGlobal("fetch", fetch);
-    requestPayment.mockResolvedValue({});
+    requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
     const { root, button } = await renderCheckout();
 
     button.click();

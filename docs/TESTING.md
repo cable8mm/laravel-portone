@@ -190,6 +190,18 @@ php tools/probes/portone-payment-lookup-probe.php
 
 > 관측 파일은 의도된 출력입니다(커밋 대상). 다만 **시크릿 값이 들어가지 않도록** 주의하세요.
 
+### 3.1 재검증 시점
+
+단위 테스트의 목 값은 probe 관측과 live 테스트 관측(`tests/E2E/*-observation.json`)에서
+옵니다. 외부 동작이 바뀌었을 수 있는 아래 경우에는 다시 관측하세요.
+
+| 계기                                                  | 다시 돌릴 것                                   |
+| ----------------------------------------------------- | ---------------------------------------------- |
+| `cable8mm/portone-php` 버전 변경                      | `composer live` 전체 + 조회 probe              |
+| `@portone/browser-sdk` 버전 변경, 테스트 채널·PG 변경 | 브라우저 SDK probe + `PortOneCheckoutFlowTest` |
+| 포트원 웹훅 설정·시크릿 변경                          | `PortOneWebhookTest`                           |
+| 릴리스 태그 직전                                      | `composer live` 전체                           |
+
 ---
 
 ## 4. 문제 해결

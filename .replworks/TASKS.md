@@ -242,7 +242,7 @@
     - TECH_STACK.md states explicitly that the no-PHP-built-in-server-router rule applies to live tests, and that probes are a documented exception.
     - The existing observation JSON files produced by the probes remain valid inputs to the live tests.
 
-- [ ] T-018 Remove paid-id dependencies between live tests (superseded by T-016)
+- [X] T-018 Remove paid-id dependencies between live tests (superseded by T-016)
   - Satisfies: TECH_STACK.md §4 (each live test is runnable on its own); keeps PaymentCompletion and CheckoutCompletion as two tests
   - External boundary: yes
   - Acceptance criteria:
@@ -250,7 +250,7 @@
     - The payment-lookup probe observation remains the INPUT for the not-paid path.
     - PaymentCompletion and CheckoutCompletion remain two separate tests (no merge).
 
-- [ ] T-019 Audit recorded observations and mocks against MOCK_RULES
+- [X] T-019 Audit recorded observations and mocks against MOCK_RULES
   - Satisfies: AGENTS.md MOCK_RULES; verification/hygiene task, non-blocking
   - External boundary: n/a (audit)
   - Acceptance criteria:
