@@ -1,10 +1,10 @@
 {
-	"recordedAt": "2026-10-13",
+	"recordedAt": "2026-10-14T02:27:26+00:00",
 	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
 	"publishedStubs": true,
 	"defaultApiBaseUrl": "https://api.portone.io",
 	"packagePreparedPayment": {
-		"paymentId": "d0290aad-3183-4ccb-aff4-6208d74ce38a",
+		"paymentId": "334a12ae-14fe-49e9-9aee-f34b91eb71e2",
 		"totalAmount": 100,
 		"browserResult": "returned without an error code"
 	},

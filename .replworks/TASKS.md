@@ -213,3 +213,49 @@
     - A failed prepare request, a failure of the SDK call itself, and a complete response without an error whose status is not PAID each set Error, and Success never occurs without status PAID (ARCHITECTURE.md RD-17, INV-18).
     - EL-026 is disabled in Loading and Success and enabled in Initial and Error (AC-052).
     - Unit tests with an SDK test double traced to the T-002 recording pass.
+
+- [X] T-016 Migrate live browser checkout tests to Orchestra Testbench Dusk
+  - Satisfies: TECH_STACK.md §1 (orchestra/testbench-dusk), §2 (tests/E2E/, phpunit.dusk.xml), §4 (live browser tests use Testbench Dusk against Workbench, headed, Dusk loginAs(), no PHP built-in router), §6 (require-dev, export-ignore for phpunit.dusk.xml); replaces the router-based PortOneCheckoutFlowTest live browser path
+  - External boundary: yes
+  - Acceptance criteria:
+    - Live browser tests (the Payer opens and completes the PG payment window) live under tests/E2E/, extend the Orchestra Testbench Dusk test case, and drive the Workbench app.
+    - tests/E2E/ is covered only by phpunit.dusk.xml; composer test excludes tests/E2E/; phpunit.dusk.xml is export-ignored.
+    - orchestra/testbench-dusk is added to composer.json require-dev; laravel/dusk and php-webdriver are NOT listed separately.
+    - ChromeDriver is provisioned as the Laravel Dusk documentation prescribes (verified against the docs; not laravel/dusk-updater, which testbench-dusk does not mandate).
+    - Live browser tests run headed (DUSK_HEADLESS_DISABLED=1) and the composer live script sets it, so the human can operate the PG payment window.
+    - The Testbench Dusk serve port is known and configurable (DUSK_SERVE_URL or DUSK_SERVE_PORT/DUSK_SERVE_HOST; default 8001) and documented so an ngrok target can match it.
+    - Live browser tests authenticate with Dusk loginAs().
+    - No PHP built-in server router script is used by any live test.
+    - An E2E test exercises the product from the Payer's click through live PortOne and the PG payment window to the final state, matching the behavior previously recorded by the router-based flow (T-015 acceptance behavior preserved).
+    - Live verification still MUST NOT run in CI; CI remains green.
+    - Each live test is runnable on its own: it creates any payment it consumes and requires no other live test to run first (TECH_STACK.md §4).
+    - Unit tests unaffected pass.
+
+- [ ] T-017 Relocate live verification probes out of tests/
+  - Satisfies: TECH_STACK.md §2 (tools/probes/), §4 (probes are a documented exception to the no-router rule), §6 (export-ignore for tools/probes/); preserves T-002/T-003 probe coverage
+  - External boundary: yes (probes observe external behavior)
+  - Acceptance criteria:
+    - Both executable probes (browser SDK payment-window probe and payment-lookup probe) move from tests/live/ to tools/probes/.
+    - Probes remain independent of the Package's own code and keep producing the same recorded observations consumed by live tests.
+    - Docs referencing the probes are updated to the new tools/probes/ location.
+    - tools/probes/ is export-ignored from the distribution archive.
+    - TECH_STACK.md states explicitly that the no-PHP-built-in-server-router rule applies to live tests, and that probes are a documented exception.
+    - The existing observation JSON files produced by the probes remain valid inputs to the live tests.
+
+- [ ] T-018 Remove paid-id dependencies between live tests (superseded by T-016)
+  - Satisfies: TECH_STACK.md §4 (each live test is runnable on its own); keeps PaymentCompletion and CheckoutCompletion as two tests
+  - External boundary: yes
+  - Acceptance criteria:
+    - No live test requires another live test to run first; the refund and cancellation tests create the payments they consume (implemented under T-016).
+    - The payment-lookup probe observation remains the INPUT for the not-paid path.
+    - PaymentCompletion and CheckoutCompletion remain two separate tests (no merge).
+
+- [ ] T-019 Audit recorded observations and mocks against MOCK_RULES
+  - Satisfies: AGENTS.md MOCK_RULES; verification/hygiene task, non-blocking
+  - External boundary: n/a (audit)
+  - Acceptance criteria:
+    - Every mock value in the test suite is traced to a recorded live observation or a documented spec.
+    - Any mock whose values cannot be traced is listed with the code that touches the external boundary.
+    - Re-verification is scheduled for any observation whose external behavior may have changed.
+    - Findings are reported; no code change is required unless a traceable-source violation is found.
+

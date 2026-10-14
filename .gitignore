@@ -10,3 +10,4 @@
 /workbench/database/database.sqlite
 /build/
 /cache/
+/tests/E2E/debug/

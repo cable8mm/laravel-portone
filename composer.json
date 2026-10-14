@@ -14,7 +14,8 @@
     "phpunit/phpunit": "^11.5 || ^12",
     "laravel/pint": "^1.0",
     "phpstan/phpstan": "^2.0",
-    "larastan/larastan": "^3.0"
+    "larastan/larastan": "^3.0",
+    "orchestra/testbench-dusk": "^10.0 || ^11.0"
   },
   "autoload": {
     "psr-4": {
@@ -33,6 +34,12 @@
     "format:check": "pint --test",
     "analyse": "phpstan analyse --no-progress",
     "test": "phpunit",
+    "live": [
+      "Composer\\Config::disableProcessTimeout",
+      "@putenv DUSK_HEADLESS_DISABLED=1",
+      "phpunit --configuration phpunit.dusk.xml"
+    ],
+    "dusk:chrome-driver": "@php vendor/bin/testbench-dusk dusk:chrome-driver --detect",
     "post-autoload-dump": [
       "@clear",
       "@prepare"

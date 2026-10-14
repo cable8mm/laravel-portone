@@ -1,0 +1,39 @@
+{
+	"recordedAt": "2026-10-14T02:37:46+00:00",
+	"publicEndpoint": "b933-211-110-41-15.ngrok-free.app",
+	"paymentId": "dc2e6b5f-3dbc-42d7-b2b3-4048cbf44e23",
+	"paymentCompleted": {
+		"event": {
+			"webhookId": "msg-01a13845-dc01-2111-f802-73059ce9d6ec",
+			"webhookType": "Cable8mm\\PortonePhp\\Webhook\\WebhookTransaction"
+		},
+		"headers": {
+			"webhook-id": "msg-01a13845-dc01-2111-f802-73059ce9d6ec",
+			"webhook-signature": "v1,3Rm7Tuo+Nx3zJBXk3IVRXRLOpEAhKZgox8C7D/+Da5Q=",
+			"webhook-timestamp": "1791945464"
+		},
+		"body": "{\"type\":\"Transaction.Paid\",\"timestamp\":\"2026-10-14T02:37:44Z\",\"data\":{\"transactionId\":\"01a13845-34ca-eb3d-e51a-2f3d35e4ec8e\",\"paymentId\":\"dc2e6b5f-3dbc-42d7-b2b3-4048cbf44e23\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\"}}",
+		"response": {
+			"status": 200,
+			"body": ""
+		}
+	},
+	"tamperedSignatureStatus": 400,
+	"paymentCancelled": {
+		"event": {
+			"webhookId": "msg-01a13845-dfab-7595-7647-560b5c6b775c",
+			"webhookType": "Cable8mm\\PortonePhp\\Webhook\\WebhookTransaction"
+		},
+		"headers": {
+			"webhook-id": "msg-01a13845-dfab-7595-7647-560b5c6b775c",
+			"webhook-signature": "v1,nZm5XtZwcoxlQPDY5v2p9gimk8ixSe0p8RIqaj5Nnjg=",
+			"webhook-timestamp": "1791945465"
+		},
+		"body": "{\"type\":\"Transaction.Cancelled\",\"timestamp\":\"2026-10-14T02:37:45.733015094Z\",\"data\":{\"transactionId\":\"01a13845-34ca-eb3d-e51a-2f3d35e4ec8e\",\"paymentId\":\"dc2e6b5f-3dbc-42d7-b2b3-4048cbf44e23\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\",\"cancellationId\":\"01a13845-de5d-3a4e-1fb1-8a29df5ee17b\"}}",
+		"response": {
+			"status": 200,
+			"body": ""
+		}
+	},
+	"secretsRecorded": false
+}
