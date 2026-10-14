@@ -342,6 +342,57 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
 | `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락                                      |
 | `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)                                 |
 
+## 실서비스 적용 전 확인 사항
+
+### 검증된 범위
+
+포트원 **테스트 채널(NHN KCP)**, 결제 수단 **카드(`CARD`)**, 통화 **원화(`KRW`)**, `@portone/browser-sdk` `0.1.13`에서
+사람이 결제창을 직접 조작하는 live 테스트로 확인했습니다.
+
+- 체크아웃 스텁: 주문서 → 결제창 → 결제 완료 → 주문 완료 화면 / 결제창 닫기 → `Error`
+- 서버 검증: 금액·주문명은 서버의 상품에서만 정해지고, `completePayment()`가 PortOne 조회로 상태와 금액을 확인
+- 전액 취소, 여러 번 나눠 하는 부분 취소, PortOne이 거절한 취소
+- 웹훅 서명 검증과 `WebhookReceived` 발송 (ngrok 공개 URL)
+- 결제 대기 건 만료: 결제창을 연 적 없음 `PAYMENT_NOT_FOUND`, 결제창이 열려 있음 `READY`, 닫음 `FAILED`,
+  같은 결제 ID로 나중에 결제됨 `PAID`
+
+**검증하지 않은 것**: 운영(live) 채널, KCP 외 PG, 카드 외 결제 수단(가상계좌·간편결제 등), 원화 외 통화.
+
+### 결제 수단·통화 바꾸기
+
+발행된 `resources/js/portone-checkout.js` 맨 위의 상수를 바꿉니다.
+
+```js
+const PAYMENT_METHOD = "CARD";
+const CURRENCY = "KRW";
+```
+
+바꾸면 위의 검증 범위를 벗어납니다. 특히 가상계좌처럼 결제창을 닫은 뒤에 입금되는 수단은 스텁 흐름
+(결제창 결과 → 바로 `complete`)과 만료 규칙이 그 수단에 맞는지 확인되지 않았습니다. 테스트 채널에서
+그 수단으로 결제·취소·만료 흐름을 먼저 돌려 보세요.
+
+### 운영 전환 체크리스트
+
+1. 운영 채널의 `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`와 `PORTONE_API_SECRET`으로 바꿉니다.
+2. 포트원 콘솔에 웹훅 URL(`https://<도메인>/portone/webhook`, 또는 `PORTONE_WEBHOOK_PATH`)을 등록하고
+   `PORTONE_WEBHOOK_SECRET`을 설정합니다.
+3. Vite `input`에 `resources/js/portone-checkout.js`를 넣고 `npm run build`합니다([프론트엔드 빌드](#2-체크아웃-화면-설치-스텁-발행)).
+4. 큐 워커와 스케줄러(`portone:expire-pending`, `model:prune`)를 운영합니다([결제 대기 건 만료와 정리](#결제-대기-건-만료와-정리)).
+5. 소액으로 **실결제 → 주문 완료 화면 → 부분 취소 → 전액 취소**를 직접 해 보고, 웹훅이 도착하는지
+   확인합니다.
+
+### 알려진 제약
+
+- **단건 결제만** 다룹니다. 구독·정기결제는 대상이 아닙니다.
+- **환불(취소) 화면은 없습니다.** 관리자 화면에서 `refund()`를 직접 호출하세요.
+- **같은 초에 만들어진 결제**는 `payments()` 결과에서 순서가 정해지지 않습니다.
+- **웹훅은 중복 전달될 수 있고**, 패키지는 걸러내지 않아 전달마다 `WebhookReceived`가 발생합니다. 리스너는
+  여러 번 실행돼도 안전하게 만드세요. `completePayment()`는 이미 `PAID`인 결제를 그대로 돌려주므로 안전합니다.
+- **취소 직후 로컬 저장 실패**: PortOne이 취소를 받아들인 뒤 DB 저장이 3번 연속 실패하면 예외가 발생하고,
+  레코드는 취소 전 상태로 남아 PortOne과 어긋납니다. 이때 `refund()`를 다시 부르면 취소 요청이 다시 가므로(PortOne이 거절할 것으로 예상),
+  레코드를 직접 바로잡아야 합니다.
+- **패키지 명령은 콘솔에서만 등록**되므로 웹 요청에서는 `Artisan::queue()`를 쓰세요.
+
 ## 개발 및 테스트
 
 이 패키지에 기여하거나 live/e2e 테스트를 직접 돌려보려면 [`docs/`](./docs)를 참고하세요.
