@@ -38,7 +38,9 @@ if (checkout) {
       setState("loading", "Loading", true);
 
       try {
-        const payment = await post(checkout.dataset.prepareUrl, {});
+        const payment = await post(checkout.dataset.prepareUrl, {
+          product: checkout.dataset.product,
+        });
         const result = await PortOne.requestPayment({
           storeId: checkout.dataset.storeId,
           channelKey: checkout.dataset.channelKey,

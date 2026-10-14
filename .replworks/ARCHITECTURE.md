@@ -77,7 +77,7 @@
 
 1. Payer visits the checkout route; the Application authenticates; Checkout Controller `show` renders Checkout View.
 2. Payer clicks the start-payment button; Checkout Script requests the `prepare` route.
-3. Checkout Controller `prepare` runs SF-1 for the authenticated user with fixed constants and responds with the checkoutParameters.
+3. Checkout Controller `prepare` runs SF-1 for the authenticated user with the price and name of the product from its product lookup and responds with the checkoutParameters.
 4. Checkout Script calls the PortOne browser SDK; the Payer pays outside the Package.
 5. On an SDK result without an error code, Checkout Script requests the `complete` route with the Payment ID.
 6. Checkout Controller `complete` runs SF-2 for the authenticated user and responds with the status.
@@ -225,13 +225,14 @@
 ### CMP-11 Checkout Controller (stub, EL-029)
 
 - Responsibilities:
-  - `show`: read EL-022, EL-023 from Configuration; when either is absent tell Checkout View to render the Error state with the button disabled (ERR-013); otherwise render Checkout View with the values available to Checkout Script (FR-043).
-  - `prepare`: call EL-004 on the authenticated user with an amount and order name defined as constants in this component; never read either from the request; respond with the EL-010 array (FR-045 to FR-047).
+  - `show`: read EL-022, EL-023 from Configuration; when either is absent tell Checkout View to render the Error state with the button disabled (ERR-013); otherwise render Checkout View with the looked-up product's name and price and with the values and the product identifier available to Checkout Script (FR-043).
+  - `prepare`: call EL-004 on the authenticated user with the price as the amount and the name as the order name of the product from the product lookup; never read an amount or order name from the request; respond with the EL-010 array (FR-045 to FR-047).
+  - Product lookup: one lookup used by `show` and `prepare`; it may read a product identifier from the request; the published stub returns a sample product the Developer replaces with a database lookup (FR-045a).
   - `complete`: call EL-005 on the authenticated user with the Payment ID from the request; never read an amount; respond with the status of the returned record (FR-053, FR-054).
   - Map PaymentNotFoundException, PaymentNotPaidException, AmountMismatchException to HTTP 422 with the key `error`; ConfigurationException and the PortOne exception to HTTP 500 with the key `error` (ERR-014, ERR-015). Every other exception propagates unmodified (RD-18).
 - Inputs: requests via CMP-14 from an authenticated user.
 - Outputs: rendered view; structured responses to Checkout Script.
-- Owns: the constants for amount and order name; the mapping of errors to responses.
+- Owns: the product lookup; the mapping of errors to responses.
 - Does not own: authentication (Application), any record, any PortOne contact.
 
 ### CMP-12 Checkout View (stub, EL-025)
@@ -239,7 +240,8 @@
 - Responsibilities:
   - Contain the start-payment button (EL-026) and the status slot (EL-027) (FR-044).
   - Render states: Initial (button enabled, idle), Loading (button disabled, in-progress), Success (button disabled, paid), Error (button enabled, error). Error caused by ERR-013 keeps the button disabled.
-  - Hand the store ID and channel key to Checkout Script.
+  - Show the looked-up product's name and price.
+  - Hand the store ID, channel key, and product identifier to Checkout Script.
   - Load Checkout Script as part of the rendered page.
 - Inputs: values and a missing-configuration flag from Checkout Controller; state changes from Checkout Script.
 - Outputs: what the Payer sees.
@@ -249,7 +251,7 @@
 ### CMP-13 Checkout Script (stub, EL-028)
 
 - Responsibilities:
-  - On click: request `prepare` and set Loading (FR-048).
+  - On click: request `prepare` with the product identifier and set Loading (FR-048).
   - Call the PortOne browser SDK `requestPayment` with store ID, channel key, paymentId, orderName, totalAmount, customerId, a payment method constant, a currency constant (FR-049). The two constants are defined at the top of the file (FR-050).
   - On a result with an error code: set Error and do not request `complete` (FR-051).
   - On a result without an error code: request `complete` with the Payment ID (FR-052).
@@ -390,8 +392,8 @@ No record is read or written.
 | Step | From -> To                    | Data                                                                                                             |
 | ---- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | 1    | Payer -> CMP-12/CMP-13        | click                                                                                                            |
-| 2    | CMP-13 -> CMP-11 (`prepare`)  | no amount, no order name                                                                                         |
-| 3    | CMP-11 -> CMP-03              | constants for amount and order name                                                                              |
+| 2    | CMP-13 -> CMP-11 (`prepare`)  | product identifier only; no amount, no order name                                                                |
+| 3    | CMP-11 -> CMP-03              | price and name of the looked-up product                                                                          |
 | 4    | CMP-11 -> CMP-13              | EL-010 array                                                                                                     |
 | 5    | CMP-13 -> SDK                 | store ID, channel key, paymentId, orderName, totalAmount, customerId, payment method constant, currency constant |
 | 6    | SDK -> CMP-13                 | result with or without error code                                                                                |
@@ -485,7 +487,7 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 - INV-14: A webhook request reads and writes no Customer record and no Payment record.
 - INV-15: Raw body bytes reach CMP-09 unmodified.
 - INV-16: The api secret exists only inside CMP-08's use; the webhook secret only in CMP-10 and as an input to CMP-09.
-- INV-17: In the stub flow, amount and order name come only from constants in CMP-11; `complete` reads only the Payment ID from the request.
+- INV-17: In the stub flow, amount and order name come only from the CMP-11 product lookup; the request supplies at most a product identifier; `complete` reads only the Payment ID from the request.
 - INV-18: CMP-12 is in the Success state only after `complete` responded with status PAID.
 - INV-19: The stub routes are never registered by the Package; each requires an authenticated user.
 - INV-20: The Core runs identically with the stubs absent.

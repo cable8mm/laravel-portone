@@ -47,7 +47,7 @@ class CheckoutPrepareActionTest extends TestCase
         $this->assertSame(0, Payment::query()->count());
     }
 
-    public function test_prepare_uses_controller_constants_and_returns_checkout_parameters(): void
+    public function test_prepare_uses_the_looked_up_product_and_returns_checkout_parameters(): void
     {
         $this->migratePackageTables();
         $this->publishAndIncludeRoutes();
@@ -57,6 +57,7 @@ class CheckoutPrepareActionTest extends TestCase
         $this->actingAs($billable);
 
         $response = $this->post(route('portone.checkout.prepare'), [
+            'product' => 1,
             'amount' => 1,
             'orderName' => 'Untrusted request value',
         ]);

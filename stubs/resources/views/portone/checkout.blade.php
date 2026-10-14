@@ -4,9 +4,12 @@
     data-channel-key="{{ $channelKey }}"
     data-prepare-url="{{ $prepareUrl }}"
     data-complete-url="{{ $completeUrl }}"
+    data-product="{{ $product->id }}"
     data-csrf-token="{{ csrf_token() }}"
     data-state="{{ $state }}"
 >
+    <h1>{{ $product->name }}</h1>
+    <p>{{ number_format($product->price) }} KRW</p>
     <button id="portone-checkout-button" type="button" @disabled($missingConfiguration)>Start payment</button>
     <p id="portone-checkout-status" role="status">{{ $statusText }}</p>
 </main>

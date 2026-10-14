@@ -1,7 +1,19 @@
 providers:
   - Workbench\App\Providers\WorkbenchServiceProvider
 
+env:
+  - AUTH_MODEL='Workbench\App\Models\User'
+
 workbench:
   install: true
+  start: /shop
   discovers:
     web: true
+    views: true
+  build:
+    - create-sqlite-db
+    - migrate-fresh:
+        --force: true
+    - db-seed:
+        --class: Workbench\Database\Seeders\DatabaseSeeder
+        --force: true

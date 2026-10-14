@@ -17,6 +17,9 @@
 - npm: used for JavaScript development tooling only
 - @portone/browser-sdk: ^0.1.13; the Developer installs it in the Application; the Package MUST NOT install it in the Application
 - Vitest: ^4.0
+- Vite: ^8.0; development-only, used only by workbench/
+- laravel-vite-plugin: ^3.0; development-only, used only by workbench/
+- Tailwind CSS: ^4.0 with @tailwindcss/vite; development-only, used only by workbench/
 - jsdom: ^27.0
 - Prettier: ^3.0
 - ESLint: ^10.0
@@ -82,6 +85,8 @@
 - Live browser tests MUST run headed so the human can operate the PG payment window; DUSK_HEADLESS_DISABLED=1 MUST disable headless and MUST be set in the composer live script.
 - The Testbench Dusk serve port MUST be known and configurable so the ngrok target matches; it is set through DUSK_SERVE_URL, or DUSK_SERVE_PORT/DUSK_SERVE_HOST (default port 8001).
 - Live browser tests MUST authenticate with Dusk loginAs().
+- The composer serve app MUST show a developer guide at / without signing anyone in, with a link that signs in the seeded Workbench user and opens the Workbench sample shop.
+- The Workbench app served by composer serve MUST read the same local .env file as live tests; PHPUnit runs (APP_ENV=testing) MUST NOT read it.
 - Live verification probes are a documented exception to the no-PHP-built-in-server-router rule: probes MUST reside outside tests/ under tools/probes/ because their purpose is to observe external behavior independently of the Package's own code; the no-router rule applies to live tests only.
 - Coverage threshold: None.
 - Coverage tooling MUST NOT be configured.
@@ -107,7 +112,7 @@
 - composer.json license MUST be MIT.
 - composer.json require MUST contain only php, illuminate/\* components, and cable8mm/portone-php.
 - composer.json require-dev MUST contain orchestra/testbench, orchestra/testbench-dusk, phpunit/phpunit, laravel/pint, phpstan/phpstan, and larastan/larastan.
-- package.json MUST list Vitest, jsdom, Prettier, ESLint, and @portone/browser-sdk under devDependencies only.
+- package.json is used only for development and testing of the Package; it MUST list dependencies under devDependencies only, and its dependency list is not otherwise restricted.
 - Dev-only files MUST be excluded from the distribution archive with export-ignore in .gitattributes: tests/, workbench/, package.json, package-lock.json, vitest.config.js, eslint.config.js, .prettierrc, phpstan.neon.dist, pint.json, phpunit.xml.dist, testbench.yaml, phpunit.dusk.xml, tools/probes/, .github/.
 - Distribution target: public GitHub repository and Packagist.
 - Versioning: SemVer.
@@ -133,4 +138,4 @@
 - Pest MUST NOT be used.
 - Code coverage tools (PCOV, Xdebug coverage) and coverage thresholds MUST NOT be used.
 - PortOne V1 SDKs and APIs MUST NOT be used.
-- JavaScript bundlers (Vite, webpack) MUST NOT be configured in the Package.
+- JavaScript bundlers (Vite, webpack) MUST NOT be configured for the Package's distributed code (src/, stubs/, config/). Development and test code (tests/, workbench/) is excluded from this rule; the Workbench sample shop is built with Vite, laravel-vite-plugin, and Tailwind CSS v4 (@tailwindcss/vite) through workbench/vite.config.js.
