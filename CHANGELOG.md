@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.2.1 - 2026-10-14
+
+### What's Changed
+
+* feat(stubs)!: send the payer to an order completion page after paying by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/40
+* docs(readme): add what to check before using the package in production by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/41
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.2.0...v0.2.1
+
 ## v0.2.0 - 2026-10-14
 
 ### What's Changed
