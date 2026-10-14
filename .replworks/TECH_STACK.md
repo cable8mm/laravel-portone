@@ -23,12 +23,14 @@
 - GitHub Actions: CI
 - Packagist: distribution
 - ngrok: development-only public URL for live webhook verification
+- orchestra/testbench-dusk: ^10.0 || ^11.0; development-only; provides laravel/dusk and php-webdriver/webdriver transitively; used only for live browser tests, never run in CI
 
 ## 2. Framework- or tool-mandated paths and file names only
 
 - composer.json at the repository root
 - composer.lock MUST NOT be committed and MUST be listed in .gitignore
 - phpunit.xml.dist at the repository root
+- phpunit.dusk.xml at the repository root
 - testbench.yaml at the repository root
 - workbench/ for Testbench Workbench files
 - pint.json at the repository root
@@ -71,6 +73,15 @@
 - Live verification MUST run through Testbench Workbench using the published stubs.
 - Live webhook verification MUST use an ngrok public URL.
 - Live verification MUST NOT run in CI.
+- Live tests MUST be under tests/E2E/ and MUST be covered only by phpunit.dusk.xml.
+- composer test MUST exclude tests/E2E/.
+- Live browser tests (the Payer opens and completes the PG payment window) MUST use Orchestra Testbench Dusk against the Workbench app and MUST NOT use a PHP built-in server router script.
+- Live server-only tests (no payment window, e.g. cancellation) MUST use plain live PHP requests through the Workbench app.
+- Live webhook tests MUST assert delivery at the Workbench portone.webhook route through ngrok; a browser is used only to trigger a payment, never to receive the webhook.
+- Live browser tests MUST run headed so the human can operate the PG payment window; DUSK_HEADLESS_DISABLED=1 MUST disable headless and MUST be set in the composer live script.
+- The Testbench Dusk serve port MUST be known and configurable so the ngrok target matches; it is set through DUSK_SERVE_URL, or DUSK_SERVE_PORT/DUSK_SERVE_HOST (default port 8001).
+- Live browser tests MUST authenticate with Dusk loginAs().
+- Live verification probes are a documented exception to the no-PHP-built-in-server-router rule: probes MUST reside outside tests/ under tools/probes/ because their purpose is to observe external behavior independently of the Package's own code; the no-router rule applies to live tests only.
 - Coverage threshold: None.
 - Coverage tooling MUST NOT be configured.
 - CI MUST run: composer validate, Pint in check mode, PHPStan, PHPUnit, Prettier in check mode, ESLint, Vitest.
@@ -94,9 +105,9 @@
 - Composer package name: cable8mm/laravel-portone
 - composer.json license MUST be MIT.
 - composer.json require MUST contain only php, illuminate/\* components, and cable8mm/portone-php.
-- composer.json require-dev MUST contain orchestra/testbench, phpunit/phpunit, laravel/pint, phpstan/phpstan, and larastan/larastan.
+- composer.json require-dev MUST contain orchestra/testbench, orchestra/testbench-dusk, phpunit/phpunit, laravel/pint, phpstan/phpstan, and larastan/larastan.
 - package.json MUST list Vitest, jsdom, Prettier, ESLint, and @portone/browser-sdk under devDependencies only.
-- Dev-only files MUST be excluded from the distribution archive with export-ignore in .gitattributes: tests/, workbench/, package.json, package-lock.json, vitest.config.js, eslint.config.js, .prettierrc, phpstan.neon.dist, pint.json, phpunit.xml.dist, testbench.yaml, .github/.
+- Dev-only files MUST be excluded from the distribution archive with export-ignore in .gitattributes: tests/, workbench/, package.json, package-lock.json, vitest.config.js, eslint.config.js, .prettierrc, phpstan.neon.dist, pint.json, phpunit.xml.dist, testbench.yaml, phpunit.dusk.xml, tools/probes/, .github/.
 - Distribution target: public GitHub repository and Packagist.
 - Versioning: SemVer.
 - Release tags MUST match vMAJOR.MINOR.PATCH.
