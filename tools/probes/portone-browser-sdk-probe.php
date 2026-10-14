@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 use Dotenv\Dotenv;
 
+// As the PHP built-in server's router, leave every other path (the SDK under
+// /node_modules) to be served as a static file from the package root.
+if (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) !== '/') {
+    return false;
+}
+
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
 Dotenv::createImmutable(dirname(__DIR__, 2))->safeLoad();
@@ -35,10 +41,12 @@ header('Content-Type: text/html; charset=UTF-8');
         <p>
             This standalone probe uses the configured PortOne channel and a KRW 100
             test payment. Complete the payment in the PG window for one run; close
-            the window without paying for another.
+            the window without paying for another. The third button provokes a
+            failure of the SDK call itself with a payment ID the PG rejects.
         </p>
         <button id="complete-payment" type="button">Start payment to complete</button>
         <button id="close-payment" type="button">Start payment to close without paying</button>
+        <button id="overlong-payment" type="button">Start payment with an over-long payment ID</button>
         <ol id="observations" aria-live="polite"></ol>
     </main>
 
@@ -57,6 +65,7 @@ header('Content-Type: text/html; charset=UTF-8');
         const buttons = [
             document.querySelector("#complete-payment"),
             document.querySelector("#close-payment"),
+            document.querySelector("#overlong-payment"),
         ];
 
         function recordObservation(fields) {
@@ -68,8 +77,11 @@ header('Content-Type: text/html; charset=UTF-8');
             observations.prepend(item);
         }
 
-        async function requestPayment() {
-            const paymentId = `probe-${crypto.randomUUID().replaceAll("-", "")}`;
+        async function requestPayment(event) {
+            // KCP V2 rejects a payment ID longer than 40 characters; the UUID's dashes push it to 42.
+            const paymentId = event.currentTarget.id === "overlong-payment"
+                ? `probe-${crypto.randomUUID()}`
+                : `probe-${crypto.randomUUID().replaceAll("-", "")}`;
             const customerId = `probe-${crypto.randomUUID().replaceAll("-", "")}`;
 
             buttons.forEach((button) => {
@@ -77,6 +89,7 @@ header('Content-Type: text/html; charset=UTF-8');
             });
             recordObservation({
                 paymentId,
+                paymentIdLength: paymentId.length,
                 amount: 100,
                 currency: "KRW",
                 payMethod: "CARD",

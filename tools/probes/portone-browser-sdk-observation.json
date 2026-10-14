@@ -1,6 +1,6 @@
 {
-	"observedAt": "2026-10-13",
-	"browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15",
+	"observedAt": "2026-10-14",
+	"browser": "not recorded (the human's desktop browser; the Claude app browser pane blocked the PG popup)",
 	"browserSdk": "@portone/browser-sdk 0.1.13",
 	"channel": "NHN KCP test",
 	"request": {
@@ -11,7 +11,7 @@
 	"completedPayment": {
 		"pgWindowOpened": true,
 		"result": "returned without an error code",
-		"paymentId": "probe-ea1a709eae2b4a20ba0ee0db9e268b25",
+		"paymentId": "probe-6b1989b0d7804aeba3b6d04996c1b827",
 		"totalAmount": 100
 	},
 	"closedPayment": {
@@ -19,14 +19,17 @@
 		"payerAction": "closed the test payment window without completing payment",
 		"result": "returned with an error code",
 		"errorCode": "FAILURE_TYPE_PG",
-		"paymentId": "probe-4393787e9e144722aea23ec61039a783",
+		"paymentId": "probe-be58f5a6086d4b6ba02c9b7425568185",
 		"totalAmount": 100
 	},
 	"sdkCallFailure": {
 		"provoked": true,
 		"cause": "KCP V2 rejects an order/payment ID longer than 40 characters",
 		"result": "requestPayment threw/rejected with BadRequest",
-		"message": "결제 창 호출에 실패하였습니다. KCP V2의 경우 주문 번호는 최대 40자를 넘을 수 없습니다."
+		"message": "결제 창 호출에 실패하였습니다. KCP V2의 경우 주문 번호는 최대 40자를 넘을 수 없습니다.",
+		"provokedWith": "a 42-character payment ID (probe-<UUID with dashes>)",
+		"browser": "Claude app browser pane (Chromium)",
+		"code": "BadRequest"
 	},
 	"secretsRecorded": false
 }
