@@ -1,5 +1,36 @@
 # Release Notes
 
+## v0.2.0 - 2026-10-14
+
+### What's Changed
+
+* chore: enhance detailed documentation by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/19
+* refactor: migrate live browser checkout tests to Ochestra Testbench Dusk by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/20
+* refactor: relocate live verification probes out of `tests/` by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/21
+* refactor: update task statuses and enhance testing documentation by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/22
+* fix: re-verify the browser SDK probe and make it runnable as a router by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/23
+* Add Claude Code GitHub Workflow by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/24
+* ci(claude): let Claude open pull requests for issues by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/25
+* ci(claude): request maintainer review and hand off live tests by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/26
+* ci: skip Claude and Pages workflows on forks by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/28
+* ci(claude): review pull requests opened by the Claude app by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/31
+* docs: explain why independent probes exist and live outside workbench by [@claude](https://github.com/claude)[bot] in https://github.com/cable8mm/laravel-portone/pull/30
+* ci(claude): assign pull requests to replworks-bot by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/32
+* ci(claude): remove the automatic pull request review by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/33
+* ci(claude): let Claude run the offline checks and re-request review by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/35
+* feat(stubs)!: look up the product in the checkout stubs and add a Workbench sample shop by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/34
+* docs: specify pending payment expiry and record the abandoned payment lookup by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/36
+* feat: expire and prune abandoned pending payments by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/37
+* feat(workbench): run the expiry check and webhook completion through a queue by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/38
+* docs(readme): fix the Vite entry, exceptions and webhook guidance by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/39
+
+### New Contributors
+
+* [@replworks-bot](https://github.com/replworks-bot) made their first contribution in https://github.com/cable8mm/laravel-portone/pull/28
+* [@claude](https://github.com/claude)[bot] made their first contribution in https://github.com/cable8mm/laravel-portone/pull/30
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.1.0...v0.2.0
+
 ## v0.1.0 - 2026-10-13
 
 ### What's Changed
