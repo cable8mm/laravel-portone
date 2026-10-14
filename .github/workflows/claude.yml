@@ -46,5 +46,8 @@ jobs:
           # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          # Open the pull request instead of only posting a link to a pre-filled one.
+          claude_args: |
+            --allowed-tools "Bash(gh pr create:*),Bash(gh pr view:*)"
+            --append-system-prompt "When you push a new branch for an issue, open the pull request yourself with gh pr create against main instead of only posting a link. Use a Conventional Commits 1.0.0 title, describe the change and how it was tested in the body, and add 'Closes #<issue number>'. Commit messages must also follow Conventional Commits 1.0.0."
 
