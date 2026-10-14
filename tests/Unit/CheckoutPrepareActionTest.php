@@ -119,6 +119,7 @@ class CheckoutPrepareActionTest extends TestCase
 
         foreach ([
             'resources/views/portone/checkout.blade.php',
+            'resources/views/portone/completed.blade.php',
             'resources/js/portone-checkout.js',
             'app/Http/Controllers/PortOneCheckoutController.php',
             'routes/portone.php',

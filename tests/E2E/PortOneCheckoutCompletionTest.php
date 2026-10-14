@@ -89,7 +89,10 @@ class PortOneCheckoutCompletionTest extends TestCase
             'paymentId' => $payment->payment_id,
             'amount' => 1,
         ]);
-        $completed->assertOk()->assertExactJson(['status' => 'PAID']);
+        $completed->assertOk()->assertExactJson([
+            'status' => 'PAID',
+            'redirectUrl' => route('portone.checkout.completed', ['paymentId' => $payment->payment_id]),
+        ]);
         self::assertSame('PAID', $payment->fresh()->status);
         self::assertNotNull($payment->fresh()->paid_at);
 

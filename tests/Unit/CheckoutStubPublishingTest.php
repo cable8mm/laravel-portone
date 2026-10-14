@@ -37,6 +37,7 @@ class CheckoutStubPublishingTest extends TestCase
         $this->publishStubs();
 
         $this->assertFileExists($this->publishedPath('resources/views/portone/checkout.blade.php'));
+        $this->assertFileExists($this->publishedPath('resources/views/portone/completed.blade.php'));
         $this->assertFileExists($this->publishedPath('resources/js/portone-checkout.js'));
         $this->assertFileExists($this->publishedPath('app/Http/Controllers/PortOneCheckoutController.php'));
         $this->assertFileExists($this->publishedPath('routes/portone.php'));
@@ -47,6 +48,7 @@ class CheckoutStubPublishingTest extends TestCase
         $this->assertFalse(Route::has('portone.checkout'));
         $this->assertFalse(Route::has('portone.checkout.prepare'));
         $this->assertFalse(Route::has('portone.checkout.complete'));
+        $this->assertFalse(Route::has('portone.checkout.completed'));
     }
 
     public function test_including_the_published_routes_registers_only_authenticated_checkout_routes(): void
@@ -65,6 +67,8 @@ class CheckoutStubPublishingTest extends TestCase
         $this->assertSame(['auth'], Route::getRoutes()->getByName('portone.checkout')->gatherMiddleware());
         $this->assertSame(['auth'], Route::getRoutes()->getByName('portone.checkout.prepare')->gatherMiddleware());
         $this->assertSame(['auth'], Route::getRoutes()->getByName('portone.checkout.complete')->gatherMiddleware());
+        $this->assertSame(['auth'], Route::getRoutes()->getByName('portone.checkout.completed')->gatherMiddleware());
+        $this->assertSame('portone/checkout/completed/{paymentId}', Route::getRoutes()->getByName('portone.checkout.completed')->uri());
     }
 
     public function test_authenticated_checkout_renders_the_product_initial_state_and_configuration(): void
@@ -134,6 +138,7 @@ class CheckoutStubPublishingTest extends TestCase
 
         foreach ([
             'resources/views/portone/checkout.blade.php',
+            'resources/views/portone/completed.blade.php',
             'resources/js/portone-checkout.js',
             'app/Http/Controllers/PortOneCheckoutController.php',
             'routes/portone.php',

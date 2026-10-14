@@ -65,9 +65,62 @@ class CheckoutCompleteActionTest extends TestCase
         $this->post(route('portone.checkout.complete'), [
             'paymentId' => $payment->payment_id,
             'amount' => 1,
-        ])->assertOk()->assertExactJson(['status' => 'PAID']);
+        ])->assertOk()->assertExactJson([
+            'status' => 'PAID',
+            'redirectUrl' => route('portone.checkout.completed', ['paymentId' => $payment->payment_id]),
+        ]);
 
         $this->assertSame('PAID', $payment->fresh()->status);
+    }
+
+    public function test_completion_page_shows_a_paid_payment_of_the_signed_in_user(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(100, 'Order A');
+        $payment->forceFill(['status' => 'PAID', 'paid_at' => now()])->save();
+        $this->actingAs($billable);
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]))
+            ->assertOk()
+            ->assertSee('data-status="PAID"', false)
+            ->assertSee('Order A')
+            ->assertSee('100 KRW')
+            ->assertSee($payment->payment_id)
+            ->assertSee($payment->paid_at->toDateTimeString());
+
+        // A later partial refund keeps the page and shows the current status.
+        $payment->forceFill(['status' => 'PARTIALLY_CANCELLED', 'cancelled_amount' => 30])->save();
+        $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]))
+            ->assertOk()
+            ->assertSee('PARTIALLY_CANCELLED');
+    }
+
+    public function test_completion_page_is_not_found_for_unpaid_unknown_or_other_payments(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        $billable = $this->billable(101);
+        $pending = $billable->preparePayment(100, 'Order A');
+        $expired = $billable->preparePayment(100, 'Order A');
+        $expired->forceFill(['status' => 'EXPIRED'])->save();
+        $others = $this->billable(202)->preparePayment(100, 'Order A');
+        $others->forceFill(['status' => 'PAID', 'paid_at' => now()])->save();
+        $this->actingAs($billable);
+
+        foreach ([$pending->payment_id, $expired->payment_id, $others->payment_id, 'unknown-payment'] as $paymentId) {
+            $this->get(route('portone.checkout.completed', ['paymentId' => $paymentId]))->assertNotFound();
+        }
+    }
+
+    public function test_unauthenticated_completion_page_redirects_to_login(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        Route::get('/login', static fn () => response('login'))->name('login');
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => 'payment-1']))->assertRedirect(route('login'));
     }
 
     public function test_not_found_not_paid_and_amount_mismatch_return_http_422(): void
@@ -172,6 +225,7 @@ class CheckoutCompleteActionTest extends TestCase
 
         foreach ([
             'resources/views/portone/checkout.blade.php',
+            'resources/views/portone/completed.blade.php',
             'resources/js/portone-checkout.js',
             'app/Http/Controllers/PortOneCheckoutController.php',
             'routes/portone.php',

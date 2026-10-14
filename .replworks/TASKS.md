@@ -312,3 +312,15 @@
     - The developer guide's feature map lists expiry and pruning.
     - Unit tests cover the listener, the schedule registration, and the new pages; the human runs the sample flow by hand against live PortOne. (Done for the expiry flow against live PortOne; the webhook-to-completion path is covered by unit tests with recorded webhook types instead of a live ngrok run, by owner decision.)
 
+- [X] T-024 Order completion page in the checkout stubs
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-029, EL-030, EL-036), FR-040, FR-042, FR-053, FR-055, FR-066, FR-067, FLOW-005 step 7, AC-039, AC-050, AC-051, AC-067, AC-068; ARCHITECTURE.md SF-5, CMP-11, CMP-13, CMP-14, CMP-17, DF-5, INV-18, INV-23
+  - External boundary: yes (the changed stub script runs in the browser against live PortOne)
+  - Acceptance criteria:
+    - vendor:publish with portone-stubs publishes five files, including resources/views/portone/completed.blade.php.
+    - The complete action responds with the status and, for PAID, the URL of portone.checkout.completed for the Payment ID.
+    - The stub script sets Success and navigates to that URL only for PAID; every other outcome sets Error and stays.
+    - portone.checkout.completed (auth) shows the order name, amount, Payment ID, paid_at, and status of the authenticated user's paid, partially cancelled, or cancelled payment, and responds 404 for a PENDING or EXPIRED payment, another user's payment, or an unknown Payment ID.
+    - The Workbench copy of the stubs includes a styled completion page; the copy-diff test still enforces that the controller differs only at the product lookup.
+    - Unit tests (PHPUnit, Vitest) cover the new route, the response, and the navigation; the live checkout flow test reaches the completion page after a completed payment.
+    - README describes the completion page.
+

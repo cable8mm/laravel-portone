@@ -139,6 +139,22 @@ class WorkbenchSampleShopTest extends TestCase
         $this->assertSame('딸기 마카롱', $payment->order_name);
     }
 
+    public function test_sample_completion_page_shows_a_paid_order(): void
+    {
+        $this->includeSampleCheckoutRoutes();
+        $user = UserFactory::new()->create();
+        $paid = $this->paidPayment($user, 10000);
+        $pending = $user->preparePayment(1000, '딸기 마카롱');
+        $this->actingAs($user);
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => $paid->payment_id]))
+            ->assertOk()
+            ->assertSee('data-portone-completed', false)
+            ->assertSee('주문이 완료됐어요!')
+            ->assertSee('10,000 KRW');
+        $this->get(route('portone.checkout.completed', ['paymentId' => $pending->payment_id]))->assertNotFound();
+    }
+
     public function test_prepare_rejects_an_unknown_product(): void
     {
         $this->includeSampleCheckoutRoutes();

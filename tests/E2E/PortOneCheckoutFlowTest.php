@@ -17,7 +17,9 @@ class PortOneCheckoutFlowTest extends TestCase
 
     private const STATUS = '#portone-checkout-status';
 
-    public function test_clicking_checkout_and_completing_live_payment_reaches_success(): void
+    private const COMPLETED = '[data-portone-completed]';
+
+    public function test_clicking_checkout_and_completing_live_payment_reaches_the_completion_page(): void
     {
         $user = UserFactory::new()->create();
 
@@ -28,11 +30,15 @@ class PortOneCheckoutFlowTest extends TestCase
                 'Complete the 10,000 KRW PortOne test payment in the browser window.',
             );
 
-            self::assertSame('success', $browser->attribute(self::CHECKOUT, 'data-state'));
-            self::assertSame('Success', $browser->text(self::STATUS));
-            $browser->assertButtonDisabled(self::BUTTON);
-
             $payment = Payment::query()->sole();
+
+            // Success navigates to the completion page of the paid payment (FR-055, FR-066).
+            $browser->assertPathIs(route('portone.checkout.completed', ['paymentId' => $payment->payment_id], false));
+            self::assertSame('PAID', $browser->attribute(self::COMPLETED, 'data-status'));
+            $browser->assertSeeIn(self::COMPLETED, 'Order A')
+                ->assertSeeIn(self::COMPLETED, '10,000 KRW')
+                ->assertSeeIn(self::COMPLETED, $payment->payment_id);
+
             self::assertSame($payment->payment_id, $user->findPayment($payment->payment_id)?->payment_id);
             self::assertSame(10000, $payment->amount);
             self::assertSame('PAID', $payment->status);
@@ -46,12 +52,15 @@ class PortOneCheckoutFlowTest extends TestCase
                 json_decode((string) $requests[1]['body'], true, 512, JSON_THROW_ON_ERROR),
             );
             self::assertSame(200, $requests[1]['status']);
+            self::assertSame(
+                ['status' => 'PAID', 'redirectUrl' => static::applicationBaseUrl().route('portone.checkout.completed', ['paymentId' => $payment->payment_id], false)],
+                json_decode((string) $requests[1]['response'], true, 512, JSON_THROW_ON_ERROR),
+            );
 
             $this->recordScenario('completedPayment', [
                 'paymentId' => $payment->payment_id,
                 'totalAmount' => $payment->amount,
-                'browserState' => 'success',
-                'browserButtonDisabled' => true,
+                'browserState' => 'success, then navigated to the completion page',
                 'sdkOutcome' => 'returned without an error code',
                 'completeRouteStatus' => $requests[1]['status'],
                 'paymentStatus' => $payment->status,
@@ -96,7 +105,9 @@ class PortOneCheckoutFlowTest extends TestCase
     /**
      * Click EL-026 as the Payer and wait for the human to finish in the PG window.
      *
-     * @return list<array{url: string, body: string|null, status: int|null}> the requests the published script sent
+     * The script's requests are kept in sessionStorage so they survive the navigation to the completion page.
+     *
+     * @return list<array{url: string, body: string|null, status: int|null, response: string|null}> the requests the published script sent
      */
     private function runCheckout(Browser $browser, User $user, string $instruction): array
     {
@@ -106,7 +117,7 @@ class PortOneCheckoutFlowTest extends TestCase
         self::assertSame('Idle', $browser->text(self::STATUS));
 
         $browser->script(<<<'JS'
-            window.__checkoutRequests = [];
+            sessionStorage.setItem("checkoutRequests", "[]");
             const send = window.fetch;
             window.fetch = async (url, options) => {
                 // The PortOne SDK also calls fetch; record only requests to this app.
@@ -114,10 +125,10 @@ class PortOneCheckoutFlowTest extends TestCase
                     return send(url, options);
                 }
 
-                const entry = { url: String(url), body: options?.body ?? null, status: null };
-                window.__checkoutRequests.push(entry);
                 const response = await send(url, options);
-                entry.status = response.status;
+                const requests = JSON.parse(sessionStorage.getItem("checkoutRequests"));
+                requests.push({ url: String(url), body: options?.body ?? null, status: response.status, response: await response.clone().text() });
+                sessionStorage.setItem("checkoutRequests", JSON.stringify(requests));
                 return response;
             };
         JS);
@@ -127,13 +138,11 @@ class PortOneCheckoutFlowTest extends TestCase
         $browser->assertButtonDisabled(self::BUTTON);
 
         $this->instruct($instruction);
-        $browser->waitFor(
-            self::CHECKOUT.'[data-state="success"], '.self::CHECKOUT.'[data-state="error"]',
-            self::PAYER_TIMEOUT,
-        );
+        // Success leaves the page, so wait for the completion page or the Error state.
+        $browser->waitFor(self::COMPLETED.', '.self::CHECKOUT.'[data-state="error"]', self::PAYER_TIMEOUT);
 
-        /** @var list<array{url: string, body: string|null, status: int|null}> $requests */
-        $requests = $browser->script('return window.__checkoutRequests;')[0];
+        /** @var list<array{url: string, body: string|null, status: int|null, response: string|null}> $requests */
+        $requests = $browser->script('return JSON.parse(sessionStorage.getItem("checkoutRequests"));')[0];
 
         return $requests;
     }

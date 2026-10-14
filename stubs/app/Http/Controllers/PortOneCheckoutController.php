@@ -52,7 +52,24 @@ class PortOneCheckoutController
             return response()->json(['error' => $exception->getMessage()], 500);
         }
 
-        return response()->json(['status' => $payment->status]);
+        if ($payment->status !== 'PAID') {
+            return response()->json(['status' => $payment->status]);
+        }
+
+        return response()->json([
+            'status' => $payment->status,
+            'redirectUrl' => route('portone.checkout.completed', ['paymentId' => $payment->payment_id]),
+        ]);
+    }
+
+    public function completed(string $paymentId): View
+    {
+        $payment = auth()->user()->findPayment($paymentId);
+
+        // Only a payment that has been paid has an order to show; a later refund keeps the page.
+        abort_unless(in_array($payment?->status, ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'], true), 404);
+
+        return view('portone.completed', ['payment' => $payment]);
     }
 
     /**
