@@ -33,6 +33,21 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Let Claude run the offline checks (composer test, analyse, format, npm checks).
+      # These install from the triggering ref; Claude re-runs composer update / npm ci
+      # after switching to a branch whose dependencies differ.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          tools: composer:v2
+          extensions: dom, mbstring, sqlite3, xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12"
+          cache: npm
+      - run: composer update --no-interaction --prefer-dist
+      - run: npm ci
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -51,6 +66,6 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           # Open the pull request instead of only posting a link to a pre-filled one.
           claude_args: |
-            --allowed-tools "Bash(gh pr create:*),Bash(gh pr view:*)"
-            --append-system-prompt "When you push a new branch for an issue, open the pull request yourself with gh pr create against main instead of only posting a link. Use a Conventional Commits 1.0.0 title, describe the change and how it was tested in the body, and add 'Closes #<issue number>'. Request a review from the maintainer with --reviewer cable8mm and assign the pull request to replworks-bot with --assignee replworks-bot. Commit messages must also follow Conventional Commits 1.0.0. Live tests (composer live) need a human operating the PortOne payment window and local secrets, so they cannot run here: when AGENTS.md requires live verification for the change, do not claim it is verified; list in the pull request the live tests the maintainer must run locally and ask them to run them."
+            --allowed-tools "Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(composer update:*),Bash(composer test:*),Bash(composer analyse:*),Bash(composer format:check:*),Bash(vendor/bin/phpunit:*),Bash(vendor/bin/pint:*),Bash(npm ci),Bash(npm run check:*),Bash(npm test:*)"
+            --append-system-prompt "When you push a new branch for an issue, open the pull request yourself with gh pr create against main instead of only posting a link. Use a Conventional Commits 1.0.0 title, describe the change and how it was tested in the body, and add 'Closes #<issue number>'. Request a review from the maintainer with --reviewer cable8mm and assign the pull request to replworks-bot with --assignee replworks-bot. Commit messages must also follow Conventional Commits 1.0.0. Live tests (composer live) need a human operating the PortOne payment window and local secrets, so they cannot run here: when AGENTS.md requires live verification for the change, do not claim it is verified; list in the pull request the live tests the maintainer must run locally and ask them to run them. Before pushing, run composer format:check, composer analyse, composer test, npm run check, and npm test, and report their results; if the branch changes composer.json or package.json, run composer update or npm ci first. After pushing commits to an existing pull request, re-request the maintainer's review with gh pr edit <number> --add-reviewer cable8mm."
 
