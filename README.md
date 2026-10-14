@@ -75,7 +75,9 @@ php artisan migrate
 - `portone_customers`: Billable 모델별 `customer_id` 1건 저장
 - `portone_payments`: 결제 기록 (`payment_id` 전역 유니크)
 
-## 빠른 시작 (서버 API)
+## 빠른 시작
+
+아래 순서대로 따라 하면 로그인한 사용자가 브라우저에서 결제하고 서버에서 `PAID`로 확정하는 화면까지 한 번에 동작합니다. 아직 결제 화면이 없으니 체크아웃 출발 파일(스텁)로 만들고, `.env` 키만 넣으면 실제 포트원 결제창까지 실행해 볼 수 있습니다.
 
 ### 1. 모델에 `Billable` 추가
 
@@ -89,7 +91,80 @@ class User extends Authenticatable
 }
 ```
 
-### 2. 결제 준비 → 확정
+### 2. 체크아웃 화면 설치 (스텁 발행)
+
+결제 화면 출발점이 필요하면 스텁 4종을 발행합니다.
+
+```bash
+php artisan vendor:publish --tag=portone-stubs
+```
+
+| 발행 파일                                            | 설명                                                                    |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `resources/views/portone/checkout.blade.php`         | 결제 버튼 + 상태 표시 뷰                                                |
+| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트           |
+| `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션 (샘플 금액 10,000원, 주문명 `Order A`) |
+| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                   |
+
+발행한 파일을 애플리케이션에 연결합니다.
+
+1. **라우트 등록** — 발행된 라우트 파일을 애플리케이션 라우트에 포함합니다.
+
+   ```php
+   // routes/web.php
+   require __DIR__.'/portone.php';
+   ```
+
+2. **브라우저 SDK 설치** — 애플리케이션에서 직접 설치합니다 (패키지가 설치하지 않습니다).
+
+   ```bash
+   npm install @portone/browser-sdk
+   ```
+
+3. **프론트엔드 실행** — 블레이드가 `@vite('resources/js/portone-checkout.js')`로 발행된 스크립트를 참조합니다. Laravel 기본 Vite 설정을 그대로 쓰면 되며 추가 설정은 없습니다.
+
+   ```bash
+   npm run dev   # 개발 서버 (프로덕션은 npm run build)
+   ```
+
+### 3. 환경 변수 설정
+
+브라우저 결제창에는 `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`가, 서버 검증에는 `PORTONE_API_SECRET`이 필요합니다. `.env`에 값을 채웁니다 (전체 항목은 [설정](#1-환경-변수) 참고).
+
+```dotenv
+PORTONE_API_SECRET=
+PORTONE_STORE_ID=
+PORTONE_CHANNEL_KEY=
+```
+
+### 4. 화면 확인
+
+체크아웃 라우트는 `auth` 미들웨어 뒤에 있으므로 로그인 후 `/portone/checkout`에 접속합니다. `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`가 설정되어 있어야 `Start payment` 버튼이 활성화되고, 클릭하면 실제 포트원 결제창이 열립니다.
+
+체크아웃 흐름:
+
+1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare` → `PENDING` 레코드 생성
+2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (storeId, channelKey, paymentId, orderName, totalAmount, customerId, `CARD`, `KRW`)
+3. 에러 코드 없이 반환되면 `POST portone.checkout.complete` (`paymentId`만 전송)
+4. `PAID` 응답이면 `Success`, 그 외(준비 실패·SDK 실패·미결제·금액 불일치 등)는 `Error`
+
+### 5. 화면 커스터마이징
+
+발행된 파일은 이제 애플리케이션 것이므로 자유롭게 고칩니다. 샘플 금액·주문명은 컨트롤러 상수이니 실제 상품에 맞게 바꾸세요.
+
+```php
+// app/Http/Controllers/PortOneCheckoutController.php
+private const AMOUNT = 10000;
+private const ORDER_NAME = 'Order A';
+```
+
+> `complete` 액션은 요청의 금액을 무시하고 서버 레코드 기준으로 검증하므로, 클라이언트 값을 조작해도 안전합니다.
+
+## 서버 API
+
+자신만의 UI·플로우를 만들거나 스텁 없이 직접 제어할 때 `Billable`이 제공하는 메서드를 사용합니다.
+
+### 결제 준비 → 확정
 
 ```php
 // 1) 결제 레코드 사전 생성 (PortOne 호출 없음, 상태 PENDING)
@@ -109,7 +184,7 @@ $paid = $user->completePayment($payment->payment_id);
 // $paid->status === 'PAID'
 ```
 
-### 3. 환불
+### 환불
 
 ```php
 // 전액 환불
@@ -122,7 +197,7 @@ $user->refund($payment->payment_id, '부분 환불', 3000);
 전액 환불되면 `CANCELLED`, 일부만 환불되면 `PARTIALLY_CANCELLED`가 되며
 `cancelled_amount`에 누적 환불액이 저장됩니다.
 
-### 4. 결제 내역 조회
+### 결제 내역 조회
 
 ```php
 // 최신순 결제 목록
@@ -132,7 +207,7 @@ $payments = $user->payments()->latest()->get();
 $payment = $user->findPayment($paymentId);
 ```
 
-### 5. 고객 ID
+### 고객 ID
 
 ```php
 $user->hasPortOneId();                  // bool
@@ -142,53 +217,6 @@ $user->createOrGetPortOneCustomerId();  // string (없으면 생성)
 
 `preparePayment()`를 호출하면 고객 레코드는 자동으로 생성되므로
 보통은 직접 호출하지 않아도 됩니다.
-
-## 체크아웃 출발 파일 (뷰 + JS + 컨트롤러 + 라우트)
-
-결제 화면 출발점이 필요하면 스텁 4종을 발행합니다.
-
-```bash
-php artisan vendor:publish --tag=portone-stubs
-```
-
-| 발행 파일                                            | 설명                                                                    |
-| ---------------------------------------------------- | ----------------------------------------------------------------------- |
-| `resources/views/portone/checkout.blade.php`         | 결제 버튼 + 상태 표시 뷰                                                |
-| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트           |
-| `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션 (샘플 금액 10,000원, 주문명 `Order A`) |
-| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                   |
-
-발행 후 애플리케이션에서 라우트 파일을 포함하고, 프론트엔드에서 브라우저 SDK와 Vite 엔트리를 연결합니다.
-
-```php
-// routes/web.php
-require __DIR__.'/portone.php';
-```
-
-```bash
-# 애플리케이션에서 직접 설치 (패키지가 설치하지 않음)
-npm install @portone/browser-sdk
-```
-
-```js
-// vite.config.js (애플리케이션)
-export default {
-  plugins: [
-    // resources/js/portone-checkout.js 를 엔트리로 빌드
-  ],
-};
-```
-
-체크아웃 흐름:
-
-1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare` → `PENDING` 레코드 생성
-2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (storeId, channelKey, paymentId, orderName, totalAmount, customerId, `CARD`, `KRW`)
-3. 에러 코드 없이 반환되면 `POST portone.checkout.complete` (`paymentId`만 전송)
-4. `PAID` 응답이면 `Success`, 그 외(준비 실패·SDK 실패·미결제·금액 불일치 등)는 `Error`
-
-> 스텁 컨트롤러의 금액·주문명은 상수로 고정된 예시입니다.
-> 실제 상품에 맞게 애플리케이션에서 수정해서 사용하세요.
-> `complete` 액션은 요청의 금액을 무시하고 서버 레코드 기준으로 검증합니다.
 
 ## 웹훅
 
@@ -230,6 +258,17 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 | `InvalidRefundAmountException`              | —                | 환불 금액이 0 이하이거나 환불 가능액 초과 |
 | `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락            |
 | `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)       |
+
+## 개발 및 테스트
+
+이 패키지에 기여하거나 live/e2e 테스트를 직접 돌려보려면 [`docs/`](./docs)를 참고하세요.
+
+- [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) — 명령·CI·PR 체크리스트·코딩 규칙
+- [`docs/TESTING.md`](./docs/TESTING.md) — 단위 테스트와 실제 포트원 연동(live/e2e) 실행법
+
+```bash
+composer analyse && composer test   # 오프라인 검증
+```
 
 ## 라이선스
 
