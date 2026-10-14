@@ -42,7 +42,7 @@
 - Configuration values: defined by EL-015 through EL-018, EL-022, EL-023, EL-033, EL-034.
 - Developer-scheduled command and pruning, and the queued job they start: defined by EL-031, EL-032, EL-035.
 - Payer action on the published view: defined by EL-026.
-- HTTP requests to the routes of EL-030: defined by FR-042 through FR-056.
+- HTTP requests to the routes of EL-030: defined by FR-042 through FR-056, FR-066, FR-067.
 - HTTP POST request to the webhook route: defined by EL-011 through EL-013.
 - PortOne API responses: defined in External Systems.
 
@@ -61,7 +61,7 @@
 - Payment record fields created_at and updated_at: timestamps.
 - Method return values: defined per element in SCR-001 and SCR-002.
 - Event: WebhookReceived, defined by EL-021.
-- Published files: defined by EL-025, EL-028, EL-029, EL-030.
+- Published files: defined by EL-025, EL-028, EL-029, EL-030, EL-036.
 - Webhook HTTP responses: defined by EL-014.
 - Exceptions and error responses: defined by ERR-001 through ERR-016.
 - Deleted Payment records: only those selected by EL-035.
@@ -235,21 +235,25 @@
   - EL-026: start-payment button inside EL-025. Purpose: start a payment. User action: click.
   - EL-027: status slot inside EL-025, placed after EL-026. Purpose: show the current state. User action: read.
   - EL-028: script file resources/js/portone-checkout.js. Purpose: run the payment sequence in the browser. User action: edit.
-  - EL-029: controller file app/Http/Controllers/PortOneCheckoutController.php with the actions show, prepare, complete and one product lookup (FR-045a). Purpose: connect EL-025 and EL-028 to EL-004 and EL-005. User action: edit.
-  - EL-030: route file routes/portone.php with the routes portone.checkout (GET), portone.checkout.prepare (POST), portone.checkout.complete (POST). Purpose: expose the actions of EL-029. User action: include in the routes of the Application.
+  - EL-029: controller file app/Http/Controllers/PortOneCheckoutController.php with the actions show, prepare, complete, completed and one product lookup (FR-045a). Purpose: connect EL-025, EL-028, and EL-036 to EL-004, EL-005, and EL-008. User action: edit.
+  - EL-030: route file routes/portone.php with the routes portone.checkout (GET), portone.checkout.prepare (POST), portone.checkout.complete (POST), portone.checkout.completed (GET, with the Payment ID in the path /portone/checkout/completed/{paymentId}). Purpose: expose the actions of EL-029. User action: include in the routes of the Application.
+  - EL-036: view file resources/views/portone/completed.blade.php. Purpose: render the order completion page the Payer reaches after paying. User action: edit.
 - EL-025 MUST load EL-028 when rendered; the Payer must not need to edit another view or layout to activate the checkout flow.
 - States of EL-025:
   - Initial: EL-026 enabled; EL-027 shows the idle state.
   - Loading: EL-026 disabled; EL-027 shows the in-progress state.
-  - Success: EL-026 disabled; EL-027 shows the paid state.
+  - Success: EL-026 disabled; EL-027 shows the paid state; the browser then navigates to EL-036 for the paid payment.
   - Error: EL-026 enabled; EL-027 shows the error state.
   - Empty: not applicable.
-  - Text in EL-027 is placeholder text that the Developer replaces; its wording is not specified.
+  - Text in EL-027 and in EL-036 is placeholder text that the Developer replaces; its wording is not specified.
 - Navigation:
   - Visit portone.checkout -> EL-025 in the Initial state.
+  - Success of EL-025 -> EL-036 for the paid payment.
+  - Visit portone.checkout.completed for a payment of the authenticated user that has been paid -> EL-036.
 - Interactions:
   - Visit portone.checkout -> FR-043, FR-044.
   - Click EL-026 -> FR-045 through FR-056.
+  - Visit portone.checkout.completed -> FR-066, FR-067.
 
 ### SCR-007 Expiry and Pruning
 
@@ -333,7 +337,7 @@
 
 ### Published checkout stubs
 
-- FR-040: The Package MUST publish EL-025, EL-028, EL-029, and EL-030 to the paths stated in SCR-006 when vendor:publish runs with EL-024.
+- FR-040: The Package MUST publish EL-025, EL-028, EL-029, EL-030, and EL-036 to the paths stated in SCR-006 when vendor:publish runs with EL-024.
 - FR-041: The Package MUST NOT register the routes of EL-030 automatically.
 - FR-042: Every route of EL-030 MUST require an authenticated user.
 - FR-043: The show action MUST render EL-025 with the name and price of the product returned by the product lookup of EL-029, and make the values of EL-022 and EL-023 and the product identifier available to EL-028.
@@ -347,10 +351,12 @@
 - FR-050: EL-028 MUST define the payment method constant and the currency constant at the top of the file, with initial values of the PortOne card payment method and the PortOne Korean won currency.
 - FR-051: When requestPayment returns a result with an error code, EL-028 MUST set the Error state and MUST NOT request the complete route.
 - FR-052: When requestPayment returns a result without an error code, EL-028 MUST request the complete route with the Payment ID.
-- FR-053: The complete action MUST call EL-005 on the authenticated user with the Payment ID from the request and respond with JSON containing the status of the returned Payment record.
+- FR-053: The complete action MUST call EL-005 on the authenticated user with the Payment ID from the request and respond with JSON containing the status of the returned Payment record and, when the status is PAID, the URL of portone.checkout.completed for that Payment ID.
 - FR-054: The complete action MUST NOT read an amount from the request.
-- FR-055: When the complete route responds with status PAID, EL-028 MUST set the Success state.
+- FR-055: When the complete route responds with status PAID, EL-028 MUST set the Success state and then navigate the browser to the URL in the response.
 - FR-056: When the complete route responds with an error, EL-028 MUST set the Error state.
+- FR-066: The completed action MUST call EL-008 on the authenticated user with the Payment ID from the path and render EL-036 only when the Payment record exists and its status is PAID, PARTIALLY_CANCELLED, or CANCELLED; otherwise it MUST respond HTTP 404.
+- FR-067: EL-036 MUST show the order name, the amount, the Payment ID, paid_at, and the current status of the Payment record.
 
 ### Expiry and pruning
 
@@ -397,6 +403,7 @@
 - Step 4: PortOne payment window opens; Payer pays outside the Package.
 - Step 5: Payment completes -> complete route -> Payment record with status PAID -> Success state.
 - Step 6: Payment does not complete -> Error state; Payment record keeps status PENDING.
+- Step 7: After the Success state -> the browser navigates to portone.checkout.completed -> EL-036 shows the paid payment.
 
 ### FLOW-006 Expiry of abandoned payments
 
@@ -477,7 +484,7 @@
 - AC-036: With EL-015 unset, EL-005 on a PENDING record and EL-006 on a PAID record throw ConfigurationException, send no request, and leave the record unchanged (ERR-001).
 - AC-037: With EL-017 unset, PortOne requests go to the PortOne default API base URL (FR-005).
 - AC-038: With EL-017 set, PortOne requests go to the value of EL-017 (FR-006).
-- AC-039: After vendor:publish with EL-024, the four files of SCR-006 exist at their stated paths (FR-040).
+- AC-039: After vendor:publish with EL-024, the five files of SCR-006 exist at their stated paths (FR-040).
 - AC-040: Before the Developer includes EL-030, the routes portone.checkout, portone.checkout.prepare, and portone.checkout.complete do not exist (FR-041).
 - AC-041: An unauthenticated request to each route of EL-030 does not reach the controller action and creates no Payment record (FR-042).
 - AC-042: portone.checkout renders EL-025 containing EL-026 and EL-027 and the name and price of the looked-up product, and the values of EL-022 and EL-023 and the product identifier are available to EL-028 (FR-043, FR-044).
@@ -488,8 +495,8 @@
 - AC-047: The constants of FR-050 exist at the top of EL-028 with the stated initial values (FR-050).
 - AC-048: When requestPayment returns an error code, EL-027 shows the Error state and no request is sent to the complete route (FR-051).
 - AC-049: When requestPayment returns no error code, a request containing the Payment ID is sent to the complete route (FR-052).
-- AC-050: The complete action returns JSON with the status PAID for a Payment record that EL-005 completed, and ignores any amount in the request (FR-053, FR-054).
-- AC-051: When the complete route responds with status PAID, EL-025 is in the Success state; when it responds with an error, EL-025 is in the Error state (FR-055, FR-056).
+- AC-050: The complete action returns JSON with the status PAID and the URL of portone.checkout.completed for that Payment ID for a Payment record that EL-005 completed, and ignores any amount in the request (FR-053, FR-054).
+- AC-051: When the complete route responds with status PAID, EL-025 is in the Success state and the browser navigates to the URL in the response; when it responds with an error, EL-025 is in the Error state and the browser stays (FR-055, FR-056).
 - AC-052: EL-026 is disabled in the Loading and Success states and enabled in the Initial and Error states (SCR-006).
 - AC-053: With EL-022 or EL-023 unset, EL-025 renders in the Error state with EL-026 disabled (ERR-013).
 - AC-054: The complete action responds HTTP 422 with the key error for PaymentNotFoundException, PaymentNotPaidException, and AmountMismatchException (ERR-014).
@@ -505,3 +512,5 @@
 - AC-064: EL-006 on an EXPIRED record throws InvalidPaymentStatusException and sends no request (ERR-008).
 - AC-065: EL-033 reads PORTONE_PENDING_EXPIRE_AFTER with default 1440, and EL-034 reads PORTONE_EXPIRED_RETENTION_DAYS with default 90 (SCR-004).
 - AC-066: Installing the Package registers no schedule for EL-031 or model:prune (FR-065).
+- AC-067: portone.checkout.completed renders EL-036 with the order name, amount, Payment ID, paid_at, and status for a PAID, PARTIALLY_CANCELLED, or CANCELLED payment of the authenticated user (FR-066, FR-067).
+- AC-068: portone.checkout.completed responds HTTP 404 for a PENDING or EXPIRED payment, for another Billable model's payment, and for an unknown Payment ID, and an unauthenticated request does not reach the action (FR-042, FR-066).

@@ -67,6 +67,7 @@ if (checkout) {
         }
 
         setState("success", "Success", true);
+        window.location.assign(completion.redirectUrl);
       } catch {
         setState("error", "Error", false);
       }

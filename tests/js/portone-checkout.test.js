@@ -55,12 +55,15 @@ afterEach(() => {
 });
 
 describe("published checkout script", () => {
-  it("prepares the product, requests payment with the observed SDK values, and completes only as PAID", async () => {
+  it("prepares the product, requests payment with the observed SDK values, completes as PAID, and opens the completion page", async () => {
+    const redirectUrl = "/portone/checkout/completed/payment-123";
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response(payment))
-      .mockResolvedValueOnce(response({ status: "PAID" }));
+      .mockResolvedValueOnce(response({ status: "PAID", redirectUrl }));
+    const location = { assign: vi.fn() };
     vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("location", location);
     requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
     const { root, button, status } = await renderCheckout();
 
@@ -101,12 +104,15 @@ describe("published checkout script", () => {
     });
     expect(button.disabled).toBe(true);
     expect(status.textContent).toBe("Success");
+    expect(location.assign).toHaveBeenCalledWith(redirectUrl);
   });
 
   it("returns to Error without completing when PortOne reports a cancelled payment", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response(payment));
     vi.stubGlobal("fetch", fetch);
     requestPayment.mockResolvedValue({ code: "FAILURE_TYPE_PG" });
+    const location = { assign: vi.fn() };
+    vi.stubGlobal("location", location);
     const { root, button, status } = await renderCheckout();
 
     button.click();
@@ -115,12 +121,15 @@ describe("published checkout script", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(button.disabled).toBe(false);
     expect(status.textContent).toBe("Error");
+    expect(location.assign).not.toHaveBeenCalled();
   });
 
   it("returns to Error when the PortOne SDK rejects", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response(payment));
     vi.stubGlobal("fetch", fetch);
     requestPayment.mockRejectedValue(new Error("SDK failure"));
+    const location = { assign: vi.fn() };
+    vi.stubGlobal("location", location);
     const { root, button } = await renderCheckout();
 
     button.click();
@@ -128,6 +137,7 @@ describe("published checkout script", () => {
     await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(button.disabled).toBe(false);
+    expect(location.assign).not.toHaveBeenCalled();
   });
 
   it("returns to Error when prepare fails", async () => {
@@ -135,6 +145,8 @@ describe("published checkout script", () => {
       .fn()
       .mockResolvedValueOnce(response({ error: "failed" }, false, 500));
     vi.stubGlobal("fetch", fetch);
+    const location = { assign: vi.fn() };
+    vi.stubGlobal("location", location);
     const { root, button } = await renderCheckout();
 
     button.click();
@@ -143,6 +155,7 @@ describe("published checkout script", () => {
     expect(requestPayment).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(button.disabled).toBe(false);
+    expect(location.assign).not.toHaveBeenCalled();
   });
 
   it("returns to Error when completion fails", async () => {
@@ -152,6 +165,8 @@ describe("published checkout script", () => {
       .mockResolvedValueOnce(response({ error: "failed" }, false, 422));
     vi.stubGlobal("fetch", fetch);
     requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
+    const location = { assign: vi.fn() };
+    vi.stubGlobal("location", location);
     const { root, button } = await renderCheckout();
 
     button.click();
@@ -159,6 +174,7 @@ describe("published checkout script", () => {
     await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(button.disabled).toBe(false);
+    expect(location.assign).not.toHaveBeenCalled();
   });
 
   it("never enters Success when completion responds with a non-PAID status", async () => {
@@ -168,11 +184,14 @@ describe("published checkout script", () => {
       .mockResolvedValueOnce(response({ status: "PENDING" }));
     vi.stubGlobal("fetch", fetch);
     requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
+    const location = { assign: vi.fn() };
+    vi.stubGlobal("location", location);
     const { root, button } = await renderCheckout();
 
     button.click();
 
     await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
     expect(button.disabled).toBe(false);
+    expect(location.assign).not.toHaveBeenCalled();
   });
 });

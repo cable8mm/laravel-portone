@@ -98,7 +98,7 @@ class User extends Authenticatable
 
 ### 2. 체크아웃 화면 설치 (스텁 발행)
 
-결제 화면 출발점이 필요하면 스텁 4종을 발행합니다.
+결제 화면 출발점이 필요하면 스텁 5종을 발행합니다.
 
 ```bash
 php artisan vendor:publish --tag=portone-stubs
@@ -107,9 +107,10 @@ php artisan vendor:publish --tag=portone-stubs
 | 발행 파일                                            | 설명                                                                                     |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `resources/views/portone/checkout.blade.php`         | 주문서(상품명·금액) + 결제 버튼 + 상태 표시 뷰                                           |
-| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트                            |
+| `resources/views/portone/completed.blade.php`        | 결제 완료 후 이동하는 주문 완료 화면 (주문명·금액·결제 ID·결제 시각·상태)                |
+| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete → 완료 화면 이동` 흐름의 ES 모듈 스크립트           |
 | `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
-| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                                    |
+| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 4종                                                    |
 
 발행한 파일을 애플리케이션에 연결합니다.
 
@@ -159,7 +160,8 @@ PORTONE_CHANNEL_KEY=
 1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare`(상품 ID만 전송) → `PENDING` 레코드 생성
 2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (storeId, channelKey, paymentId, orderName, totalAmount, customerId, `CARD`, `KRW`)
 3. 에러 코드 없이 반환되면 `POST portone.checkout.complete` (`paymentId`만 전송)
-4. `PAID` 응답이면 `Success`, 그 외(준비 실패·SDK 실패·미결제·금액 불일치 등)는 `Error`
+4. `PAID` 응답이면 `Success` 후 응답의 `redirectUrl`(`GET portone.checkout.completed`, `/portone/checkout/completed/{paymentId}`)로 이동, 그 외(준비 실패·SDK 실패·미결제·금액 불일치 등)는 `Error`
+5. 주문 완료 화면은 내 결제이면서 결제된 적 있는 건(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`)만 보여 주고, 그 밖에는 `404`
 
 ### 5. 화면 커스터마이징
 

@@ -14,4 +14,7 @@ Route::middleware('auth')->group(function (): void {
 
     Route::post('/portone/checkout/complete', [PortOneCheckoutController::class, 'complete'])
         ->name('portone.checkout.complete');
+
+    Route::get('/portone/checkout/completed/{paymentId}', [PortOneCheckoutController::class, 'completed'])
+        ->name('portone.checkout.completed');
 });

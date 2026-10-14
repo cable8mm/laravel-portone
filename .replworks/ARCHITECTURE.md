@@ -34,7 +34,7 @@
   - PortOne browser SDK: opens the PG payment window.
   - Event listeners: Application code that reacts to WebhookReceived.
   - Scheduler and queue worker: Application infrastructure that runs EL-031, model:prune, and EL-032.
-- **Core versus stubs**: Core = CMP-01 through CMP-10, CMP-15, CMP-16. Stubs = CMP-11 through CMP-14. The Core never depends on the Stubs. The Stubs reach the Core only through the Billable Facade and Configuration.
+- **Core versus stubs**: Core = CMP-01 through CMP-10, CMP-15, CMP-16. Stubs = CMP-11 through CMP-14 and CMP-17. The Core never depends on the Stubs. The Stubs reach the Core only through the Billable Facade and Configuration.
 
 ## System Flow
 
@@ -85,8 +85,9 @@
 3. Checkout Controller `prepare` runs SF-1 for the authenticated user with the price and name of the product from its product lookup and responds with the checkoutParameters.
 4. Checkout Script calls the PortOne browser SDK; the Payer pays outside the Package.
 5. On an SDK result without an error code, Checkout Script requests the `complete` route with the Payment ID.
-6. Checkout Controller `complete` runs SF-2 for the authenticated user and responds with the status.
-7. Checkout Script moves Checkout View to the Success or Error state.
+6. Checkout Controller `complete` runs SF-2 for the authenticated user and responds with the status and, for PAID, the URL of the `completed` route for that Payment ID.
+7. Checkout Script moves Checkout View to the Success or Error state; on Success it navigates the browser to that URL.
+8. Checkout Controller `completed` finds the record through the Facade's scoped lookup (EL-008) and renders Completion View when it has been paid; otherwise it responds HTTP 404.
 
 ### SF-6 History and customer queries (FLOW-004, EL-001 to EL-003, EL-007, EL-008)
 
@@ -256,11 +257,12 @@
   - `show`: read EL-022, EL-023 from Configuration; when either is absent tell Checkout View to render the Error state with the button disabled (ERR-013); otherwise render Checkout View with the looked-up product's name and price and with the values and the product identifier available to Checkout Script (FR-043).
   - `prepare`: call EL-004 on the authenticated user with the price as the amount and the name as the order name of the product from the product lookup; never read an amount or order name from the request; respond with the EL-010 array (FR-045 to FR-047).
   - Product lookup: one lookup used by `show` and `prepare`; it may read a product identifier from the request; the published stub returns a sample product the Developer replaces with a database lookup (FR-045a).
-  - `complete`: call EL-005 on the authenticated user with the Payment ID from the request; never read an amount; respond with the status of the returned record (FR-053, FR-054).
+  - `complete`: call EL-005 on the authenticated user with the Payment ID from the request; never read an amount; respond with the status of the returned record and, for PAID, the URL of `completed` for that Payment ID (FR-053, FR-054).
+  - `completed`: call EL-008 on the authenticated user with the Payment ID from the path; render Completion View when the record is PAID, PARTIALLY_CANCELLED, or CANCELLED; otherwise respond HTTP 404 (FR-066).
   - Map PaymentNotFoundException, PaymentNotPaidException, AmountMismatchException to HTTP 422 with the key `error`; ConfigurationException and the PortOne exception to HTTP 500 with the key `error` (ERR-014, ERR-015). Every other exception propagates unmodified (RD-18).
 - Inputs: requests via CMP-14 from an authenticated user.
-- Outputs: rendered view; structured responses to Checkout Script.
-- Owns: the product lookup; the mapping of errors to responses.
+- Outputs: rendered views; structured responses to Checkout Script.
+- Owns: the product lookup; the mapping of errors to responses; which statuses may show the completion page.
 - Does not own: authentication (Application), any record, any PortOne contact.
 
 ### CMP-12 Checkout View (stub, EL-025)
@@ -283,7 +285,7 @@
   - Call the PortOne browser SDK `requestPayment` with store ID, channel key, paymentId, orderName, totalAmount, customerId, a payment method constant, a currency constant (FR-049). The two constants are defined at the top of the file (FR-050).
   - On a result with an error code: set Error and do not request `complete` (FR-051).
   - On a result without an error code: request `complete` with the Payment ID (FR-052).
-  - Set Success only when `complete` responds with status PAID. Every other outcome sets Error (FR-055, FR-056, RD-17).
+  - Set Success only when `complete` responds with status PAID, then navigate to the URL in that response. Every other outcome sets Error and stays (FR-055, FR-056, RD-17).
 - Inputs: Payer click; responses of `prepare` and `complete`; the SDK result.
 - Outputs: requests to CMP-14 routes; state changes to Checkout View.
 - Owns: the browser-side sequence and the currency and payment method constants. The core has no currency concept.
@@ -293,11 +295,20 @@
 ### CMP-14 Checkout Routes (stub, EL-030)
 
 - Responsibilities:
-  - Define `portone.checkout` (GET), `portone.checkout.prepare` (POST), `portone.checkout.complete` (POST), each requiring an authenticated user (FR-042). An unauthenticated request never reaches CMP-11 and creates no Payment record.
+  - Define `portone.checkout` (GET), `portone.checkout.prepare` (POST), `portone.checkout.complete` (POST), `portone.checkout.completed` (GET, Payment ID in the path), each requiring an authenticated user (FR-042). An unauthenticated request never reaches CMP-11 and creates no Payment record.
 - Inputs: the Application's decision to include the file.
 - Outputs: routes bound to CMP-11 actions.
-- Owns: the authentication requirement on the three routes.
+- Owns: the authentication requirement on the four routes.
 - Does not own: authentication itself (Application); registration (the Developer includes the file, CMP-02 never does).
+
+### CMP-17 Completion View (stub, EL-036)
+
+- Responsibilities:
+  - Show the order name, amount, Payment ID, paid_at, and current status of one paid Payment record (FR-067).
+- Inputs: the Payment record from Checkout Controller `completed`.
+- Outputs: what the Payer sees after paying.
+- Owns: presentation of the completion page; placeholder text, which the Developer replaces.
+- Does not own: deciding which record or status may be shown (CMP-11).
 
 ### CMP-15 Expiry Command (EL-031)
 
@@ -342,6 +353,7 @@ Each responsibility has exactly one owner.
 | Missing store ID or channel key detection                                   | CMP-11                       | ERR-013                                                              |
 | Rendering of the four checkout states                                       | CMP-12                       | SCR-006                                                              |
 | Browser payment sequence                                                    | CMP-13                       | FR-048 to FR-052, FR-055, FR-056                                     |
+| Completion page selection and rendering                                     | CMP-11, CMP-17               | FR-066, FR-067                                                       |
 | Authentication requirement on stub routes                                   | CMP-14                       | FR-042                                                               |
 | Selecting stale PENDING records and queuing one check each                  | CMP-15                       | FR-057, FR-065                                                       |
 | Queued unit of one expiry check; failure propagation                        | CMP-16                       | ERR-016                                                              |
@@ -357,7 +369,7 @@ Each responsibility has exactly one owner.
 - CMP-07 -> CMP-04, CMP-05, CMP-06, CMP-08
 - CMP-08 -> CMP-01
 - CMP-10 -> CMP-01, CMP-09
-- CMP-11 -> CMP-01, CMP-03, CMP-12
+- CMP-11 -> CMP-01, CMP-03, CMP-12, CMP-17
 - CMP-13 -> CMP-14 routes, the PortOne browser SDK
 - CMP-02 -> CMP-10 (route target), CMP-01 (EL-018), published file groups
 - CMP-15 -> CMP-01, CMP-05, CMP-16 (dispatch only)
@@ -372,8 +384,8 @@ Each responsibility has exactly one owner.
 - CMP-03 never depends on CMP-06 or CMP-08.
 - CMP-15 never depends on CMP-06, CMP-07, or CMP-08; it decides nothing about a record and never contacts PortOne.
 - CMP-16 never depends on CMP-05, CMP-06, or CMP-08 directly; its only door is CMP-07.
-- CMP-11 to CMP-14 never depend on CMP-04, CMP-05, CMP-06, CMP-07, CMP-08 directly; the only door into the Core is CMP-03.
-- The Core never depends on CMP-11 to CMP-14.
+- CMP-11 to CMP-14 and CMP-17 never depend on CMP-04, CMP-05, CMP-06, CMP-07, CMP-08 directly; the only door into the Core is CMP-03.
+- The Core never depends on CMP-11 to CMP-14 or CMP-17.
 - No component other than CMP-08 sends a request to PortOne; no component other than CMP-09 decides authenticity.
 
 ### Secret ownership
@@ -384,7 +396,7 @@ Each responsibility has exactly one owner.
 
 ### Ownership transfer
 
-- After a Developer publishes the stub files, CMP-11 to CMP-14 belong to the Application. The Package keeps no live link to the copies and does not update them.
+- After a Developer publishes the stub files, CMP-11 to CMP-14 and CMP-17 belong to the Application. The Package keeps no live link to the copies and does not update them.
 
 ## Data Flow
 
@@ -455,7 +467,9 @@ No record is read or written.
 | 5    | CMP-13 -> SDK                 | store ID, channel key, paymentId, orderName, totalAmount, customerId, payment method constant, currency constant |
 | 6    | SDK -> CMP-13                 | result with or without error code                                                                                |
 | 7    | CMP-13 -> CMP-11 (`complete`) | Payment ID only                                                                                                  |
-| 8    | CMP-11 -> CMP-13              | status, or error with key `error`                                                                                |
+| 8    | CMP-11 -> CMP-13              | status and, for PAID, the `completed` URL; or error with key `error`                                             |
+| 9    | CMP-13 -> CMP-11 (`completed`) | Payment ID in the path (browser navigation)                                                                      |
+| 10   | CMP-11 -> CMP-03 -> CMP-17    | the scoped Payment record (EL-008)                                                                               |
 
 ### DF-6 Queries
 
@@ -572,9 +586,10 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 - INV-15: Raw body bytes reach CMP-09 unmodified.
 - INV-16: The api secret exists only inside CMP-08's use; the webhook secret only in CMP-10 and as an input to CMP-09.
 - INV-17: In the stub flow, amount and order name come only from the CMP-11 product lookup; the request supplies at most a product identifier; `complete` reads only the Payment ID from the request.
-- INV-18: CMP-12 is in the Success state only after `complete` responded with status PAID.
+- INV-18: CMP-12 is in the Success state, and the browser navigates to the completion page, only after `complete` responded with status PAID.
 - INV-19: The stub routes are never registered by the Package; each requires an authenticated user.
 - INV-20: The Core runs identically with the stubs absent.
+- INV-23: The completion page shows only a Payment record of the authenticated user that has been paid (PAID, PARTIALLY_CANCELLED, CANCELLED).
 - INV-21: A Payment record is deleted only when its status is EXPIRED and its updated_at is older than EL-034.
 - INV-22: A record becomes EXPIRED only after a lookup in which PortOne reported a "not paid at the time of the check" result. EXPIRED is not a promise that the payment can never be paid; EL-005 completes it if it is paid later.
 
