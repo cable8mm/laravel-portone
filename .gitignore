@@ -12,3 +12,4 @@
 /cache/
 /tests/E2E/debug/
 /.claude/launch.json
+/tools/probes/*.jsonl

@@ -6,6 +6,7 @@
 - Laravel components (illuminate/\*): ^12.0 || ^13.0
 - The Package MUST NOT require laravel/framework.
 - Eloquent ORM and Laravel migrations: as provided by the illuminate/\* version in use.
+- illuminate/console and illuminate/queue: ^12.0 || ^13.0; required for the expiry command (EL-031) and the expiry job (EL-032).
 - cable8mm/portone-php: ^0.4
 - Composer: PSR-4 autoload, Laravel package discovery through composer.json extra.laravel.providers
 - orchestra/testbench: ^10.0 || ^11.0, including Workbench
@@ -55,6 +56,9 @@
 - PHP code MUST pass PHPStan with Larastan at level 6 with zero errors.
 - All PortOne API calls MUST go through cable8mm/portone-php.
 - Persistence MUST use Eloquent models and migrations.
+- The expiry command MUST be an Artisan command registered by the service provider.
+- The expiry job MUST implement Illuminate\Contracts\Queue\ShouldQueue and MUST use the Application's default queue connection.
+- The prunable definition (EL-035) MUST use Laravel's MassPrunable model trait so that model:prune can select it.
 - Configuration values MUST be read through config().
 - The stub script MUST be an ES module.
 - The stub script MUST import PortOne from @portone/browser-sdk/v2 (verify).
