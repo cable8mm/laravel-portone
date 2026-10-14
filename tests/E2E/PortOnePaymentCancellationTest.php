@@ -6,9 +6,12 @@ namespace Tests\E2E;
 
 use Cable8mm\PortonePhp\Client\PortOneClient;
 use Cable8mm\PortonePhp\Exception\PortOneException;
+use Laravel\Dusk\Browser;
+use Workbench\Database\Factories\UserFactory;
 
 /**
- * Server-only: no payment window is opened.
+ * Observes PortOne cancellation itself through cable8mm/portone-php; the
+ * browser only produces the two paid payments the test then cancels.
  */
 class PortOnePaymentCancellationTest extends TestCase
 {
@@ -16,15 +19,25 @@ class PortOnePaymentCancellationTest extends TestCase
     {
         $apiSecret = config('portone.api_secret');
         self::assertIsString($apiSecret);
-        $partialPaymentId = $_SERVER['PORTONE_CANCEL_PARTIAL_PAYMENT_ID'] ?? $_ENV['PORTONE_CANCEL_PARTIAL_PAYMENT_ID'] ?? '';
 
-        if ($partialPaymentId === '') {
-            $this->markTestSkipped('Set PORTONE_CANCEL_PARTIAL_PAYMENT_ID to a paid 100 KRW test payment to run the live cancellation test.');
-        }
+        // Each run cancels the two payments it has the human pay, so the test
+        // needs no paid payment left over from an earlier run.
+        $user = UserFactory::new()->create();
+        $fullPaymentId = $user->preparePayment(100, 'PortOne full cancellation probe')->payment_id;
+        $partialPaymentId = $user->preparePayment(100, 'PortOne partial cancellation probe')->payment_id;
 
-        $browserObservation = $this->probeObservation('portone-browser-sdk-observation.json');
-        $fullPaymentId = $browserObservation['completedPayment']['paymentId'] ?? null;
-        self::assertIsString($fullPaymentId, 'The T-002 browser observation must contain a completed payment ID.');
+        $this->browse(function (Browser $browser) use ($user, $fullPaymentId, $partialPaymentId): void {
+            foreach ([$fullPaymentId, $partialPaymentId] as $number => $paymentId) {
+                $payment = $user->findPayment($paymentId);
+                self::assertNotNull($payment);
+                $this->payInBrowser(
+                    $browser,
+                    $user,
+                    $payment,
+                    'Complete the 100 KRW PortOne test payment ('.($number + 1).' of 2) in the browser window.',
+                );
+            }
+        });
 
         $client = new PortOneClient($apiSecret);
         $fullPaymentBefore = $client->payment->getPayment($fullPaymentId);

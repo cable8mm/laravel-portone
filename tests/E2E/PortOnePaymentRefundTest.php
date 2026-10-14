@@ -18,27 +18,21 @@ class PortOnePaymentRefundTest extends TestCase
     {
         $user = UserFactory::new()->create();
 
-        // The full refund consumes the payment PortOnePaymentCompletionTest left
-        // paid, so that test has to run before each run of this one.
-        $completionObservation = $this->readObservation(__DIR__.'/portone-payment-completion-observation.json');
-        $previouslyPaidPaymentId = $completionObservation['packagePreparedPayment']['paymentId'] ?? null;
-        self::assertIsString($previouslyPaidPaymentId);
-
         $payments = [
-            'full' => $this->localPayment($user, $previouslyPaidPaymentId, 'Previously completed refund probe', 'PENDING'),
+            'full' => $user->preparePayment(100, 'PortOne full refund probe'),
             'partial' => $user->preparePayment(10000, 'PortOne partial refund probe'),
             'remaining' => $user->preparePayment(10000, 'PortOne remaining refund probe'),
         ];
 
         $this->browse(function (Browser $browser) use ($user, $payments): void {
-            foreach (['partial', 'remaining'] as $key) {
+            foreach ($payments as $key => $payment) {
                 $this->payInBrowser(
                     $browser,
                     $user,
-                    $payments[$key],
-                    "Complete the 10,000 KRW PortOne test payment ({$key}) in the browser window.",
+                    $payment,
+                    'Complete the '.number_format($payment->amount)." KRW PortOne test payment ({$key}) in the browser window.",
                 );
-                $this->assertSame('PENDING', $payments[$key]->fresh()->status);
+                $this->assertSame('PENDING', $payment->fresh()->status);
             }
         });
 
@@ -58,8 +52,8 @@ class PortOnePaymentRefundTest extends TestCase
             $observation['livePreparedPayments'][$key] = [
                 'paymentId' => $payment->payment_id,
                 'totalAmount' => $payment->amount,
-                'origin' => $key === 'full' ? 'T-011 live payment' : 'package-prepared payment',
-                'browserResult' => $key === 'full' ? 'previously returned without an error code' : 'returned without an error code',
+                'origin' => 'package-prepared payment',
+                'browserResult' => 'returned without an error code',
                 'completionStatus' => $completed->status,
                 'paidAtRecorded' => true,
             ];

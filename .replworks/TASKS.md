@@ -214,7 +214,7 @@
     - EL-026 is disabled in Loading and Success and enabled in Initial and Error (AC-052).
     - Unit tests with an SDK test double traced to the T-002 recording pass.
 
-- [ ] T-016 Migrate live browser checkout tests to Orchestra Testbench Dusk
+- [X] T-016 Migrate live browser checkout tests to Orchestra Testbench Dusk
   - Satisfies: TECH_STACK.md §1 (orchestra/testbench-dusk), §2 (tests/E2E/, phpunit.dusk.xml), §4 (live browser tests use Testbench Dusk against Workbench, headed, Dusk loginAs(), no PHP built-in router), §6 (require-dev, export-ignore for phpunit.dusk.xml); replaces the router-based PortOneCheckoutFlowTest live browser path
   - External boundary: yes
   - Acceptance criteria:
@@ -228,6 +228,7 @@
     - No PHP built-in server router script is used by any live test.
     - An E2E test exercises the product from the Payer's click through live PortOne and the PG payment window to the final state, matching the behavior previously recorded by the router-based flow (T-015 acceptance behavior preserved).
     - Live verification still MUST NOT run in CI; CI remains green.
+    - Each live test is runnable on its own: it creates any payment it consumes and requires no other live test to run first (TECH_STACK.md §4).
     - Unit tests unaffected pass.
 
 - [ ] T-017 Relocate live verification probes out of tests/
@@ -241,15 +242,13 @@
     - TECH_STACK.md states explicitly that the no-PHP-built-in-server-router rule applies to live tests, and that probes are a documented exception.
     - The existing observation JSON files produced by the probes remain valid inputs to the live tests.
 
-- [ ] T-018 Chain paid-id observations for live tests (completion -> refund in one test)
-  - Satisfies: TECH_STACK.md §4 (chaining), external-boundary MOCK_RULES; keeps PaymentCompletion and CheckoutCompletion as two tests
+- [ ] T-018 Remove paid-id dependencies between live tests (superseded by T-016)
+  - Satisfies: TECH_STACK.md §4 (each live test is runnable on its own); keeps PaymentCompletion and CheckoutCompletion as two tests
   - External boundary: yes
   - Acceptance criteria:
-    - A chained design is proposed (documentation only) in which a payment made PAID by the completion test is refunded by the refund test in the same run, removing the dependency on a recorded/manually supplied PAID id.
+    - No live test requires another live test to run first; the refund and cancellation tests create the payments they consume (implemented under T-016).
     - The payment-lookup probe observation remains the INPUT for the not-paid path.
     - PaymentCompletion and CheckoutCompletion remain two separate tests (no merge).
-    - Report how PaymentCancellation currently obtains a fresh PAID id per run and whether a recorded id can be reused across runs.
-    - No behavior change yet: this task produces the design and report only, pending approval before implementation.
 
 - [ ] T-019 Audit recorded observations and mocks against MOCK_RULES
   - Satisfies: AGENTS.md MOCK_RULES; verification/hygiene task, non-blocking

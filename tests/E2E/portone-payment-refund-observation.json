@@ -1,20 +1,20 @@
 {
-	"recordedAt": "2026-10-14T02:28:17+00:00",
+	"recordedAt": "2026-10-14T02:40:05+00:00",
 	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
 	"publishedStubs": true,
 	"defaultApiBaseUrl": "https://api.portone.io",
 	"secretsRecorded": false,
 	"livePreparedPayments": {
 		"full": {
-			"paymentId": "334a12ae-14fe-49e9-9aee-f34b91eb71e2",
+			"paymentId": "5a3cffe1-af70-4de3-a6f6-de4b9613d753",
 			"totalAmount": 100,
-			"origin": "T-011 live payment",
-			"browserResult": "previously returned without an error code",
+			"origin": "package-prepared payment",
+			"browserResult": "returned without an error code",
 			"completionStatus": "PAID",
 			"paidAtRecorded": true
 		},
 		"partial": {
-			"paymentId": "8b14d7b2-f114-46c5-9943-f573282b596d",
+			"paymentId": "d0ebfd82-2c7f-409c-890d-061d8821bb0f",
 			"totalAmount": 10000,
 			"origin": "package-prepared payment",
 			"browserResult": "returned without an error code",
@@ -22,7 +22,7 @@
 			"paidAtRecorded": true
 		},
 		"remaining": {
-			"paymentId": "01d49e33-9b80-4f1f-93e5-bea6696f46d5",
+			"paymentId": "b7c15d64-5bad-4c68-a3ee-3dd612705664",
 			"totalAmount": 10000,
 			"origin": "package-prepared payment",
 			"browserResult": "returned without an error code",
@@ -31,14 +31,14 @@
 		}
 	},
 	"fullRefund": {
-		"paymentId": "334a12ae-14fe-49e9-9aee-f34b91eb71e2",
+		"paymentId": "5a3cffe1-af70-4de3-a6f6-de4b9613d753",
 		"amountOmitted": true,
 		"status": "CANCELLED",
 		"cancelledAmount": 100,
 		"configuredApiBaseUrl": "https://api.portone.io/"
 	},
 	"partialRefund": {
-		"paymentId": "8b14d7b2-f114-46c5-9943-f573282b596d",
+		"paymentId": "d0ebfd82-2c7f-409c-890d-061d8821bb0f",
 		"partialAmount": 3000,
 		"partialStatus": "PARTIALLY_CANCELLED",
 		"partialCancelledAmount": 3000,
@@ -47,7 +47,7 @@
 		"finalCancelledAmount": 10000
 	},
 	"remainingRefund": {
-		"paymentId": "01d49e33-9b80-4f1f-93e5-bea6696f46d5",
+		"paymentId": "b7c15d64-5bad-4c68-a3ee-3dd612705664",
 		"initialPartialAmount": 3000,
 		"fullRemainingAmountOmitted": true,
 		"finalStatus": "CANCELLED",

@@ -74,9 +74,10 @@
 - Live webhook verification MUST use an ngrok public URL.
 - Live verification MUST NOT run in CI.
 - Live tests MUST be under tests/E2E/ and MUST be covered only by phpunit.dusk.xml.
+- Each live test MUST be runnable on its own: it MUST create any payment it consumes and MUST NOT require another live test to run first. A live test MAY reuse a recorded resource that stays valid across runs.
 - composer test MUST exclude tests/E2E/.
 - Live browser tests (the Payer opens and completes the PG payment window) MUST use Orchestra Testbench Dusk against the Workbench app and MUST NOT use a PHP built-in server router script.
-- Live server-only tests (no payment window, e.g. cancellation) MUST use plain live PHP requests through the Workbench app.
+- Live server-only tests (no payment window) MUST use plain live PHP requests through the Workbench app.
 - Live webhook tests MUST assert delivery at the Workbench portone.webhook route through ngrok; a browser is used only to trigger a payment, never to receive the webhook.
 - Live browser tests MUST run headed so the human can operate the PG payment window; DUSK_HEADLESS_DISABLED=1 MUST disable headless and MUST be set in the composer live script.
 - The Testbench Dusk serve port MUST be known and configurable so the ngrok target matches; it is set through DUSK_SERVE_URL, or DUSK_SERVE_PORT/DUSK_SERVE_HOST (default port 8001).
