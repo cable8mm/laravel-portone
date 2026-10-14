@@ -38,6 +38,7 @@ Route::get('/', function () use ($controller, $routes) {
             Route::has('portone.checkout') => 'sample',
             default => null,
         },
+        'pendingExpireAfter' => config('portone.pending_expire_after'),
         'signInUrl' => Route::has('workbench.login') ? route('workbench.login', ['userId' => 'test@example.com']) : null,
     ]);
 })->name('workbench.guide');
@@ -50,6 +51,7 @@ Route::middleware('auth')->prefix('shop')->name('shop.')->group(function (): voi
     Route::get('/', [ProductController::class, 'index'])->name('products.index');
     Route::get('/products/{product}', [ProductController::class, 'show'])->name('products.show');
     Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+    Route::post('/payments/expire', [PaymentController::class, 'expire'])->name('payments.expire');
     Route::get('/payments/{paymentId}', [PaymentController::class, 'show'])->name('payments.show');
     Route::post('/payments/{paymentId}/complete', [PaymentController::class, 'complete'])->name('payments.complete');
     Route::post('/payments/{paymentId}/refund', [PaymentController::class, 'refund'])->name('payments.refund');

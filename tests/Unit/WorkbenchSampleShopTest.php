@@ -6,17 +6,24 @@ namespace Tests\Unit;
 
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\GatewayPayment;
+use Cable8mm\LaravelPortone\Jobs\ExpirePendingPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
 use Cable8mm\PortonePhp\Webhook\WebhookTransactionData;
 use DateTimeImmutable;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Foundation\Console\QueuedCommand;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase;
 use Orchestra\Workbench\WorkbenchServiceProvider;
+use Workbench\App\Jobs\CompletePaymentFromWebhook;
+use Workbench\App\Listeners\QueuePaymentCompletion;
 use Workbench\App\Models\Product;
 use Workbench\App\Models\User;
 use Workbench\App\Models\WebhookLog;
@@ -317,6 +324,78 @@ class WorkbenchSampleShopTest extends TestCase
             ->assertSee('data-webhook-log="webhook-1"', false);
     }
 
+    public function test_the_workbench_app_schedules_the_expiry_check_and_pruning(): void
+    {
+        $events = collect($this->app->make(Schedule::class)->events())
+            ->mapWithKeys(fn ($event): array => [(string) $event->command => $event->expression]);
+
+        $this->assertSame('*/10 * * * *', $events->first(fn (string $expression, string $command): bool => str_contains($command, 'portone:expire-pending')));
+        $this->assertSame('0 0 * * *', $events->first(fn (string $expression, string $command): bool => str_contains($command, 'model:prune') && str_contains($command, 'Payment')));
+    }
+
+    public function test_only_a_paid_webhook_queues_a_completion(): void
+    {
+        Queue::fake();
+        // Webhook types traced to tests/E2E/portone-webhook-observation.json.
+        $listener = new QueuePaymentCompletion;
+
+        $listener->handle($this->webhook('Transaction.Paid', 'payment-1'));
+        $listener->handle($this->webhook('Transaction.Cancelled', 'payment-2'));
+
+        Queue::assertPushed(CompletePaymentFromWebhook::class, 1);
+        Queue::assertPushed(CompletePaymentFromWebhook::class, fn (CompletePaymentFromWebhook $job): bool => $job->paymentId === 'payment-1');
+    }
+
+    public function test_webhook_completion_recovers_an_expired_payment(): void
+    {
+        $user = UserFactory::new()->create();
+        // Values traced to tools/probes/portone-abandoned-payment-observation.json (retryAfterFailed: PAID 100).
+        $payment = $user->preparePayment(100, '딸기 마카롱');
+        $payment->forceFill(['status' => 'EXPIRED'])->save();
+        $gateway = $this->createMock(PaymentGateway::class);
+        $gateway->expects($this->once())->method('lookup')->with($payment->payment_id)->willReturn(new GatewayPayment('PAID', 100));
+        $this->app->instance(PaymentGateway::class, $gateway);
+
+        (new CompletePaymentFromWebhook($payment->payment_id))->handle();
+        (new CompletePaymentFromWebhook('unknown-payment'))->handle();
+
+        $this->assertSame('PAID', $payment->refresh()->status);
+    }
+
+    public function test_expire_now_button_queues_the_expiry_command(): void
+    {
+        $queue = Queue::fake();
+        config(['portone.pending_expire_after' => 1]);
+        $user = UserFactory::new()->create();
+        $stale = $user->preparePayment(1000, '딸기 마카롱');
+        Payment::query()->whereKey($stale->getKey())->update(['created_at' => now()->subMinutes(2)]);
+        $user->preparePayment(3500, '곰돌이 쿠키');
+
+        $this->actingAs($user)->post('/shop/payments/expire')->assertRedirect('/shop/payments');
+
+        // The web request queues the command itself; the queue worker runs it.
+        Queue::assertPushed(QueuedCommand::class, 1);
+        Queue::assertNotPushed(ExpirePendingPayment::class);
+
+        $queue->pushed(QueuedCommand::class)->first()->handle($this->app->make(Kernel::class));
+
+        Queue::assertPushed(ExpirePendingPayment::class, 1);
+        Queue::assertPushed(ExpirePendingPayment::class, fn (ExpirePendingPayment $job): bool => $job->paymentId === $stale->payment_id);
+    }
+
+    public function test_expired_payment_is_labelled_and_offers_confirmation(): void
+    {
+        $user = UserFactory::new()->create();
+        $payment = $user->preparePayment(1000, '딸기 마카롱');
+        $payment->forceFill(['status' => 'EXPIRED'])->save();
+        $this->actingAs($user);
+
+        $this->get('/shop/payments')->assertSee('data-status="EXPIRED"', false)->assertSee('만료');
+        $this->get('/shop/payments/'.$payment->payment_id)
+            ->assertSee('data-complete', false)
+            ->assertDontSee('data-cancel-full', false);
+    }
+
     public function test_phpunit_runs_exercise_only_the_published_checkout_stubs(): void
     {
         $this->assertFalse(Route::has('portone.checkout'));
@@ -367,6 +446,14 @@ class WorkbenchSampleShopTest extends TestCase
     private function product(): Product
     {
         return Product::create(['emoji' => '🍓', 'name' => '딸기 마카롱', 'description' => '새콤달콤', 'price' => 1000]);
+    }
+
+    private function webhook(string $type, string $paymentId): WebhookReceived
+    {
+        return new WebhookReceived(
+            new WebhookTransaction($type, new DateTimeImmutable, new WebhookTransactionData($paymentId, 'store-1', 'tx-1')),
+            'webhook-'.$paymentId,
+        );
     }
 
     private function paidPayment(User $user, int $amount): Payment

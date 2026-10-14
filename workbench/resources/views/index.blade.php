@@ -79,11 +79,30 @@
                         <tr><td class="py-2 font-bold">전액 취소</td><td class="font-mono text-xs">refund($id, $reason)</td><td>결제 상세 → 전액 취소</td></tr>
                         <tr><td class="py-2 font-bold">부분 취소</td><td class="font-mono text-xs">refund($id, $reason, $amount)</td><td>결제 상세 → 부분 취소 (여러 번)</td></tr>
                         <tr><td class="py-2 font-bold">결제 내역</td><td class="font-mono text-xs">payments() · findPayment()</td><td>결제 내역 · 결제 상세</td></tr>
+                        <tr><td class="py-2 font-bold">결제 대기 만료</td><td class="font-mono text-xs">portone:expire-pending · ExpirePendingPayment</td><td>결제 내역 → 지금 만료 검사 · 스케줄러(10분마다)</td></tr>
+                        <tr><td class="py-2 font-bold">만료 건 정리</td><td class="font-mono text-xs">model:prune --model=Payment (MassPrunable)</td><td>스케줄러(매일)</td></tr>
+                        <tr><td class="py-2 font-bold">만료 건 복구</td><td class="font-mono text-xs">completePayment() on EXPIRED</td><td>만료된 결제 상세 → 결제 확인</td></tr>
                         <tr><td class="py-2 font-bold">웹훅</td><td class="font-mono text-xs">POST {{ $webhookPath }} · WebhookReceived</td><td>웹훅 로그 (ngrok 필요)</td></tr>
                         <tr><td class="py-2 font-bold">체크아웃 스텁</td><td class="font-mono text-xs">portone.checkout · prepare · complete</td><td>상품 상세 → 결제</td></tr>
                     </tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="card" data-workbench-background>
+            <h2 class="text-lg font-black text-slate-800">⚙️ 백그라운드 작업 (큐 · 스케줄러)</h2>
+            <p class="mt-1 text-sm text-slate-500">
+                실서비스처럼 별도 터미널에서 띄워 두세요. 샘플은 결제 대기 {{ $pendingExpireAfter }}분 뒤 만료 검사를 해요(실서비스 기본값 1440분).
+            </p>
+            <ul class="mt-4 space-y-2 text-sm">
+                <li><code class="font-mono">vendor/bin/testbench queue:work</code> 만료 확인 잡, 웹훅 → 결제 확정 잡 처리</li>
+                <li><code class="font-mono">vendor/bin/testbench schedule:work</code> 10분마다 <code class="font-mono">portone:expire-pending</code>, 매일 <code class="font-mono">model:prune</code></li>
+                <li><code class="font-mono">vendor/bin/testbench schedule:list</code> 등록된 스케줄 확인</li>
+            </ul>
+            <p class="mt-4 text-sm text-slate-500">
+                <code class="font-mono">Transaction.Paid</code> 웹훅이 오면 앱의 리스너가 큐 잡으로 <code class="font-mono">completePayment()</code>를 불러요.
+                패키지는 웹훅 처리 중 레코드를 바꾸지 않으므로, 이 연결은 앱 코드(<code class="font-mono">workbench/app/Listeners/QueuePaymentCompletion.php</code>)입니다.
+            </p>
         </section>
 
         <section class="card">
@@ -93,6 +112,7 @@
                 <li><code class="font-mono">php artisan vendor:publish --tag=portone-migrations</code> 마이그레이션 → <code class="font-mono">php artisan migrate</code></li>
                 <li><code class="font-mono">php artisan vendor:publish --tag=portone-stubs</code> 체크아웃 스텁 → <code class="font-mono">routes/portone.php</code>를 라우트에 포함하고 <code class="font-mono">product()</code>를 상품 조회로 바꾸기</li>
                 <li>사용자 모델에 <code class="font-mono">use Billable;</code></li>
+                <li>스케줄러에 <code class="font-mono">portone:expire-pending</code>과 <code class="font-mono">model:prune</code>을 등록하고 큐 워커 실행</li>
             </ul>
         </section>
 

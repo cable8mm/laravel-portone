@@ -36,4 +36,9 @@
         'note' => '패키지는 검증된 웹훅마다 WebhookReceived 이벤트를 한 번 보냅니다.',
         'code' => "Event::listen(WebhookReceived::class, function (WebhookReceived \$event) {\n    WebhookLog::create([...]);\n});",
     ])
+    @include('workbench::partials.code', [
+        'file' => 'workbench/app/Listeners/QueuePaymentCompletion.php',
+        'note' => 'Transaction.Paid 웹훅이면 큐 잡이 completePayment()로 결제를 확정해요. 결제 대기·만료 건 모두 PAID가 됩니다.',
+        'code' => "dispatch(new CompletePaymentFromWebhook(\$event->webhook->data->paymentId));",
+    ])
 @endsection

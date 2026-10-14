@@ -81,6 +81,25 @@ composer serve   # composer build(에셋 + DB) 후 testbench serve (기본 http:
   `WorkbenchSampleShopTest`가 이 차이를 강제합니다.
 - 스텁을 앱에 직접 발행해 두면(`vendor:publish --tag=portone-stubs`) 워크벤치 사본 대신 발행본이 쓰입니다.
   PHPUnit 실행(live 테스트 포함)에서는 워크벤치 사본이 등록되지 않으므로, 테스트는 항상 발행본을 검증합니다.
+- **결제 대기 만료(큐 · 스케줄러)**: 워크벤치 앱이 `portone:expire-pending`(10분마다)과
+  `model:prune`(매일)을 스케줄에 등록합니다. 샘플은 `testbench.yaml`에서
+  `PORTONE_PENDING_EXPIRE_AFTER=1`로 1분 뒤 검사합니다(실서비스 기본값 1440분). 별도 터미널에서
+  큐 워커와 스케줄러를 띄우세요.
+
+  ```bash
+  vendor/bin/testbench queue:work
+  vendor/bin/testbench schedule:work
+  ```
+
+  결제 내역의 **지금 만료 검사 실행**은 웹 요청이라 `Artisan::queue()`로 명령을 큐에 넣고, 큐 워커가
+  실행합니다(패키지 명령은 콘솔에서만 등록되므로 웹에서 `Artisan::call()`은 실패합니다).
+
+- **웹훅 → 결제 확정**: `Transaction.Paid` 웹훅이 오면 앱의 리스너
+  (`workbench/app/Listeners/QueuePaymentCompletion.php`)가 큐 잡으로 `completePayment()`를 불러
+  결제 대기·만료 건을 `PAID`로 만듭니다. PHPUnit 실행에서는 등록되지 않습니다(live 웹훅 테스트가
+  "패키지는 웹훅 처리 중 레코드를 바꾸지 않는다"를 그대로 검증하도록).
+- `composer require` 등으로 `composer.json`이 바뀌면 post-autoload-dump 훅(`package:purge-skeleton`)이
+  스켈레톤의 SQLite 파일을 지웁니다. 그 뒤에는 `composer build`(또는 `composer serve`)로 다시 만드세요.
 - 이 서버는 live 테스트(§2)와 같은 루트 `.env`의 `PORTONE_*`를 읽습니다. PHPUnit 실행(`APP_ENV=testing`)에서는
   읽지 않습니다.
 - 워크벤치가 꼬이면 `composer build`로 다시 빌드하세요.

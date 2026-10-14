@@ -3,6 +3,8 @@ providers:
 
 env:
   - AUTH_MODEL='Workbench\App\Models\User'
+  # The sample shop checks pending payments after 1 minute instead of the default 24 hours.
+  - PORTONE_PENDING_EXPIRE_AFTER=1
 
 workbench:
   install: true
