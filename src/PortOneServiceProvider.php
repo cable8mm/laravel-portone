@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone;
 
+use Cable8mm\LaravelPortone\Console\ExpirePendingPaymentsCommand;
 use Cable8mm\LaravelPortone\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -11,8 +12,8 @@ use Illuminate\Support\ServiceProvider;
 /**
  * 패키지 서비스 프로바이더.
  *
- * 설정 병합, 게이트웨이 바인딩, 웹훅 라우트 등록,
- * 설정·마이그레이션·체크아웃 스텁 발행을 담당한다.
+ * 설정 병합, 게이트웨이 바인딩, 웹훅 라우트 등록, 만료 명령 등록,
+ * 설정·마이그레이션·체크아웃 스텁 발행을 담당한다. 스케줄은 등록하지 않는다.
  */
 class PortOneServiceProvider extends ServiceProvider
 {
@@ -38,6 +39,8 @@ class PortOneServiceProvider extends ServiceProvider
         )->name('portone.webhook');
 
         if ($this->app->runningInConsole()) {
+            $this->commands([ExpirePendingPaymentsCommand::class]);
+
             $this->publishes([
                 __DIR__.'/../config/portone.php' => $this->app->configPath('portone.php'),
             ], 'portone-config');

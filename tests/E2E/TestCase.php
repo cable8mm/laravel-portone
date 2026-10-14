@@ -109,6 +109,30 @@ abstract class TestCase extends DuskTestCase
      */
     protected function payInBrowser(Browser $browser, User $user, Payment $payment, string $instruction): void
     {
+        self::assertSame(
+            'paid',
+            $this->operatePaymentWindow($browser, $user, $payment, $instruction),
+            'The browser SDK reported a payment error.',
+        );
+    }
+
+    /**
+     * Have the human close the PG window of a Package-prepared payment without paying.
+     */
+    protected function closeInBrowser(Browser $browser, User $user, Payment $payment, string $instruction): void
+    {
+        self::assertSame(
+            'error',
+            $this->operatePaymentWindow($browser, $user, $payment, $instruction),
+            'The browser SDK reported a completed payment.',
+        );
+    }
+
+    /**
+     * Open the PG window on the Workbench pay page and return the SDK result once the human acts.
+     */
+    private function operatePaymentWindow(Browser $browser, User $user, Payment $payment, string $instruction): string
+    {
         $browser->loginAs($user)
             ->visit(route('workbench.pay', ['paymentId' => $payment->payment_id], false))
             // Dusk reads a bare "#id:pseudo" selector as an element ID, so qualify it.
@@ -118,11 +142,7 @@ abstract class TestCase extends DuskTestCase
         $this->instruct($instruction);
         $browser->waitFor('[data-workbench-pay]:not([data-result="pending"])', self::PAYER_TIMEOUT);
 
-        self::assertSame(
-            'paid',
-            $browser->attribute('[data-workbench-pay]', 'data-result'),
-            'The browser SDK reported a payment error.',
-        );
+        return (string) $browser->attribute('[data-workbench-pay]', 'data-result');
     }
 
     /**

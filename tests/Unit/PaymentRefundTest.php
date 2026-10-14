@@ -449,6 +449,11 @@ class RefundConcurrencyGateway implements PaymentGateway
         throw new \LogicException('Refund concurrency must not perform a lookup.');
     }
 
+    public function lookupForExpiry(string $paymentId): GatewayPayment
+    {
+        throw new \LogicException('Refund concurrency must not perform an expiry lookup.');
+    }
+
     public function cancel(string $paymentId, string $reason, ?int $amount): void
     {
         $counter = fopen($this->directory.'/cancel-count', 'c+');

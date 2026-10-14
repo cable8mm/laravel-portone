@@ -399,6 +399,11 @@ class CompletionConcurrencyGateway implements PaymentGateway
         return new GatewayPayment('PAID', 100);
     }
 
+    public function lookupForExpiry(string $paymentId): GatewayPayment
+    {
+        throw new \LogicException('Completion concurrency must not perform an expiry lookup.');
+    }
+
     public function cancel(string $paymentId, string $reason, ?int $amount): void
     {
         throw new \LogicException('Completion concurrency must not send cancellation requests.');

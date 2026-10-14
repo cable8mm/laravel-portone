@@ -6,6 +6,7 @@ namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\PortonePhp\Client\PortOneClient;
+use Cable8mm\PortonePhp\Exception\PortOneException;
 
 /**
  * cable8mm/portone-php 클라이언트로 PortOne V2 API를 호출하는 게이트웨이.
@@ -21,25 +22,41 @@ class PortOneGateway implements PaymentGateway
      * @return GatewayPayment PortOne 결제 상태와 실결제액
      *
      * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
      */
     public function lookup(string $paymentId): GatewayPayment
     {
-        $apiSecret = config('portone.api_secret');
-
-        if (! is_string($apiSecret) || $apiSecret === '') {
-            throw new ConfigurationException('The PortOne API secret is not configured.');
-        }
-
-        $baseUrl = config('portone.base_url');
-        $baseUrl = is_string($baseUrl) && $baseUrl !== '' ? $baseUrl : 'https://api.portone.io';
-        $client = new PortOneClient($apiSecret, new PortOneRequestExecutor($apiSecret, $baseUrl));
-        $payment = $client->payment->getPayment($paymentId);
+        $payment = $this->client()->payment->getPayment($paymentId);
         $amount = $payment->data['amount'] ?? null;
         $totalAmount = is_array($amount) && is_int($amount['total'] ?? null)
             ? $amount['total']
             : null;
 
         return new GatewayPayment($payment->variant, $totalAmount);
+    }
+
+    /**
+     * 만료 확인용으로 결제 1건을 조회한다. PortOne이 결제를 모르면 found가 false이다.
+     *
+     * PAYMENT_NOT_FOUND는 T-003·T-021에서 결제창을 연 적 없는 결제에 대해 관측된 응답이다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return GatewayPayment PortOne 결제 상태와 실결제액
+     *
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PAYMENT_NOT_FOUND가 아닌 PortOne API 호출 실패 (원문 그대로 전달)
+     */
+    public function lookupForExpiry(string $paymentId): GatewayPayment
+    {
+        try {
+            return $this->lookup($paymentId);
+        } catch (PortOneException $exception) {
+            if ($exception->errorType !== 'PAYMENT_NOT_FOUND') {
+                throw $exception;
+            }
+
+            return new GatewayPayment('PAYMENT_NOT_FOUND', null, found: false);
+        }
     }
 
     /**
@@ -53,6 +70,20 @@ class PortOneGateway implements PaymentGateway
      */
     public function cancel(string $paymentId, string $reason, ?int $amount): void
     {
+        $this->client()->payment->cancelPayment(
+            paymentId: $paymentId,
+            amount: $amount,
+            reason: $reason,
+        );
+    }
+
+    /**
+     * 설정된 API Secret과 기본 주소로 PortOne 클라이언트를 만든다.
+     *
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     */
+    private function client(): PortOneClient
+    {
         $apiSecret = config('portone.api_secret');
 
         if (! is_string($apiSecret) || $apiSecret === '') {
@@ -61,11 +92,7 @@ class PortOneGateway implements PaymentGateway
 
         $baseUrl = config('portone.base_url');
         $baseUrl = is_string($baseUrl) && $baseUrl !== '' ? $baseUrl : 'https://api.portone.io';
-        $client = new PortOneClient($apiSecret, new PortOneRequestExecutor($apiSecret, $baseUrl));
-        $client->payment->cancelPayment(
-            paymentId: $paymentId,
-            amount: $amount,
-            reason: $reason,
-        );
+
+        return new PortOneClient($apiSecret, new PortOneRequestExecutor($apiSecret, $baseUrl));
     }
 }

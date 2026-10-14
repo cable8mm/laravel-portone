@@ -20,6 +20,19 @@ interface PaymentGateway
     public function lookup(string $paymentId): GatewayPayment;
 
     /**
+     * 만료 확인용으로 결제 1건을 조회한다.
+     *
+     * lookup()과 같지만, PortOne이 결제를 모르면(PAYMENT_NOT_FOUND) 예외 대신
+     * found가 false인 결과를 반환한다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return GatewayPayment PortOne 결제 상태와 실결제액
+     *
+     * @throws \Throwable 그 밖의 PortOne API 호출 실패 (원문 그대로 전달)
+     */
+    public function lookupForExpiry(string $paymentId): GatewayPayment;
+
+    /**
      * PortOne 결제를 취소(환불)한다. 금액 생략 시 전액 취소이다.
      *
      * @param  string  $paymentId  PortOne 결제 식별자

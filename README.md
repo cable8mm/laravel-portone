@@ -49,16 +49,20 @@ PORTONE_BASE_URL=
 PORTONE_WEBHOOK_PATH=
 PORTONE_STORE_ID=
 PORTONE_CHANNEL_KEY=
+PORTONE_PENDING_EXPIRE_AFTER=
+PORTONE_EXPIRED_RETENTION_DAYS=
 ```
 
-| 변수                     | 설명                                                 | 기본값            |
-| ------------------------ | ---------------------------------------------------- | ----------------- |
-| `PORTONE_API_SECRET`     | 포트원 API Secret (결제 조회·취소용)                 | 없음 (필수)       |
-| `PORTONE_WEBHOOK_SECRET` | 포트원 웹훅 Secret (웹훅 검증용)                     | 없음 (필수)       |
-| `PORTONE_BASE_URL`       | PortOne API 주소 재정의 (비우면 PortOne 기본값 사용) | 없음              |
-| `PORTONE_WEBHOOK_PATH`   | 웹훅 수신 경로                                       | `portone/webhook` |
-| `PORTONE_STORE_ID`       | 포트원 상점 ID (브라우저 결제창용)                   | 없음 (필수)       |
-| `PORTONE_CHANNEL_KEY`    | 포트원 채널 키 (브라우저 결제창용)                   | 없음 (필수)       |
+| 변수                             | 설명                                                 | 기본값            |
+| -------------------------------- | ---------------------------------------------------- | ----------------- |
+| `PORTONE_API_SECRET`             | 포트원 API Secret (결제 조회·취소용)                 | 없음 (필수)       |
+| `PORTONE_WEBHOOK_SECRET`         | 포트원 웹훅 Secret (웹훅 검증용)                     | 없음 (필수)       |
+| `PORTONE_BASE_URL`               | PortOne API 주소 재정의 (비우면 PortOne 기본값 사용) | 없음              |
+| `PORTONE_WEBHOOK_PATH`           | 웹훅 수신 경로                                       | `portone/webhook` |
+| `PORTONE_STORE_ID`               | 포트원 상점 ID (브라우저 결제창용)                   | 없음 (필수)       |
+| `PORTONE_CHANNEL_KEY`            | 포트원 채널 키 (브라우저 결제창용)                   | 없음 (필수)       |
+| `PORTONE_PENDING_EXPIRE_AFTER`   | 이 시간(분)보다 오래된 `PENDING` 결제를 만료 검사    | `1440` (24시간)   |
+| `PORTONE_EXPIRED_RETENTION_DAYS` | `EXPIRED` 결제를 지우기 전까지 보관할 일수           | `90`              |
 
 ### 2. 설정 / 마이그레이션 발행
 
@@ -99,12 +103,12 @@ class User extends Authenticatable
 php artisan vendor:publish --tag=portone-stubs
 ```
 
-| 발행 파일                                            | 설명                                                                    |
-| ---------------------------------------------------- | ----------------------------------------------------------------------- |
-| `resources/views/portone/checkout.blade.php`         | 결제 버튼 + 상태 표시 뷰                                                |
-| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트           |
+| 발행 파일                                            | 설명                                                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `resources/views/portone/checkout.blade.php`         | 결제 버튼 + 상태 표시 뷰                                                                 |
+| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트                            |
 | `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
-| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                   |
+| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                                    |
 
 발행한 파일을 애플리케이션에 연결합니다.
 
@@ -256,6 +260,32 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 - `PENDING` → `PAID` → `PARTIALLY_CANCELLED` → `CANCELLED`
 - `PAID`에서 바로 `CANCELLED` (전액 환불)도 가능
 - `CANCELLED`는 최종 상태입니다
+- 버려진 결제: `PENDING` → `EXPIRED`. 만료 뒤에 결제되면 `completePayment()`로 `EXPIRED` → `PAID` 복구
+- `EXPIRED`는 환불할 수 없습니다 (`InvalidPaymentStatusException`)
+
+## 결제 대기 건 만료와 정리
+
+결제하기를 누르고 결제를 끝내지 않은 `PENDING` 결제는 그대로 쌓입니다. 패키지는 스케줄을
+등록하지 않으므로, 앱의 스케줄러와 큐 워커로 정리합니다.
+
+```php
+// routes/console.php
+use Cable8mm\LaravelPortone\Models\Payment;
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('portone:expire-pending')->everyTenMinutes();
+Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
+```
+
+- `portone:expire-pending`은 `PORTONE_PENDING_EXPIRE_AFTER`분보다 오래된 `PENDING` 결제마다
+  확인 잡을 큐에 넣습니다(PortOne 호출 없음). 앱의 기본 큐 연결을 쓰므로 `queue:work`가 떠 있어야 합니다.
+- 잡은 PortOne에 결제를 조회해 결제·금액 일치면 `PAID`, 결제되지 않았으면(`READY`·`FAILED`·
+  `PAYMENT_NOT_FOUND`) `EXPIRED`로 바꾸고, 그 밖에는 그대로 둬서 다음 검사에서 다시 확인합니다.
+  설정 누락이나 PortOne 실패는 실패 잡으로 남습니다.
+- `EXPIRED`는 "확인 시점에 결제되지 않음"입니다. 같은 결제 ID로 나중에 결제될 수 있으므로
+  (실제 관측), 웹훅 등에서 `completePayment()`를 부르면 `PAID`로 복구됩니다.
+- `model:prune`은 `PORTONE_EXPIRED_RETENTION_DAYS`일이 지난 `EXPIRED` 결제만 지웁니다.
+  결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 기록은 절대 지우지 않습니다.
 
 ## 예외
 

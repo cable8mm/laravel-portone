@@ -141,14 +141,15 @@ composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 
 ### 2.3 테스트 목록
 
-| 테스트                           | 결제창 조작                         | 추가 요구사항                                                           |
-| -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
-| `PortOneCheckoutCompletionTest`  | 10,000원 결제 1회 완료              | 조회 probe 관측(`tools/probes/portone-payment-lookup-observation.json`) |
-| `PortOneCheckoutFlowTest`        | 10,000원 결제 1회 완료, 1회 창 닫기 | —                                                                       |
-| `PortOnePaymentCancellationTest` | 100원 결제 2회 완료                 | —                                                                       |
-| `PortOnePaymentCompletionTest`   | 100원 결제 1회 완료                 | 조회 probe 관측                                                         |
-| `PortOnePaymentRefundTest`       | 100원 1회 + 10,000원 2회 결제 완료  | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능)                      |
-| `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)    |
+| 테스트                           | 결제창 조작                         | 추가 요구사항                                                                     |
+| -------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
+| `PortOneCheckoutCompletionTest`  | 10,000원 결제 1회 완료              | 조회 probe 관측(`tools/probes/portone-payment-lookup-observation.json`)           |
+| `PortOneCheckoutFlowTest`        | 10,000원 결제 1회 완료, 1회 창 닫기 | —                                                                                 |
+| `PortOnePaymentCancellationTest` | 100원 결제 2회 완료                 | —                                                                                 |
+| `PortOnePaymentCompletionTest`   | 100원 결제 1회 완료                 | 조회 probe 관측                                                                   |
+| `PortOnePaymentRefundTest`       | 100원 1회 + 10,000원 2회 결제 완료  | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능)                                |
+| `PortOnePaymentExpiryTest`       | 100원 결제 1회 완료, 1회 창 닫기    | 버려진 결제 probe 관측(`tools/probes/portone-abandoned-payment-observation.json`) |
+| `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)              |
 
 - `PortOneWebhookTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
 - 각 테스트는 **단독으로 실행**할 수 있습니다. 소모하는 결제는 테스트가 직접 만들고,
