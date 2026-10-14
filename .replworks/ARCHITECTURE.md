@@ -12,16 +12,20 @@
 - **Billable reference**: the identity of one Billable model, consisting of the model kind and its key. Two Billable models of different kinds may share a key; the reference distinguishes them.
 - **Scope**: every operation reachable from a Billable model is bound to that model's Billable reference. A Payment record outside that scope does not exist for the operation.
 - **Customer record**: one per Billable reference. Holds the Customer ID.
-- **Payment record**: owned by exactly one Billable reference. Lifecycle: `PENDING -> PAID -> PARTIALLY_CANCELLED -> CANCELLED`. Allowed transitions only:
+- **Payment record**: owned by exactly one Billable reference. Lifecycle: `PENDING -> PAID -> PARTIALLY_CANCELLED -> CANCELLED`, with `PENDING -> EXPIRED` for an abandoned payment. Allowed transitions only:
   - PENDING -> PAID
+  - PENDING -> EXPIRED
+  - EXPIRED -> PAID
   - PAID -> PARTIALLY_CANCELLED
   - PAID -> CANCELLED
   - PARTIALLY_CANCELLED -> PARTIALLY_CANCELLED
   - PARTIALLY_CANCELLED -> CANCELLED
   - CANCELLED is terminal.
+  - Deletion: only EXPIRED records, only through EL-035 (FR-063).
 - **Exclusive access**: a period during which no other operation of the Package can read a given Payment record for a decision or write it. Provided by the Payment Ledger, requested by Payment Operations.
 - **Precomputed outcome**: the complete set of absolute field values (status, cancelled_amount, paid_at) computed before any PortOne request that changes remote state. Written to the record as absolute values, never as increments.
-- **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status and, when paid, the total paid amount.
+- **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status and, when paid, the total paid amount. For an expiry check only, it can also say that PortOne does not know the payment.
+- **Stale PENDING record**: a PENDING record whose created_at is older than EL-033.
 - **Verified webhook**: a webhook whose authenticity was established by the Webhook Verifier. The only kind of webhook the Package acts on.
 - **External parties** (not components of the Package):
   - Application: owns authentication, the Billable models, the host error handling, and, after publishing, the checkout stub files.
@@ -29,7 +33,8 @@
   - PortOne API: payment lookup and cancellation.
   - PortOne browser SDK: opens the PG payment window.
   - Event listeners: Application code that reacts to WebhookReceived.
-- **Core versus stubs**: Core = CMP-01 through CMP-10. Stubs = CMP-11 through CMP-14. The Core never depends on the Stubs. The Stubs reach the Core only through the Billable Facade and Configuration.
+  - Scheduler and queue worker: Application infrastructure that runs EL-031, model:prune, and EL-032.
+- **Core versus stubs**: Core = CMP-01 through CMP-10, CMP-15, CMP-16. Stubs = CMP-11 through CMP-14. The Core never depends on the Stubs. The Stubs reach the Core only through the Billable Facade and Configuration.
 
 ## System Flow
 
@@ -47,7 +52,7 @@
 1. Facade passes the Billable reference and Payment ID to Payment Operations.
 2. Payment Ledger finds the record inside the Billable reference's scope, otherwise ERR-003.
 3. Payment Operations takes exclusive access and reads the record's current state.
-4. A non-PENDING record is returned unchanged (FR-022).
+4. A record that is neither PENDING nor EXPIRED is returned unchanged (FR-022).
 5. PortOne Gateway looks up the payment.
 6. Payment Lifecycle decides: not paid -> ERR-006; total differs -> ERR-007; otherwise produces the Precomputed outcome (PAID, paid_at).
 7. Payment Operations writes the Precomputed outcome through the Payment Ledger under the persistence retry rule (RD-11).
@@ -88,6 +93,24 @@
 - Facade answers EL-001, EL-002, EL-003 from the Customer Registry only.
 - Facade answers EL-007, EL-008 from the Payment Ledger only.
 - Payment Operations is not involved.
+
+### SF-7 Expire (FLOW-006 steps 1-5)
+
+1. The Application's scheduler runs the Expiry Command; it reads EL-033 from Configuration and the current time.
+2. Payment Ledger selects the stale PENDING records (RD-26).
+3. The Expiry Command queues one Expiry Job per record, carrying the record's Billable reference and Payment ID. No PortOne request (FR-057).
+4. The queue worker runs the Expiry Job; it passes the Billable reference and Payment ID to Payment Operations.
+5. Payment Operations takes exclusive access and reads the record's current state. A missing or non-PENDING record ends the job with no change (FR-058).
+6. PortOne Gateway looks up the payment in its expiry form (RD-28).
+7. Payment Lifecycle decides: paid with the same total -> Precomputed outcome PAID; a "not paid at the time of the check" result -> Precomputed outcome EXPIRED; anything else -> no change (FR-060 to FR-062).
+8. Payment Operations writes the outcome through the Payment Ledger under the persistence retry rule (RD-11), or writes nothing.
+9. Exclusive access ends. ConfigurationException and PortOne failures propagate out of the job unwrapped (ERR-016, RD-27).
+
+### SF-8 Prune (FLOW-006 step 6)
+
+1. The Application's scheduler runs model:prune for the Payment model.
+2. The prunable definition of the Payment Ledger selects EXPIRED records whose updated_at is older than EL-034 (FR-063).
+3. The prune run deletes the selected records. No other record is selectable (FR-064).
 
 ## Components
 
@@ -148,7 +171,9 @@
   - List a Billable reference's records ordered by created_at descending (FR-031).
   - Provide exclusive access per Payment record and an atomic write of a Precomputed outcome.
   - Expose the record attributes (EL-009) and checkoutParameters (EL-010, FR-019).
-- Inputs: Billable reference; Payment ID; creation values; Precomputed outcome; requests for exclusive access.
+  - Select stale PENDING records across all Billable references for the Expiry Command only, returning each record's Billable reference with its Payment ID (RD-26).
+  - Define the prunable selection of EL-035: EXPIRED and updated_at older than EL-034 (FR-063, FR-064).
+- Inputs: Billable reference; Payment ID; creation values; Precomputed outcome; requests for exclusive access; the staleness cut-off; the retention cut-off.
 - Outputs: Payment records; lists; checkoutParameters; a persistence failure when a write cannot be completed.
 - Owns: the stored Payment records and the guarantee that a write is all-or-nothing; Payment ID generation and uniqueness; the mechanism of exclusive access.
 - Does not own: deciding when to take exclusive access (Payment Operations); deciding any field value (Payment Lifecycle); any PortOne contact.
@@ -159,6 +184,8 @@
   - Hold every state rule of a Payment record as pure decisions with no persistence and no network contact.
   - Completion decision: given a record, a Gateway result, and the current time, either produce the Precomputed outcome (PAID, paid_at = current time) or report ERR-006 or ERR-007 (FR-023).
   - Refund decision: given a record, a reason-validated request and an optional amount, either report ERR-008 or ERR-010, or produce the Precomputed outcome with absolute cancelled_amount and status (FR-028, FR-029).
+  - Expiry decision: given a PENDING record, a Gateway result in its expiry form, and the current time, produce the Precomputed outcome PAID (paid_at = current time) when paid with the same total, the Precomputed outcome EXPIRED when the result means "not paid at the time of the check", or no change otherwise (FR-060 to FR-062). Which results mean that follows PRODUCT_SPEC External Systems "PortOne V2 lookup of abandoned payments".
+  - Completion decision accepts an EXPIRED record as it accepts a PENDING one (FR-021).
   - Define the allowed transitions listed in Core Concepts.
 - Inputs: Payment record state; Gateway result; refund amount; current time (supplied by the caller).
 - Outputs: a Precomputed outcome or a named error condition.
@@ -168,7 +195,7 @@
 ### CMP-07 Payment Operations
 
 - Responsibilities:
-  - Run preparation, completion, and refund sequences exactly as SF-1, SF-2, SF-3.
+  - Run preparation, completion, refund, and expiry sequences exactly as SF-1, SF-2, SF-3, SF-7.
   - Validate preparation arguments (ERR-004, ERR-005) and the refund reason (ERR-009).
   - Own the order in which checks happen (RD-09).
   - Open the atomic unit around Customer ensure and Payment creation (RD-04).
@@ -190,11 +217,12 @@
   - Choose the base address (FR-005, FR-006).
   - Check that the api secret is configured before every request; when absent, raise ConfigurationException and send nothing (ERR-001).
   - Let PortOne failures, including PortOne reporting that the payment is unknown, pass through unmodified (ERR-011, RD-12).
+  - Expiry lookup: the same request, except that PortOne reporting the payment unknown yields a Gateway result saying so instead of an exception (RD-28). Every other failure passes through unmodified (ERR-016).
 - Inputs: Payment ID, reason, optional amount; Configuration values EL-015, EL-017.
 - Outputs: Gateway result; cancellation acceptance; ConfigurationException or the PortOne exception.
 - Owns: the single door to PortOne and the use of the api secret.
 - Does not own: interpreting the Gateway result (Lifecycle), any record, any retry of PortOne requests.
-- Depends on lookup and cancellation assumptions at the external boundary. Lookup behavior was verified by T-003, payment completion through the Package by T-011, and cancellation by T-010; observations are recorded for each.
+- Depends on lookup and cancellation assumptions at the external boundary. Lookup behavior was verified by T-003, payment completion through the Package by T-011, and cancellation by T-010; observations are recorded for each. The lookup of abandoned payments was verified by T-021.
 
 ### CMP-09 Webhook Verifier
 
@@ -271,6 +299,26 @@
 - Owns: the authentication requirement on the three routes.
 - Does not own: authentication itself (Application); registration (the Developer includes the file, CMP-02 never does).
 
+### CMP-15 Expiry Command (EL-031)
+
+- Responsibilities:
+  - Read EL-033 from Configuration and the current time; compute the staleness cut-off.
+  - Ask the Payment Ledger for the stale PENDING records and queue exactly one Expiry Job per record (FR-057).
+- Inputs: EL-033; the current time.
+- Outputs: queued Expiry Jobs.
+- Owns: the choice of which records to check in one run.
+- Does not own: any decision about a record, any write, any PortOne contact, scheduling (Application).
+
+### CMP-16 Expiry Job (EL-032)
+
+- Responsibilities:
+  - Hand its Billable reference and Payment ID to Payment Operations to run SF-7.
+  - Let ConfigurationException and PortOne failures propagate so the Application's queue records the failure (ERR-016, RD-27).
+- Inputs: a Billable reference and a Payment ID.
+- Outputs: none; the record change is made by Payment Operations.
+- Owns: being the queued unit of one expiry check.
+- Does not own: the state read, the decision, the write (CMP-07, CMP-06, CMP-05), running the queue (Application).
+
 ## Component Responsibilities
 
 Each responsibility has exactly one owner.
@@ -289,12 +337,17 @@ Each responsibility has exactly one owner.
 | Webhook authenticity                                                        | CMP-09                       | FR-035, FR-037, ERR-012                                              |
 | Webhook response and event dispatch                                         | CMP-10                       | FR-036, FR-038, ERR-002                                              |
 | Webhook non-interference with records                                       | CMP-10 (by having no access) | FR-039                                                               |
-| Fixed amount and order name for the stub flow                               | CMP-11                       | FR-045, FR-046                                                       |
+| Product lookup for the stub flow                                            | CMP-11                       | FR-043, FR-045, FR-045a, FR-046                                      |
 | Error-to-response mapping in the stub flow                                  | CMP-11                       | ERR-014, ERR-015                                                     |
 | Missing store ID or channel key detection                                   | CMP-11                       | ERR-013                                                              |
 | Rendering of the four checkout states                                       | CMP-12                       | SCR-006                                                              |
 | Browser payment sequence                                                    | CMP-13                       | FR-048 to FR-052, FR-055, FR-056                                     |
 | Authentication requirement on stub routes                                   | CMP-14                       | FR-042                                                               |
+| Selecting stale PENDING records and queuing one check each                  | CMP-15                       | FR-057, FR-065                                                       |
+| Queued unit of one expiry check; failure propagation                        | CMP-16                       | ERR-016                                                              |
+| Expiry decision                                                             | CMP-06                       | FR-060, FR-061, FR-062                                               |
+| Expiry sequencing and the no-op for non-PENDING records                     | CMP-07                       | FR-058, FR-059                                                       |
+| Prunable selection of expired records                                       | CMP-05                       | FR-063, FR-064                                                       |
 
 ## Responsibility Boundaries
 
@@ -307,6 +360,8 @@ Each responsibility has exactly one owner.
 - CMP-11 -> CMP-01, CMP-03, CMP-12
 - CMP-13 -> CMP-14 routes, the PortOne browser SDK
 - CMP-02 -> CMP-10 (route target), CMP-01 (EL-018), published file groups
+- CMP-15 -> CMP-01, CMP-05, CMP-16 (dispatch only)
+- CMP-16 -> CMP-07
 - CMP-04, CMP-05, CMP-06, CMP-09 depend on no other component.
 
 ### Forbidden dependencies
@@ -315,6 +370,8 @@ Each responsibility has exactly one owner.
 - CMP-05 and CMP-04 never depend on CMP-08 (storage never contacts PortOne).
 - CMP-06 never depends on anything (pure decisions).
 - CMP-03 never depends on CMP-06 or CMP-08.
+- CMP-15 never depends on CMP-06, CMP-07, or CMP-08; it decides nothing about a record and never contacts PortOne.
+- CMP-16 never depends on CMP-05, CMP-06, or CMP-08 directly; its only door is CMP-07.
 - CMP-11 to CMP-14 never depend on CMP-04, CMP-05, CMP-06, CMP-07, CMP-08 directly; the only door into the Core is CMP-03.
 - The Core never depends on CMP-11 to CMP-14.
 - No component other than CMP-08 sends a request to PortOne; no component other than CMP-09 decides authenticity.
@@ -358,7 +415,7 @@ Steps 3 to 5 are one atomic unit. Written data: possibly one Customer record, on
 | 8    | CMP-06 -> CMP-07            | Precomputed outcome or named error           |
 | 9    | CMP-07 -> CMP-05            | Precomputed outcome (absolute values)        |
 
-Steps 4 to 9 happen only when the record is PENDING. Written data: status, paid_at of one Payment record.
+Steps 4 to 9 happen only when the record is PENDING or EXPIRED. Written data: status, paid_at of one Payment record.
 
 ### DF-3 Refund
 
@@ -405,14 +462,34 @@ No record is read or written.
 - EL-001, EL-002, EL-003: CMP-03 <-> CMP-04.
 - EL-007, EL-008: CMP-03 <-> CMP-05.
 
+### DF-7 Expiry
+
+| Step | From -> To                  | Data                                                        |
+| ---- | --------------------------- | ----------------------------------------------------------- |
+| 1    | CMP-15 -> CMP-01            | EL-033                                                      |
+| 2    | CMP-15 -> CMP-05            | staleness cut-off                                           |
+| 3    | CMP-05 -> CMP-15            | Billable reference and Payment ID of each stale record      |
+| 4    | CMP-15 -> queue             | one Expiry Job per record                                   |
+| 5    | queue -> CMP-16 -> CMP-07   | Billable reference, Payment ID                              |
+| 6    | CMP-07 -> CMP-05            | scoped lookup, exclusive access request                     |
+| 7    | CMP-07 -> CMP-08 -> PortOne | Payment ID (expiry lookup)                                  |
+| 8    | CMP-07 -> CMP-06            | Payment record, Gateway result, current time                |
+| 9    | CMP-07 -> CMP-05            | Precomputed outcome (PAID or EXPIRED), or nothing           |
+
+Steps 7 to 9 happen only when the record is still PENDING. Written data: status, and paid_at for PAID, of one Payment record.
+
+### DF-8 Prune
+
+- model:prune -> CMP-05 prunable selection (EXPIRED, updated_at older than EL-034) -> deletion of the selected records.
+
 ## Architectural Rules
 
-- AR-01: Only CMP-07 changes a Payment record after creation, and only by writing a Precomputed outcome produced by CMP-06.
+- AR-01: Only CMP-07 changes a Payment record after creation, and only by writing a Precomputed outcome produced by CMP-06. The only deletion is model:prune through the CMP-05 prunable selection of EL-035.
 - AR-02: CMP-06 never reads the clock; CMP-07 supplies the time.
 - AR-03: Payment Operations runs checks in the order of RD-09 and stops at the first failure.
 - AR-04: A PortOne request that changes remote state (cancellation) is sent only while the caller holds exclusive access on the record, only after the Precomputed outcome exists, and is never repeated by any retry.
 - AR-05: Records are written as absolute values computed before the PortOne request, so a repeated write of the same outcome is harmless.
-- AR-06: All records reachable from a Billable model are reached through its Billable reference; lookup by Payment ID alone, without scope, does not exist anywhere in the Core.
+- AR-06: All records reachable from a Billable model are reached through its Billable reference; lookup by Payment ID alone, without scope, does not exist anywhere in the Core. The two unscoped selections are the stale PENDING selection for CMP-15, which hands each record's own Billable reference onward (RD-26), and the prunable selection of EL-035.
 - AR-07: Exceptions from CMP-08 and CMP-05 pass through CMP-07 and CMP-03 unmodified.
 - AR-08: The webhook route is the only Package route that is open to unauthenticated requests without a forgery token. No stub route is.
 - AR-09: Authenticity is decided on the raw body exactly as received, before any decoding.
@@ -420,6 +497,7 @@ No record is read or written.
 - AR-11: Behavior that depends on an unverified PortOne assumption lives only in CMP-08 and CMP-13.
 - AR-12: Amounts in the Core are plain integers with no currency attached.
 - AR-13: A component refuses work it does not own by having no access to it (see Forbidden dependencies), not by checking at run time.
+- AR-14: The Package registers no schedule; the Application decides whether and when EL-031 and model:prune run (FR-065).
 
 ## Failure Boundaries
 
@@ -444,6 +522,11 @@ No record is read or written.
 | any other exception in `complete` or `prepare`                       | host              | not contained                 | per cause                                                                             | host error handling; CMP-13 shows Error                            |
 | SDK reports an error code                                            | CMP-13            | CMP-13                        | Payment record stays PENDING                                                          | Payer: Error state                                                 |
 | SDK throws, `prepare` fails, `complete` returns non-error non-PAID   | CMP-13            | CMP-13                        | per cause                                                                             | Payer: Error state                                                 |
+| expiry job finds the record gone or not PENDING (FR-058)             | CMP-07            | CMP-07                        | none                                                                                  | nobody; the job ends                                               |
+| expiry lookup gives no decision (FR-062)                             | CMP-06            | CMP-07                        | stays PENDING; the next run of EL-031 checks it again                                 | nobody; the job ends                                               |
+| api secret absent or PortOne fails during expiry (ERR-016)           | CMP-08            | not contained; job fails      | stays PENDING                                                                         | the Application's queue (failed job)                               |
+| local write fails during expiry                                      | CMP-05            | CMP-07 retry, then propagates | stays PENDING; the next run checks it again                                           | the Application's queue (failed job)                               |
+| expired record paid later at PortOne                                 | not a failure     | n/a                           | stays EXPIRED until EL-005 is called; then PAID (FR-021)                              | Developer or an Application webhook listener                       |
 | concurrent calls on one Payment record                               | CMP-05, CMP-07    | exclusive access              | serialized                                                                            | callers wait                                                       |
 | concurrent Customer creation                                         | CMP-04            | CMP-04                        | one record                                                                            | callers converge                                                   |
 
@@ -457,11 +540,12 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 
 - No component other than CMP-07 changes Payment record state.
 - No path exists from the Webhook Receiver to Customer records or Payment records; webhooks cannot change payment state.
-- No reconciliation, polling, or background synchronization with PortOne.
+- No reconciliation, polling, or background synchronization with PortOne other than the Application-scheduled expiry check of stale PENDING records (SF-7).
 - No automatic retry of any PortOne request.
 - No notification channel for a failed local write other than the propagated exception (RD-11).
 - No de-duplication of webhooks; a repeated delivery produces a repeated event.
-- No entity for a payment attempt; each preparation creates a new Payment record, and abandoned PENDING records are neither expired nor cleaned up.
+- No entity for a payment attempt; each preparation creates a new Payment record. Abandoned PENDING records are expired only by SF-7 and deleted only by SF-8, both run by the Application.
+- No deletion of PAID, PARTIALLY_CANCELLED, or CANCELLED records.
 - No behavior is defined for what happens to Customer records and Payment records when a Billable model is deleted.
 - No currency in the Core.
 - No cache of PortOne responses.
@@ -475,11 +559,11 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 - INV-02: A Billable reference has at most one Customer record. Customer IDs are unique across all Customer records.
 - INV-03: Payment IDs are unique across all Payment records and are never reused.
 - INV-04: A Payment record's customer_id equals the Customer ID of its owner at the time of creation.
-- INV-05: Status transitions follow only the transitions listed in Core Concepts. CANCELLED never changes.
+- INV-05: Status transitions follow only the transitions listed in Core Concepts. CANCELLED never changes. EXPIRED changes only to PAID.
 - INV-06: `0 <= cancelled_amount <= amount` always; cancelled_amount never decreases.
-- INV-07: PENDING implies cancelled_amount = 0 and paid_at = null. PAID implies cancelled_amount = 0 and paid_at non-null. PARTIALLY_CANCELLED implies `0 < cancelled_amount < amount` and paid_at non-null. CANCELLED implies cancelled_amount = amount and paid_at non-null.
-- INV-08: A record becomes PAID only in a completion in which PortOne reported paid and the total paid amount equalled the record's amount.
-- INV-09: No PortOne request is sent when ERR-003, ERR-004, ERR-005, ERR-008, ERR-009, ERR-010 apply, when a record is not PENDING at completion, or during preparation or any webhook handling.
+- INV-07: PENDING and EXPIRED imply cancelled_amount = 0 and paid_at = null. PAID implies cancelled_amount = 0 and paid_at non-null. PARTIALLY_CANCELLED implies `0 < cancelled_amount < amount` and paid_at non-null. CANCELLED implies cancelled_amount = amount and paid_at non-null.
+- INV-08: A record becomes PAID only in a completion or an expiry check in which PortOne reported paid and the total paid amount equalled the record's amount.
+- INV-09: No PortOne request is sent when ERR-003, ERR-004, ERR-005, ERR-008, ERR-009, ERR-010 apply, when a record is neither PENDING nor EXPIRED at completion, when a record is not PENDING when an expiry job runs, or during preparation, any webhook handling, CMP-15, or pruning.
 - INV-10: A completion or refund that fails before the local write leaves the record unchanged. The one exception is the post-acceptance write failure of a refund (RD-11).
 - INV-11: Between reading a record for a decision and writing the resulting outcome, no other operation of the Package reads that record for a decision or writes it.
 - INV-12: Every PortOne request originates in CMP-08. Every authenticity decision originates in CMP-09.
@@ -491,6 +575,8 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 - INV-18: CMP-12 is in the Success state only after `complete` responded with status PAID.
 - INV-19: The stub routes are never registered by the Package; each requires an authenticated user.
 - INV-20: The Core runs identically with the stubs absent.
+- INV-21: A Payment record is deleted only when its status is EXPIRED and its updated_at is older than EL-034.
+- INV-22: A record becomes EXPIRED only after a lookup in which PortOne reported a "not paid at the time of the check" result. EXPIRED is not a promise that the payment can never be paid; EL-005 completes it if it is paid later.
 
 ## Resolved Decisions
 
@@ -505,7 +591,7 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-07: Ambiguous: who detects missing store ID or channel key (ERR-013). Decided: CMP-11 `show` detects, CMP-12 renders. Why: CMP-11 is the only stub component that reads Configuration.
 - RD-08: Ambiguous: order of records with equal created_at. Decided: unspecified; callers must not rely on it. Why: PRODUCT_SPEC requires only descending created_at.
 - RD-09 (owner-confirmed): Ambiguous: order of checks when several errors apply. Decided: local checks first, configuration check immediately before the PortOne request.
-  - Completion: ERR-003, then the non-PENDING return of FR-022, then ERR-001 (inside CMP-08), then the PortOne lookup, then ERR-006, ERR-007.
+  - Completion: ERR-003, then the return of FR-022 for a record that is neither PENDING nor EXPIRED, then ERR-001 (inside CMP-08), then the PortOne lookup, then ERR-006, ERR-007.
   - Refund: ERR-003, ERR-009, ERR-008, ERR-010, then ERR-001 (inside CMP-08), then the cancellation.
   - Preparation: ERR-004, ERR-005.
 - RD-10 (owner-confirmed): Ambiguous: concurrent completion or refund on one record. Decided: exclusive access per Payment record from the state read through the end of the write, so FR-022, ERR-008, ERR-010 are judged on the latest state. Why: prevents double completion and over-refund. Cost: a concurrent caller waits for the PortOne round trip.
@@ -522,9 +608,15 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-16: Ambiguous: whether CMP-07 reads the clock. Decided: CMP-07 supplies the time to CMP-06. Why: CMP-06 stays pure.
 - RD-17 (owner-confirmed): Ambiguous: PRODUCT_SPEC names only two ways CMP-13 ends (no error code -> complete -> PAID; complete error). Silent: `prepare` fails, the SDK throws instead of returning, `complete` responds without an error but with a status other than PAID (for example, the record is already CANCELLED). Decided: Success only when `complete` responds with status PAID; every other outcome sets Error. Why: a terminal state is required and Success must imply PAID.
 - RD-18: Ambiguous: ERR-014 and ERR-015 list only some exceptions for `complete`. Decided: CMP-11 maps exactly those; every other exception (for example a persistence failure) propagates unmodified to the host's error handling, and CMP-13 shows Error by RD-17. **Gap-filling; to confirm.**
-- RD-19: Ambiguous: repeated preparation for the same order. Decided: each preparation creates a new Payment record; nothing de-duplicates or expires PENDING records (FLOW-005 step 6 already leaves PENDING records behind).
+- RD-19 (owner-confirmed, revised for T-022): Ambiguous: repeated preparation for the same order and abandoned PENDING records. Decided: each preparation creates a new Payment record and nothing de-duplicates them. Abandoned records are expired only after a PortOne check (SF-7) and deleted only after the EXPIRED retention period (SF-8), both scheduled by the Application. Why: a PENDING record may be paid at PortOne even though completion never ran; deleting it without a check loses a paid payment.
 - RD-20: Ambiguous: duplicate webhook deliveries. Decided: one event per verified request, no de-duplication.
 - RD-21: Ambiguous: ownership of published stub files. Decided: transfer to the Application on publishing; the Package keeps no link.
 - RD-22: Ambiguous: who may hold secrets. Decided: the api secret only for CMP-08; the webhook secret for CMP-10 and, as an input, CMP-09.
 - RD-23: Ambiguous: where currency lives. Decided: only in CMP-13 as a constant; the Core handles plain integer amounts.
-- RD-24: PortOne lookup and browser SDK assumptions are isolated to CMP-08 and CMP-13. Lookup behavior was confirmed by T-003, completion through the Package by T-011, and cancellation by T-010; the observations are recorded.
+- RD-24: PortOne lookup and browser SDK assumptions are isolated to CMP-08 and CMP-13. Lookup behavior was confirmed by T-003 and, for abandoned payments, by T-021; completion through the Package by T-011, and cancellation by T-010; the observations are recorded.
+- RD-25 (owner-confirmed): Ambiguous: how abandoned records are found. Decided: a periodic scan by the Expiry Command, not one delayed job per preparation. Why: a lost or never-dispatched delayed job would leave a record PENDING forever; the next scan always finds it again.
+- RD-26: Ambiguous: AR-06 forbids unscoped lookup, but the scan must see every Billable reference. Decided: CMP-05 offers one unscoped selection, used only by CMP-15, returning each record's own Billable reference; everything after it runs scoped through CMP-07. Why: keeps every decision and write inside Scope.
+- RD-27: Ambiguous: what an expiry job does when it cannot decide. Decided: a lookup result that is neither paid nor "not paid at the time of the check" ends the job with no change and no exception; ConfigurationException, PortOne failures, and persistence failures propagate unwrapped so the Application's queue records a failed job. Why: an undecidable status is normal and is retried by the next scan; an infrastructure failure must be visible.
+- RD-28: Ambiguous: RD-12 makes "PortOne does not know the payment" a passed-through failure, but for an abandoned payment it is the expected answer. Decided: CMP-08 offers an expiry form of the lookup that returns it as a Gateway result; completion keeps RD-12. Why: knowledge of PortOne error shapes stays in CMP-08 (AR-11).
+- RD-29 (owner-confirmed): Defaults: EL-033 = 1440 minutes, EL-034 = 90 days.
+- RD-30 (owner-confirmed): Ambiguous: T-021 showed that no lookup result is final (a FAILED payment ID can still be paid). Decided: after EL-033, PAYMENT_NOT_FOUND, READY, and FAILED all expire the record; recovery of a later payment is EL-005 on the EXPIRED record. Why: a stale READY would otherwise stay PENDING and be looked up on every run, and recovery is always available.

@@ -273,3 +273,42 @@
     - The served Workbench app reads PORTONE_* settings from the local .env; PHPUnit runs (APP_ENV=testing) do not.
     - Unit tests for the stubs and the sample shop pass; composer live passes with the changed stub script.
     - docs/TESTING.md §1.2 describes the developer guide, the sample shop, and the build.
+
+- [X] T-021 Verify PortOne lookup of abandoned payments
+  - Satisfies: PRODUCT_SPEC.md External Systems "PortOne V2 lookup of abandoned payments" [UNVERIFIED] (required by FR-061, FR-021)
+  - External boundary: yes (verification task)
+  - Acceptance criteria:
+    - An executable probe under tools/probes/, independent of the Package's own code, runs against the live PortOne test environment with a human operating the PG payment window.
+    - Recorded observation: the lookup result of a payment whose window is still open (the Payer has not finished or closed it).
+    - Recorded observation: the lookup result of a payment whose window the Payer closed (re-confirms FAILED from T-003).
+    - Recorded observation: whether a payment ID whose lookup reported FAILED can be paid afterwards by opening the window again with the same payment ID, and the lookup result after that.
+    - Recorded observation: the lookup result of a payment ID whose window never opened (re-confirms PAYMENT_NOT_FOUND from T-003).
+    - The human confirms which results mean "never paid"; PRODUCT_SPEC.md External Systems is updated with them and the [UNVERIFIED] mark is cleared only after that confirmation.
+    - Secrets are not recorded.
+
+- [ ] T-022 Expire and prune abandoned PENDING payments
+  - Satisfies: PRODUCT_SPEC.md SCR-007 (EL-031, EL-032, EL-035), SCR-004 (EL-033, EL-034), FR-021, FR-022, FR-057 to FR-065, FLOW-006, ERR-008, ERR-016, AC-057 to AC-066; ARCHITECTURE.md SF-7, SF-8, CMP-15, CMP-16, RD-25 to RD-29; TECH_STACK.md §1 (illuminate/console, illuminate/queue), §3 (Artisan command, ShouldQueue job, MassPrunable)
+  - Depends on: T-021 (done; FR-061 results: PAYMENT_NOT_FOUND, READY, FAILED)
+  - External boundary: yes (the expiry job looks up live PortOne)
+  - Acceptance criteria:
+    - The Payment status set includes EXPIRED; refunds reject EXPIRED records and completion accepts them.
+    - portone:expire-pending queues exactly one expiry job per stale PENDING record and contacts no PortOne API.
+    - The expiry job no-ops for a missing or non-PENDING record, sets PAID or EXPIRED per FR-060 and FR-061, leaves the record unchanged otherwise, and lets ConfigurationException and PortOne failures propagate.
+    - model:prune for the Payment model deletes only EXPIRED records older than the retention period and never PAID, PARTIALLY_CANCELLED, or CANCELLED records.
+    - pending_expire_after (PORTONE_PENDING_EXPIRE_AFTER, default 1440) and expired_retention_days (PORTONE_EXPIRED_RETENTION_DAYS, default 90) are in config/portone.php and .env.example.
+    - The Package registers no schedule.
+    - Unit tests cover AC-057 to AC-066 with test doubles traced to the T-003 and T-021 recordings.
+    - An E2E test runs the expiry job against live PortOne for a paid, a closed-window, and a never-opened payment and matches the T-021 recording.
+    - README and docs/TESTING.md describe scheduling portone:expire-pending and model:prune and running a queue worker.
+
+- [ ] T-023 Workbench queue and scheduler sample
+  - Satisfies: TECH_STACK.md §4 (Workbench sample shop); demonstrates T-022 and the webhook-to-completion pattern in the Application's own code
+  - Depends on: T-022
+  - External boundary: yes (the sample shop pays and looks up live PortOne)
+  - Acceptance criteria:
+    - The Workbench app schedules portone:expire-pending every 10 minutes and model:prune for the Payment model daily, and the developer guide shows how to run the scheduler and a queue worker through Testbench.
+    - A Workbench WebhookReceived listener queues a job that calls completePayment for a Transaction.Paid webhook; the Package itself still changes no record during webhook handling (FR-039).
+    - The payment history shows the EXPIRED status, and a button runs the expiry check now.
+    - The developer guide's feature map lists expiry and pruning.
+    - Unit tests cover the listener, the schedule registration, and the new pages; the human runs the sample flow by hand against live PortOne.
+

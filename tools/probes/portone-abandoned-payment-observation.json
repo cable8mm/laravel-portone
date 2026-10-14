@@ -1,0 +1,59 @@
+{
+	"recordedAt": "2026-10-14T12:33:15+00:00",
+	"task": "T-021",
+	"client": "cable8mm/portone-php (lookup through PortOneClient only, not the Package)",
+	"browserSdk": "@portone/browser-sdk 0.1.13",
+	"channel": "NHN KCP test",
+	"request": {
+		"payMethod": "CARD",
+		"currency": "KRW",
+		"totalAmount": 100
+	},
+	"neverOpened": {
+		"paymentId": "probe-never-opened-91f7565af7be4285",
+		"lookup": {
+			"exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+			"httpStatus": 404,
+			"errorType": "PAYMENT_NOT_FOUND"
+		},
+		"matchesT003": true
+	},
+	"windowOpen": {
+		"paymentId": "probe-5864192679d54db0b11495baafd13529",
+		"payerAction": "left the PG window open without paying",
+		"lookupsWhileOpen": 5,
+		"observedForSeconds": 15,
+		"lookup": {
+			"status": "READY",
+			"totalAmount": 100,
+			"amountPaidField": 100
+		},
+		"note": "amount.paid already reported 100 while READY; only the status distinguishes a paid payment."
+	},
+	"windowClosed": {
+		"paymentId": "probe-5864192679d54db0b11495baafd13529",
+		"payerAction": "closed the PG window without paying",
+		"sdkResult": "returned with an error code",
+		"errorCode": "FAILURE_TYPE_PG",
+		"lookup": {
+			"status": "FAILED",
+			"totalAmount": 100
+		},
+		"matchesT003": true
+	},
+	"retryAfterFailed": {
+		"paymentId": "probe-5864192679d54db0b11495baafd13529",
+		"payerAction": "reopened the PG window with the same payment ID and completed the payment",
+		"pgWindowOpened": true,
+		"sdkResult": "returned without an error code",
+		"lookup": {
+			"status": "PAID",
+			"totalAmount": 100
+		},
+		"conclusion": "FAILED is not final: a payment ID whose lookup reported FAILED can still be paid later with the same payment ID."
+	},
+	"notObserved": [
+		"The status of a READY payment whose window is abandoned (tab closed or left open) for hours; whether PortOne ever moves it to FAILED by itself."
+	],
+	"secretsRecorded": false
+}

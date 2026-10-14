@@ -208,6 +208,11 @@ PORTONE_WEBHOOK_PUBLIC_URL=https://<ngrok-host>/portone/webhook composer live --
   결과(에러 코드 유무)를 돌려주는지 기록합니다.
 - **결제 조회 probe (T-003)**: 결제된/결제되지 않은/모르는 결제 ID와 잘못된 시크릿에 대해
   조회 API가 어떻게 응답하는지 기록합니다.
+- **버려진 결제 probe (T-021)**: 브라우저 SDK probe 페이지의 "Abandoned payments" 버튼 두 개로,
+  결제창을 열어 둔 동안(READY)과 닫은 뒤(FAILED), 같은 paymentId로 다시 결제했을 때(PAID)의
+  상태를 패키지 없이 조회 API로 직접 기록합니다. 조회 결과는
+  `tools/probes/portone-abandoned-payment-log.jsonl`(gitignore)에 쌓이고, 정리한 결과가
+  `portone-abandoned-payment-observation.json`입니다.
 
 ### 3.0.1 왜 워크벤치(live 테스트) 안에 넣지 않는가
 
