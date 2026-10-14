@@ -20,8 +20,8 @@
 | `npm run format`        | Prettier 자동 포맷                                           |
 | `npm test`              | Vitest(jsdom) 자바스크립트 테스트                            |
 
-`composer test`는 **live 테스트를 건너뜁니다**(게이트 플래그 미설정). 실제 포트원과
-연동하는 e2e 실행은 [`TESTING.md`](./TESTING.md)를 참고하세요.
+`composer test`는 **live 테스트(`tests/E2E/`)를 제외합니다**. 실제 포트원과
+연동하는 e2e 실행(`composer live`)은 [`TESTING.md`](./TESTING.md)를 참고하세요.
 
 ## CI
 
@@ -80,7 +80,8 @@ config/         발행되는 설정 (portone.php)
 database/       마이그레이션
 stubs/          발행용 체크아웃 파일 (뷰·JS·컨트롤러·라우트)
 tests/Unit/     오프라인 단위 테스트
-tests/live/     live/e2e 테스트 + 관측 기록 (CI 미실행)
+tests/E2E/      live/e2e 테스트(Testbench Dusk) + 관측 기록 (CI 미실행)
+tests/live/     독립 관측 probe + probe 관측 기록
 docs/           개발자 문서 (이 파일, TESTING.md)
 workbench/      테스트벤치 워크벤치
 ```

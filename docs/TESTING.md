@@ -5,8 +5,8 @@
 1. **오프라인 (CI)** — `composer test` + `npm test`. 네트워크 없이, 포트원 호출은
    테스트 더블로 대체합니다. PR마다 자동 실행.
 2. **Live / E2E (수동)** — 실제 포트원 테스트 채널·브라우저·(웹훅은) ngrok으로 돌립니다.
-   사람이 PG 결제창을 조작해야 하므로 **CI에서는 절대 실행하지 않고**, 게이트 플래그를
-   켜야만 동작합니다.
+   사람이 PG 결제창을 조작해야 하므로 **CI에서는 절대 실행하지 않고**, `composer live`로만
+   실행합니다.
 
 > 근거: `.replworks/TECH_STACK.md` §4 — "Live verification MUST NOT run in CI.",
 > "Live webhook verification MUST use an ngrok public URL."
@@ -24,8 +24,8 @@ npm run check         # Prettier + ESLint
 npm test              # Vitest (jsdom)
 ```
 
-`composer test`는 live 테스트가 `markTestSkipped()`로 **자동 스킵**되므로 안전합니다.
-게이트 플래그를 주지 않으면 아래 live 테스트는 전부 건너뜁니다.
+`composer test`는 `tests/E2E/`를 **제외**하므로 live 테스트가 섞여 돌지 않습니다.
+live 테스트는 `phpunit.dusk.xml`만 포함합니다.
 
 ### 1.1 테스트 하네스: Orchestra Testbench
 
@@ -59,14 +59,18 @@ composer serve   # testbench workbench:build + testbench serve (기본 http://12
 - 이 서버는 `workbench/`의 워크벤치 앱(`Workbench\App\Models\User`,
   `WorkbenchServiceProvider`)을 띄웁니다. 패키지가 **자동 등록**하는 라우트 — 예:
   `POST /portone/webhook` — 를 curl 등으로 바로 확인하기 좋습니다.
-- 체크아웃 스텁 라우트는 워크벤치에 자동 포함되지 않습니다(호스트 앱에 발행·포함하는
-  구조). 그것까지 보려면 §2의 브라우저 라우터를 쓰세요. `composer serve`는 웹훅처럼
-  자동 등록되는 경로를 빠르게 확인하는 용도입니다.
+- 체크아웃 스텁 라우트는 스텁이 워크벤치 앱에 발행돼 있을 때만 포함됩니다
+  (`workbench/routes/web.php`). live 테스트(§2)는 매 테스트마다 스텁을 발행하고 끝나면
+  지웁니다. `composer serve`는 웹훅처럼 자동 등록되는 경로를 빠르게 확인하는 용도입니다.
 - 워크벤치가 꼬이면 `composer build`로 워크벤치를 다시 빌드하세요.
 
 ---
 
 ## 2. Live / E2E 테스트
+
+live 테스트는 `tests/E2E/`에 있고 **Orchestra Testbench Dusk**로 돕니다. Testbench Dusk가
+워크벤치 앱을 실제 HTTP 서버로 띄우고 Chrome을 조작하므로, 발행된 스텁이 세션·CSRF·
+인증 미들웨어가 붙은 실제 Laravel 앱 위에서 검증됩니다.
 
 ### 2.1 사전 준비
 
@@ -85,108 +89,90 @@ PORTONE_CHANNEL_KEY=...
 PORTONE_BASE_URL=             # 비우면 포트원 기본값
 ```
 
-테스트는 이 값을 `Dotenv`으로 읽습니다. 시크릿은 절대 커밋·로그·픽스처에 남기지 마세요.
+시크릿은 절대 커밋·로그·픽스처에 남기지 마세요.
 
-**의존성** — 브라우저 테스트는 SDK를 정적 파일로 서빙하므로 `npm ci`가 선행되어야
-`node_modules/@portone/browser-sdk`가 존재합니다.
+**의존성** — 브라우저가 SDK를 `node_modules/@portone/browser-sdk`에서 받으므로 `npm ci`가
+선행되어야 합니다.
 
-**세션 디렉터리** — 브라우저 테스트는 임시 디렉터리로 PHP 테스트와 브라우저 라우터가
-파일로 통신합니다. 실행 전 `mkdir`로 만들어 두세요(테스트가 존재를 단정합니다).
-
-### 2.2 브라우저 라우터 서버 띄우기 (핵심)
-
-브라우저 테스트들은 사람에게 `http://127.0.0.1:8765/...`를 열라고 안내하지만, **그 포트를
-서빙하는 서버는 당신이 직접 띄워야 합니다.** 패키지 루트에서 아래처럼 PHP 내장 서버에
-해당 테스트의 라우터 스크립트를 붙입니다.
+**ChromeDriver** — 설치된 Chrome 버전에 맞는 드라이버를 한 번 받습니다(Laravel Dusk의
+`dusk:chrome-driver --detect`).
 
 ```bash
-php -S 127.0.0.1:8765 tests/live/portone-checkout-flow-browser.php
+composer dusk:chrome-driver
 ```
 
-- 라우터는 자기 경로(`/checkout` 등)만 처리하고, 나머지는 `return false` → PHP 내장 서버가
-  패키지 루트를 문서 루트로 정적 서빙합니다. 그래서
-  `/node_modules/@portone/browser-sdk/...`가 함께 제공됩니다(검증 완료: 200).
-- 세션 디렉터리 환경변수를 **같이** export한 뒤 서버를 띄우세요(미설정이면 모든 요청이
-  503 "session directory not configured"로 떨어집니다).
-- **한 번에 하나의 테스트만** 같은 포트로 돌리세요. 테스트가 끝나면 `Ctrl+C`로 서버를
-  내리고 다음 테스트용 라우터로 교체합니다.
-
-테스트 ↔ 라우터 매핑:
-
-| 라이브 테스트                   | 라우터 스크립트                          | URL 경로      | 필수 세션 env                       |
-| ------------------------------- | ---------------------------------------- | ------------- | ----------------------------------- |
-| `PortOneCheckoutFlowTest`       | `portone-checkout-flow-browser.php`      | `/checkout`   | `PORTONE_CHECKOUT_FLOW_SESSION_DIR` |
-| `PortOnePaymentCompletionTest`  | `portone-payment-completion-browser.php` | `/completion` | `PORTONE_COMPLETION_SESSION_DIR`    |
-| `PortOneCheckoutCompletionTest` | `portone-payment-completion-browser.php` | `/completion` | `PORTONE_COMPLETION_SESSION_DIR`    |
-| `PortOnePaymentRefundTest`      | `portone-payment-refund-browser.php`     | `/refund`     | `PORTONE_REFUND_SESSION_DIR`        |
-| `PortOneWebhookTest`            | `portone-webhook-browser.php`            | `/webhook`    | `PORTONE_WEBHOOK_SESSION_DIR`       |
-
-> `PortOnePaymentCancellationTest`는 **브라우저 서버가 필요 없습니다**(서버↔API만).
-> `PortOnePaymentCompletionTest`·`PortOneCheckoutCompletionTest`는 같은 라우터·같은
-> `/completion` 경로를 쓰므로 동시에 띄우지 마세요.
-
-### 2.3 테스트별 실행
-
-각 테스트는 **게이트 플래그 `=1`**로 켜고, 해당 PHPUnit 테스트만 필터 실행합니다.
+### 2.2 실행
 
 ```bash
-# 예: 체크아웃 플로우
-export PORTONE_CHECKOUT_FLOW_LIVE=1
-export PORTONE_CHECKOUT_FLOW_SESSION_DIR=/tmp/pf-session   # 미리 mkdir
-php -S 127.0.0.1:8765 tests/live/portone-checkout-flow-browser.php &   # 라우터
-composer test -- --filter PortOneCheckoutFlowTest
+composer live                                        # 전체
+composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 ```
 
-아래 표로 전체 게이트 플래그와 추가 요구사항을 정리했습니다.
+- `composer live`는 `DUSK_HEADLESS_DISABLED=1`을 설정해 **Chrome 창을 띄웁니다**. 사람이
+  PG 결제창을 조작해야 하기 때문입니다.
+- 워크벤치 앱은 기본 `http://127.0.0.1:8001`에서 서빙됩니다. 바꾸려면 `DUSK_SERVE_URL`
+  또는 `DUSK_SERVE_HOST`/`DUSK_SERVE_PORT`를 설정하세요.
+- 각 테스트는 스텁을 `vendor:publish --tag=portone-stubs`로 워크벤치 앱에 발행하고,
+  sqlite DB를 새로 마이그레이션한 뒤, Dusk `loginAs()`로 워크벤치 `User`로 로그인합니다.
+- 패키지는 번들러를 두지 않으므로, 테스트가 발행된 `portone-checkout.js`를 그대로
+  `public/build/`에 두고 Vite manifest를 써 줍니다. `@portone/browser-sdk/v2` import는
+  워크벤치 미들웨어 `MapBrowserSdkImport`가 붙이는 import map으로 해석됩니다.
 
-| 테스트                           | 게이트 플래그                      | 추가 요구사항                                                                                   |
-| -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `PortOnePaymentCompletionTest`   | `PORTONE_COMPLETE_LIVE=1`          | `PORTONE_COMPLETION_SESSION_DIR`                                                                |
-| `PortOneCheckoutCompletionTest`  | `PORTONE_CHECKOUT_COMPLETE_LIVE=1` | `PORTONE_COMPLETION_SESSION_DIR`                                                                |
-| `PortOnePaymentRefundTest`       | `PORTONE_REFUND_LIVE=1`            | `PORTONE_REFUND_SESSION_DIR` + 완료 관측(`portone-payment-completion-observation.json`)         |
-| `PortOneCheckoutFlowTest`        | `PORTONE_CHECKOUT_FLOW_LIVE=1`     | `PORTONE_CHECKOUT_FLOW_SESSION_DIR`                                                             |
-| `PortOnePaymentCancellationTest` | `PORTONE_CANCEL_LIVE=1`            | `PORTONE_CANCEL_PARTIAL_PAYMENT_ID` + 브라우저 SDK 관측(`portone-browser-sdk-observation.json`) |
-| `PortOneWebhookTest`             | `PORTONE_WEBHOOK_LIVE=1`           | `PORTONE_WEBHOOK_SESSION_DIR`, `PORTONE_WEBHOOK_OBSERVATION_DIR`, `PORTONE_WEBHOOK_PUBLIC_URL`  |
+### 2.3 테스트 목록
 
-공통 자격증명: `PORTONE_API_SECRET`, `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`
-(웹훅은 추가로 `PORTONE_WEBHOOK_SECRET`).
+| 테스트                           | 결제창 조작                         | 추가 요구사항                                                         |
+| -------------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| `PortOneCheckoutCompletionTest`  | 10,000원 결제 1회 완료              | 조회 probe 관측(`tests/live/portone-payment-lookup-observation.json`) |
+| `PortOneCheckoutFlowTest`        | 10,000원 결제 1회 완료, 1회 창 닫기 | —                                                                     |
+| `PortOnePaymentCancellationTest` | 없음(서버↔API)                      | `PORTONE_CANCEL_PARTIAL_PAYMENT_ID` + 브라우저 SDK probe 관측         |
+| `PortOnePaymentCompletionTest`   | 100원 결제 1회 완료                 | 조회 probe 관측                                                       |
+| `PortOnePaymentRefundTest`       | 10,000원 결제 2회 완료              | 직전에 `PortOnePaymentCompletionTest`가 남긴 결제(전액 환불 대상)     |
+| `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)  |
+
+- `PortOnePaymentCancellationTest`와 `PortOneWebhookTest`는 추가 요구사항의 환경변수가
+  없으면 **스킵**됩니다.
+- `PortOnePaymentRefundTest`는 `PortOnePaymentCompletionTest`가 결제한 건을 전액 환불하므로,
+  실행할 때마다 완료 테스트가 먼저 돌아야 합니다(`composer live` 전체 실행 순서가 이를 만족).
+- 결제 페이지는 두 가지입니다. 체크아웃 테스트는 **발행된 스텁 페이지**
+  (`/portone/checkout`)를, 나머지는 패키지가 준비한 임의 결제를 띄우는 워크벤치 전용
+  페이지(`/workbench/pay/{paymentId}`)를 씁니다.
 
 ### 2.4 사람이 하는 일
 
-테스트를 실행하면 STDOUT에 안내가 뜨고, 테스트는 브라우저가 파일로 신호를 보낼 때까지
-대기합니다(타임아웃 900초). 예:
+테스트가 로그인·버튼 클릭까지 진행한 뒤 STDOUT에 안내를 찍고 대기합니다(타임아웃 900초).
 
 ```text
-Open http://127.0.0.1:8765/checkout and click Start payment.
-Complete the 10,000 KRW PortOne test payment.
+>>> Complete the 10,000 KRW PortOne test payment in the browser window.
 ```
 
-1. 브라우저에서 안내된 URL을 엽니다.
-2. 포트원 테스트 결제창에서 **결제 완료**(또는 테스트 의도에 따라 **창만 닫기**)를 합니다.
-3. 페이지가 결과를 라우터에 전송하면 PHP 테스트가 이어서 서버 검증을 마치고 종료합니다.
-
-- 체크아웃 플로우 테스트는 **성공 케이스**(결제 완료 → `Success`)와 **실패 케이스**
-  (창 닫기 → `Error`, 완료 요청 없음) 두 메서드를 가집니다.
-- 웹훅 테스트는 결제 완료 후 **포탈 웹훅이 ngrok 공개 URL로 실제로 도착**하는지 봅니다.
+안내에 따라 Chrome 창의 포트원 테스트 결제창에서 **결제 완료** 또는 **창만 닫기**를 하면,
+테스트가 화면 상태와 DB·포트원 조회 결과를 검증하고 다음으로 넘어갑니다. 실패하면
+스크린샷과 콘솔 로그가 `tests/E2E/debug/`에 남습니다(gitignore됨).
 
 ### 2.5 웹훅 live 테스트 (ngrok)
 
-웹훅은 포트원이 **공개 URL로 콜백**해야 하므로 로컬 터널이 필요합니다.
+웹훅은 포트원이 **공개 URL로 콜백**해야 하므로, Dusk가 서빙하는 포트로 터널을 엽니다.
 
 ```bash
-ngrok http 8765
-# 발급된 https URL 을 PORTONE_WEBHOOK_PUBLIC_URL 에 넣고,
-# 포트원 콘솔 웹훅 설정도 그 URL + /portone/webhook 으로 맞춥니다.
+ngrok http 8001
 ```
 
-그리고 2.3 표의 env를 모두 설정한 뒤 웹훅 라우터를 띄우고 실행합니다.
+발급된 https URL에 웹훅 경로(`PORTONE_WEBHOOK_PATH`, 기본 `portone/webhook`)를 붙여
+포트원 콘솔의 웹훅 URL로 등록하고, 같은 값을 넘겨 실행합니다.
+
+```bash
+PORTONE_WEBHOOK_PUBLIC_URL=https://<ngrok-host>/portone/webhook composer live -- --filter PortOneWebhookTest
+```
+
+브라우저는 결제를 일으키는 데만 쓰이고, 웹훅 수신은 워크벤치의 `portone.webhook`
+라우트에서 확인합니다.
 
 ---
 
 ## 3. 독립 관측 probe (T-002 / T-003)
 
 패키지 코드와 무관하게 **외부 경계 동작 자체를 관측**하는 독립 스크립트입니다.
-결과는 `tests/live/portone-*-observation.json`에 기록되고, 일부 live 테스트가 이를
+결과는 `tests/live/`의 probe 관측 JSON 두 개에 기록되고, 일부 live 테스트가 이를
 입력으로 읽습니다.
 
 **브라우저 SDK probe (T-002)** — PG 창이 열리는지·완료/미완료 결과 코드를 관측:
@@ -208,13 +194,13 @@ php tests/live/portone-payment-lookup-probe.php
 
 ## 4. 문제 해결
 
-| 증상                                   | 원인 / 해결                                               |
-| -------------------------------------- | --------------------------------------------------------- |
-| 테스트가 전부 "skipped"                | 게이트 플래그(`*_LIVE=1`) 미설정                          |
-| 브라우저가 연결 실패                   | 라우터 서버(`php -S`) 미실행 또는 포트 불일치             |
-| 503 "session directory not configured" | 세션 env 미설정 — 라우터 띄우기 전에 export               |
-| 503 waiting for view/script            | 정상 — 테스트가 아직 페이지를 준비 중                     |
-| SDK 로딩 실패(404)                     | `npm ci` 미실행 또는 라우터를 패키지 루트에서 띄우지 않음 |
-| 웹훅 미도착                            | ngrok 미실행 또는 콘솔 웹훅 URL 불일치                    |
-| 타임아웃(900초)                        | 브라우저에서 결제를 끝내지 않음                           |
-| 워크벤치 라우트/프로바이더가 이상함    | `composer build`로 워크벤치 재빌드                        |
+| 증상                                | 원인 / 해결                                                         |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| `Invalid path to Chromedriver`      | `composer dusk:chrome-driver` 미실행                                |
+| `Unable to start server` (8001)     | 포트 사용 중 — 이전 실행의 서버를 종료하거나 `DUSK_SERVE_PORT` 변경 |
+| Chrome 창이 안 뜸                   | `CI` 환경변수가 설정됨(Testbench Dusk가 헤드리스로 전환)            |
+| SDK import 실패                     | `npm ci` 미실행                                                     |
+| 웹훅 테스트가 스킵됨                | `PORTONE_WEBHOOK_PUBLIC_URL` 미설정                                 |
+| 웹훅 미도착                         | ngrok 미실행, 포트 불일치, 또는 콘솔 웹훅 URL 불일치                |
+| 타임아웃(900초)                     | 브라우저에서 결제를 끝내지 않음                                     |
+| 워크벤치 라우트/프로바이더가 이상함 | `composer build`로 워크벤치 재빌드                                  |

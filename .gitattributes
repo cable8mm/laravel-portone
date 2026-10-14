@@ -10,5 +10,6 @@ eslint.config.js export-ignore
 phpstan.neon.dist export-ignore
 pint.json export-ignore
 phpunit.xml.dist export-ignore
+phpunit.dusk.xml export-ignore
 testbench.yaml export-ignore
 .github export-ignore

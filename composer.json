@@ -34,6 +34,12 @@
     "format:check": "pint --test",
     "analyse": "phpstan analyse --no-progress",
     "test": "phpunit",
+    "live": [
+      "Composer\\Config::disableProcessTimeout",
+      "@putenv DUSK_HEADLESS_DISABLED=1",
+      "phpunit --configuration phpunit.dusk.xml"
+    ],
+    "dusk:chrome-driver": "@php vendor/bin/testbench-dusk dusk:chrome-driver --detect",
     "post-autoload-dump": [
       "@clear",
       "@prepare"

@@ -1,9 +1,9 @@
 {
-	"recordedAt": "2026-10-13T15:12:21+00:00",
+	"recordedAt": "2026-10-14T02:26:54+00:00",
 	"publishedStubs": true,
 	"scenarios": {
 		"completedPayment": {
-			"paymentId": "29fa6806-ff84-4d02-9866-3f2d5a70ec04",
+			"paymentId": "44850d07-5f71-4663-80ec-4c8002e2347a",
 			"totalAmount": 10000,
 			"browserState": "success",
 			"browserButtonDisabled": true,
@@ -12,7 +12,7 @@
 			"paymentStatus": "PAID"
 		},
 		"cancelledPayment": {
-			"paymentId": "618a9f40-98ad-466c-9131-ce37b693347a",
+			"paymentId": "95e14f96-b80e-46c1-ae62-2bcb2b88f18f",
 			"totalAmount": 10000,
 			"browserState": "error",
 			"browserButtonDisabled": false,

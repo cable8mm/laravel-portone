@@ -2,61 +2,27 @@
 
 declare(strict_types=1);
 
-namespace Tests\Live;
+namespace Tests\E2E;
 
-use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Cable8mm\PortonePhp\Client\PortOneClient;
 use Cable8mm\PortonePhp\Exception\PortOneException;
-use Dotenv\Dotenv;
-use Orchestra\Testbench\TestCase;
 
+/**
+ * Server-only: no payment window is opened.
+ */
 class PortOnePaymentCancellationTest extends TestCase
 {
-    /** @var list<string> */
-    private array $publishedFiles = [];
-
-    protected function getPackageProviders($app): array
-    {
-        return [PortOneServiceProvider::class];
-    }
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        if (($_SERVER['PORTONE_CANCEL_LIVE'] ?? $_ENV['PORTONE_CANCEL_LIVE'] ?? null) !== '1') {
-            $this->markTestSkipped('Set PORTONE_CANCEL_LIVE=1 to enable live PortOne cancellation requests.');
-        }
-
-        Dotenv::createImmutable(dirname(__DIR__, 2))->safeLoad();
-        $this->publishStubs();
-    }
-
-    protected function tearDown(): void
-    {
-        parent::tearDown();
-
-        foreach ($this->publishedFiles as $file) {
-            if (is_file($file)) {
-                unlink($file);
-            }
-        }
-    }
-
     public function test_live_cancellation_behavior(): void
     {
-        $apiSecret = $_SERVER['PORTONE_API_SECRET'] ?? $_ENV['PORTONE_API_SECRET'] ?? '';
+        $apiSecret = config('portone.api_secret');
+        self::assertIsString($apiSecret);
         $partialPaymentId = $_SERVER['PORTONE_CANCEL_PARTIAL_PAYMENT_ID'] ?? $_ENV['PORTONE_CANCEL_PARTIAL_PAYMENT_ID'] ?? '';
 
-        self::assertNotSame('', $apiSecret, 'PORTONE_API_SECRET must be set in the local .env file.');
-        self::assertNotSame('', $partialPaymentId, 'PORTONE_CANCEL_PARTIAL_PAYMENT_ID must identify a paid test payment.');
+        if ($partialPaymentId === '') {
+            $this->markTestSkipped('Set PORTONE_CANCEL_PARTIAL_PAYMENT_ID to a paid 100 KRW test payment to run the live cancellation test.');
+        }
 
-        $browserObservation = json_decode(
-            file_get_contents(__DIR__.'/portone-browser-sdk-observation.json'),
-            true,
-            512,
-            JSON_THROW_ON_ERROR,
-        );
+        $browserObservation = $this->probeObservation('portone-browser-sdk-observation.json');
         $fullPaymentId = $browserObservation['completedPayment']['paymentId'] ?? null;
         self::assertIsString($fullPaymentId, 'The T-002 browser observation must contain a completed payment ID.');
 
@@ -132,11 +98,7 @@ class PortOnePaymentCancellationTest extends TestCase
             self::assertSame(100, $finalState['cancelledAmount']);
             self::assertSame(0, $finalState['cancellableAmount']);
         } finally {
-            file_put_contents(
-                __DIR__.'/portone-payment-cancellation-observation.json',
-                $this->prettyJson($observation),
-                LOCK_EX,
-            );
+            $this->recordObservation('portone-payment-cancellation-observation.json', $observation);
         }
     }
 
@@ -205,41 +167,5 @@ class PortOnePaymentCancellationTest extends TestCase
             'cancelledAmount' => $cancelledAmount,
             'cancellableAmount' => $totalAmount === null ? null : $totalAmount - $cancelledAmount,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $observation
-     */
-    private function prettyJson(array $observation): string
-    {
-        $json = json_encode($observation, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-        $lines = explode("\n", $json);
-
-        foreach ($lines as &$line) {
-            $spaces = strspn($line, ' ');
-            $line = str_repeat("\t", intdiv($spaces, 4)).substr($line, $spaces);
-        }
-
-        return implode("\n", $lines).PHP_EOL;
-    }
-
-    private function publishStubs(): void
-    {
-        $this->artisan('vendor:publish', [
-            '--tag' => 'portone-stubs',
-            '--force' => true,
-            '--no-interaction' => true,
-        ])->assertExitCode(0);
-
-        foreach ([
-            'resources/views/portone/checkout.blade.php',
-            'resources/js/portone-checkout.js',
-            'app/Http/Controllers/PortOneCheckoutController.php',
-            'routes/portone.php',
-        ] as $path) {
-            $file = $this->app->basePath($path);
-            self::assertFileExists($file);
-            $this->publishedFiles[] = $file;
-        }
     }
 }

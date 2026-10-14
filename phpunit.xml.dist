@@ -7,6 +7,7 @@
     <testsuites>
         <testsuite name="Package">
             <directory suffix="Test.php">./tests</directory>
+            <exclude>./tests/E2E</exclude>
         </testsuite>
     </testsuites>
     <source>
