@@ -19,6 +19,7 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 - 전액 / 부분 환불 (`PARTIALLY_CANCELLED` / `CANCELLED`)
 - 모델별 결제 내역 조회
 - 포트원 웹훅을 Laravel 이벤트(`WebhookReceived`)로 수신
+- 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고, 보관 기간 뒤 정리
 - 수정 가능한 체크아웃 출발 파일(뷰·스크립트·컨트롤러·라우트) 발행
 
 ## 요구 사항
@@ -105,7 +106,7 @@ php artisan vendor:publish --tag=portone-stubs
 
 | 발행 파일                                            | 설명                                                                                     |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `resources/views/portone/checkout.blade.php`         | 결제 버튼 + 상태 표시 뷰                                                                 |
+| `resources/views/portone/checkout.blade.php`         | 주문서(상품명·금액) + 결제 버튼 + 상태 표시 뷰                                           |
 | `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete` 흐름의 ES 모듈 스크립트                            |
 | `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
 | `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 3종                                                    |
@@ -125,7 +126,15 @@ php artisan vendor:publish --tag=portone-stubs
    npm install @portone/browser-sdk
    ```
 
-3. **프론트엔드 실행** — 블레이드가 `@vite('resources/js/portone-checkout.js')`로 발행된 스크립트를 참조합니다. Laravel 기본 Vite 설정을 그대로 쓰면 되며 추가 설정은 없습니다.
+3. **프론트엔드 빌드** — 블레이드가 `@vite('resources/js/portone-checkout.js')`로 발행된 스크립트를 참조합니다. Laravel 기본 `vite.config.js`의 `input`에는 이 파일이 없으므로 엔트리로 추가합니다. 추가하지 않으면 `npm run dev`에서는 동작해도 `npm run build`의 manifest에 없어 프로덕션에서 오류가 납니다.
+
+   ```js
+   // vite.config.js
+   laravel({
+       input: ['resources/css/app.css', 'resources/js/app.js', 'resources/js/portone-checkout.js'],
+       refresh: true,
+   }),
+   ```
 
    ```bash
    npm run dev   # 개발 서버 (프로덕션은 npm run build)
@@ -253,6 +262,35 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 - `PORTONE_WEBHOOK_SECRET` 미설정 → `500`, 이벤트 없음
 - 웹훅은 고객·결제 레코드를 읽거나 쓰지 않습니다
 
+결제 레코드에 반영하는 것은 앱이 정합니다. 예를 들어 결제 완료 웹훅으로 결제를 확정하려면
+리스너에서 `completePayment()`를 호출합니다. `completePayment()`는 PortOne에 다시 조회해
+검증하므로 웹훅 내용만 믿고 상태를 바꾸지 않습니다. 오래 걸릴 수 있으니 큐 잡으로 처리하세요.
+
+```php
+// 리스너: 결제 완료 웹훅이면 큐 잡을 넣는다
+use Cable8mm\LaravelPortone\Events\WebhookReceived;
+use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
+
+Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
+    if ($event->webhook instanceof WebhookTransaction && $event->webhook->type === 'Transaction.Paid') {
+        CompletePaymentFromWebhook::dispatch($event->webhook->data->paymentId);
+    }
+});
+
+// 큐 잡의 handle(): 결제를 소유한 Billable 모델로 확정한다 (PENDING·EXPIRED → PAID)
+use Cable8mm\LaravelPortone\Models\Payment;
+use Illuminate\Database\Eloquent\Model;
+
+$payment = Payment::where('payment_id', $this->paymentId)->first();
+$billable = $payment
+    ? Model::getActualClassNameForMorph($payment->billable_type)::find($payment->billable_id)
+    : null;
+$billable?->completePayment($this->paymentId);
+```
+
+전체 예시는 워크벤치의 `workbench/app/Listeners/QueuePaymentCompletion.php`와
+`workbench/app/Jobs/CompletePaymentFromWebhook.php`입니다.
+
 ## 결제 상태
 
 `portone_payments.status`는 다음 중 하나입니다.
@@ -265,7 +303,7 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 
 ## 결제 대기 건 만료와 정리
 
-결제하기를 누르고 결제를 끝내지 않은 `PENDING` 결제는 그대로 쌓입니다. 패키지는 스케줄을
+결제를 시작(`prepare`)하고 끝내지 않은 `PENDING` 결제는 그대로 쌓입니다. 패키지는 스케줄을
 등록하지 않으므로, 앱의 스케줄러와 큐 워커로 정리합니다.
 
 ```php
@@ -283,20 +321,24 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
   `PAYMENT_NOT_FOUND`) `EXPIRED`로 바꾸고, 그 밖에는 그대로 둬서 다음 검사에서 다시 확인합니다.
   설정 누락이나 PortOne 실패는 실패 잡으로 남습니다.
 - `EXPIRED`는 "확인 시점에 결제되지 않음"입니다. 같은 결제 ID로 나중에 결제될 수 있으므로
-  (실제 관측), 웹훅 등에서 `completePayment()`를 부르면 `PAID`로 복구됩니다.
+  (실제 관측), `completePayment()`를 부르면 `PAID`로 복구됩니다. 웹훅으로 자동 복구하려면
+  [웹훅](#웹훅)의 리스너 예시를 참고하세요.
 - `model:prune`은 `PORTONE_EXPIRED_RETENTION_DAYS`일이 지난 `EXPIRED` 결제만 지웁니다.
   결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 기록은 절대 지우지 않습니다.
+- 웹 요청(예: 관리자 화면의 버튼)에서 만료 검사를 바로 돌리려면 `Artisan::queue('portone:expire-pending')`를
+  쓰세요. 패키지 명령은 콘솔에서만 등록되므로 웹 요청 안의 `Artisan::call()`은 "command does not exist"로 실패합니다.
 
 ## 예외
 
-| 예외                                        | HTTP (스텁 기준) | 의미                                      |
-| ------------------------------------------- | ---------------- | ----------------------------------------- |
-| `PaymentNotFoundException`                  | `422`            | 내 범위에 해당 `payment_id` 없음          |
-| `PaymentNotPaidException`                   | `422`            | PortOne에서 미결제 상태                   |
-| `AmountMismatchException`                   | `422`            | 서버 금액과 PortOne 실결제액 불일치       |
-| `InvalidRefundAmountException`              | —                | 환불 금액이 0 이하이거나 환불 가능액 초과 |
-| `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락            |
-| `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)       |
+| 예외                                        | HTTP (스텁 기준) | 의미                                                                |
+| ------------------------------------------- | ---------------- | ------------------------------------------------------------------- |
+| `PaymentNotFoundException`                  | `422`            | 내 범위에 해당 `payment_id` 없음                                    |
+| `PaymentNotPaidException`                   | `422`            | PortOne에서 미결제 상태                                             |
+| `AmountMismatchException`                   | `422`            | 서버 금액과 PortOne 실결제액 불일치                                 |
+| `InvalidPaymentStatusException`             | —                | 결제되지 않았거나(`PENDING`·`EXPIRED`) 이미 전액 취소된 결제를 환불 |
+| `InvalidRefundAmountException`              | —                | 환불 금액이 0 이하이거나 환불 가능액 초과                           |
+| `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락                                      |
+| `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)                                 |
 
 ## 개발 및 테스트
 
