@@ -231,7 +231,7 @@
     - Each live test is runnable on its own: it creates any payment it consumes and requires no other live test to run first (TECH_STACK.md §4).
     - Unit tests unaffected pass.
 
-- [ ] T-017 Relocate live verification probes out of tests/
+- [X] T-017 Relocate live verification probes out of tests/
   - Satisfies: TECH_STACK.md §2 (tools/probes/), §4 (probes are a documented exception to the no-router rule), §6 (export-ignore for tools/probes/); preserves T-002/T-003 probe coverage
   - External boundary: yes (probes observe external behavior)
   - Acceptance criteria:

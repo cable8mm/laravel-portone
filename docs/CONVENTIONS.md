@@ -81,7 +81,7 @@ database/       마이그레이션
 stubs/          발행용 체크아웃 파일 (뷰·JS·컨트롤러·라우트)
 tests/Unit/     오프라인 단위 테스트
 tests/E2E/      live/e2e 테스트(Testbench Dusk) + 관측 기록 (CI 미실행)
-tests/live/     독립 관측 probe + probe 관측 기록
+tools/probes/   독립 관측 probe + probe 관측 기록 (패키지 코드와 무관)
 docs/           개발자 문서 (이 파일, TESTING.md)
 workbench/      테스트벤치 워크벤치
 ```

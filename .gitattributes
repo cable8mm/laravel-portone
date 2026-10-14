@@ -2,6 +2,7 @@
 
 tests export-ignore
 workbench export-ignore
+tools/probes export-ignore
 package.json export-ignore
 package-lock.json export-ignore
 vitest.config.js export-ignore
