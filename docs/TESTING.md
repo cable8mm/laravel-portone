@@ -120,14 +120,14 @@ composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 
 ### 2.3 테스트 목록
 
-| 테스트                           | 결제창 조작                         | 추가 요구사항                                                         |
-| -------------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
-| `PortOneCheckoutCompletionTest`  | 10,000원 결제 1회 완료              | 조회 probe 관측(`tests/live/portone-payment-lookup-observation.json`) |
-| `PortOneCheckoutFlowTest`        | 10,000원 결제 1회 완료, 1회 창 닫기 | —                                                                     |
-| `PortOnePaymentCancellationTest` | 100원 결제 2회 완료                 | —                                                                     |
-| `PortOnePaymentCompletionTest`   | 100원 결제 1회 완료                 | 조회 probe 관측                                                       |
-| `PortOnePaymentRefundTest`       | 100원 1회 + 10,000원 2회 결제 완료  | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능)                    |
-| `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)  |
+| 테스트                           | 결제창 조작                         | 추가 요구사항                                                           |
+| -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
+| `PortOneCheckoutCompletionTest`  | 10,000원 결제 1회 완료              | 조회 probe 관측(`tools/probes/portone-payment-lookup-observation.json`) |
+| `PortOneCheckoutFlowTest`        | 10,000원 결제 1회 완료, 1회 창 닫기 | —                                                                       |
+| `PortOnePaymentCancellationTest` | 100원 결제 2회 완료                 | —                                                                       |
+| `PortOnePaymentCompletionTest`   | 100원 결제 1회 완료                 | 조회 probe 관측                                                         |
+| `PortOnePaymentRefundTest`       | 100원 1회 + 10,000원 2회 결제 완료  | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능)                      |
+| `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)    |
 
 - `PortOneWebhookTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
 - 각 테스트는 **단독으로 실행**할 수 있습니다. 소모하는 결제는 테스트가 직접 만들고,
@@ -172,20 +172,20 @@ PORTONE_WEBHOOK_PUBLIC_URL=https://<ngrok-host>/portone/webhook composer live --
 ## 3. 독립 관측 probe (T-002 / T-003)
 
 패키지 코드와 무관하게 **외부 경계 동작 자체를 관측**하는 독립 스크립트입니다.
-결과는 `tests/live/`의 probe 관측 JSON 두 개에 기록되고, 일부 live 테스트가 이를
+결과는 `tools/probes/`의 probe 관측 JSON 두 개에 기록되고, 일부 live 테스트가 이를
 입력으로 읽습니다.
 
 **브라우저 SDK probe (T-002)** — PG 창이 열리는지·완료/미완료 결과 코드를 관측:
 
 ```bash
-php -S 127.0.0.1:8765 tests/live/portone-browser-sdk-probe.php
+php -S 127.0.0.1:8765 tools/probes/portone-browser-sdk-probe.php
 # 브라우저에서 열고: 한 번은 결제 완료, 한 번은 창만 닫기
 ```
 
 **결제 조회 probe (T-003)** — 위 관측의 paymentId로 상태·금액을 조회:
 
 ```bash
-php tests/live/portone-payment-lookup-probe.php
+php tools/probes/portone-payment-lookup-probe.php
 ```
 
 > 관측 파일은 의도된 출력입니다(커밋 대상). 다만 **시크릿 값이 들어가지 않도록** 주의하세요.

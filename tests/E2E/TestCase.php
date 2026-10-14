@@ -132,7 +132,7 @@ abstract class TestCase extends DuskTestCase
      */
     protected function probeObservation(string $name): array
     {
-        return $this->readObservation(dirname(__DIR__).'/live/'.$name);
+        return $this->readObservation(package_path('tools/probes/'.$name));
     }
 
     /**
