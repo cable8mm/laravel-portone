@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace Workbench\App\Providers;
 
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
+use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
 use Dotenv\Dotenv;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Workbench\App\Http\Middleware\RecordWebhookExchange;
+use Workbench\App\Listeners\QueuePaymentCompletion;
 use Workbench\App\Models\WebhookLog;
 
 use function Orchestra\Testbench\package_path;
@@ -39,6 +42,18 @@ class WorkbenchServiceProvider extends ServiceProvider
     {
         // The Package only publishes its migrations; the Workbench database runs them in place.
         $this->loadMigrationsFrom([package_path('database/migrations'), workbench_path('database/migrations')]);
+
+        // The Package registers no schedule; the Application does (T-023).
+        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule): void {
+            $schedule->command('portone:expire-pending')->everyTenMinutes();
+            $schedule->command('model:prune', ['--model' => [Payment::class]])->daily();
+        });
+
+        // A paid webhook completes the payment through a queued job. PHPUnit runs (live
+        // webhook tests included) skip it, so they still see the Package change no record.
+        if (! $this->app->runningUnitTests()) {
+            Event::listen(WebhookReceived::class, QueuePaymentCompletion::class);
+        }
 
         // The sample shop's webhook log: record every verified webhook the Package dispatches.
         Event::listen(WebhookReceived::class, static function (WebhookReceived $event): void {

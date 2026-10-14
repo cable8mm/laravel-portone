@@ -14,6 +14,7 @@ use Cable8mm\PortonePhp\Exception\PortOneException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 
 /**
  * Payment history, confirmation, and cancellation through the Billable methods of the signed-in user.
@@ -35,7 +36,19 @@ class PaymentController
     }
 
     /**
-     * Ask PortOne again for a payment still PENDING, e.g. when the browser closed right after paying.
+     * Run the expiry check the scheduler runs every 10 minutes. The Package registers its
+     * command for the console only, so a web request queues it; the queue worker runs it,
+     * and it queues one PortOne check per stale PENDING payment.
+     */
+    public function expire(): RedirectResponse
+    {
+        Artisan::queue('portone:expire-pending');
+
+        return redirect()->route('shop.payments.index')->with('status', '만료 검사를 큐에 넣었어요. 큐 워커가 처리하면 상태가 바뀌어요.');
+    }
+
+    /**
+     * Ask PortOne again for a PENDING or EXPIRED payment, e.g. when the browser closed right after paying.
      */
     public function complete(Request $request, string $paymentId): RedirectResponse
     {

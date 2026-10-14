@@ -301,7 +301,7 @@
     - An E2E test runs the expiry job against live PortOne for a paid, a closed-window, and a never-opened payment and matches the T-021 recording.
     - README and docs/TESTING.md describe scheduling portone:expire-pending and model:prune and running a queue worker.
 
-- [ ] T-023 Workbench queue and scheduler sample
+- [X] T-023 Workbench queue and scheduler sample
   - Satisfies: TECH_STACK.md §4 (Workbench sample shop); demonstrates T-022 and the webhook-to-completion pattern in the Application's own code
   - Depends on: T-022
   - External boundary: yes (the sample shop pays and looks up live PortOne)
@@ -310,5 +310,5 @@
     - A Workbench WebhookReceived listener queues a job that calls completePayment for a Transaction.Paid webhook; the Package itself still changes no record during webhook handling (FR-039).
     - The payment history shows the EXPIRED status, and a button runs the expiry check now.
     - The developer guide's feature map lists expiry and pruning.
-    - Unit tests cover the listener, the schedule registration, and the new pages; the human runs the sample flow by hand against live PortOne.
+    - Unit tests cover the listener, the schedule registration, and the new pages; the human runs the sample flow by hand against live PortOne. (Done for the expiry flow against live PortOne; the webhook-to-completion path is covered by unit tests with recorded webhook types instead of a live ngrok run, by owner decision.)
 

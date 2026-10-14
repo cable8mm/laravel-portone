@@ -23,12 +23,17 @@
         </section>
 
         @php($remaining = $payment->amount - $payment->cancelled_amount)
-        @if ($payment->status === 'PENDING')
+        @if (in_array($payment->status, ['PENDING', 'EXPIRED'], true))
             <section class="card" data-complete>
                 <h2 class="text-xl font-black text-slate-800">🔎 결제 확인</h2>
                 <p class="mt-2 text-sm text-slate-500">
-                    결제창에서 결제했는데 브라우저가 닫혀 완료 처리가 안 됐다면, 포트원에 다시 물어봐 PAID로 바꿀 수 있어요.
-                    결제하지 않은 건이면 미결제 오류가 납니다.
+                    @if ($payment->status === 'EXPIRED')
+                        확인 시점에 결제되지 않아 만료된 건이에요. 같은 결제 ID로 나중에 결제됐다면 포트원에 다시 물어봐 PAID로 복구할 수 있어요.
+                        보관 기간({{ config('portone.expired_retention_days') }}일)이 지나면 model:prune이 지웁니다.
+                    @else
+                        결제창에서 결제했는데 브라우저가 닫혀 완료 처리가 안 됐다면, 포트원에 다시 물어봐 PAID로 바꿀 수 있어요.
+                        결제하지 않은 건이면 미결제 오류가 납니다.
+                    @endif
                 </p>
                 <form method="post" action="{{ route('shop.payments.complete', $payment->payment_id) }}" class="mt-4">
                     @csrf
@@ -73,7 +78,7 @@
 @section('code')
     @include('workbench::partials.code', [
         'file' => 'workbench/app/Http/Controllers/PaymentController.php',
-        'note' => '결제 대기 건은 completePayment()로 다시 확인하고, 결제된 건은 refund()로 취소합니다. 금액이 null이면 전액, 숫자면 부분 취소예요.',
+        'note' => '결제 대기·만료 건은 completePayment()로 다시 확인하고(만료 뒤 결제됐으면 PAID로 복구), 결제된 건은 refund()로 취소합니다. 금액이 null이면 전액, 숫자면 부분 취소예요.',
         'code' => "\$request->user()->findPayment(\$paymentId);\n\$request->user()->completePayment(\$paymentId);          // PENDING → PAID\n\$request->user()->refund(\$paymentId, \$reason);           // 전액 취소\n\$request->user()->refund(\$paymentId, \$reason, 3000);     // 부분 취소",
     ])
 @endsection
