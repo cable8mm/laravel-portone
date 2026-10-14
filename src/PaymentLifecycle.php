@@ -12,7 +12,7 @@ use Cable8mm\LaravelPortone\Models\Payment;
 use Illuminate\Support\Carbon;
 
 /**
- * 결제 확정·환불의 상태 전이를 순수하게 계산하는 클래스.
+ * 결제 확정·환불·만료의 상태 전이를 순수하게 계산하는 클래스.
  *
  * DB도 PortOne도 건드리지 않으며, 저장할 절대값만 반환한다.
  */
@@ -21,7 +21,7 @@ class PaymentLifecycle
     /**
      * 확정 결과를 계산한다. PortOne 결제 완료 + 금액 일치가 조건이다.
      *
-     * @param  Payment  $payment  확정할 PENDING 결제 레코드
+     * @param  Payment  $payment  확정할 PENDING 또는 EXPIRED 결제 레코드
      * @param  GatewayPayment  $gatewayPayment  PortOne 조회 결과
      * @param  Carbon  $paidAt  paid_at에 기록할 시각
      * @return array{status: string, paid_at: Carbon} 저장할 확정 값
@@ -43,6 +43,33 @@ class PaymentLifecycle
             'status' => 'PAID',
             'paid_at' => $paidAt,
         ];
+    }
+
+    /**
+     * 만료 확인 결과를 계산한다.
+     *
+     * 결제 완료 + 금액 일치면 PAID, 확인 시점에 결제되지 않은 결과(PAYMENT_NOT_FOUND,
+     * READY, FAILED — T-021 관측과 소유자 결정)면 EXPIRED, 그 밖에는 변경 없음(null)이다.
+     *
+     * @param  Payment  $payment  확인할 PENDING 결제 레코드
+     * @param  GatewayPayment  $gatewayPayment  만료 확인용 PortOne 조회 결과
+     * @param  Carbon  $paidAt  PAID일 때 paid_at에 기록할 시각
+     * @return array{status: string, paid_at: Carbon}|array{status: string}|null 저장할 값, 변경이 없으면 null
+     */
+    public function expire(Payment $payment, GatewayPayment $gatewayPayment, Carbon $paidAt): ?array
+    {
+        if (! $gatewayPayment->found || in_array($gatewayPayment->status, ['READY', 'FAILED'], true)) {
+            return ['status' => 'EXPIRED'];
+        }
+
+        if ($gatewayPayment->status === 'PAID' && $gatewayPayment->totalAmount === $payment->amount) {
+            return [
+                'status' => 'PAID',
+                'paid_at' => $paidAt,
+            ];
+        }
+
+        return null;
     }
 
     /**

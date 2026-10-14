@@ -1,0 +1,29 @@
+{
+	"recordedAt": "2026-10-14T12:46:08+00:00",
+	"payments": {
+		"paid": {
+			"paymentId": "777c9e0c-f8f0-4320-bea3-3ea2b71d31c2",
+			"expiryLookup": {
+				"status": "PAID",
+				"found": true
+			},
+			"finalStatus": "PAID"
+		},
+		"closed": {
+			"paymentId": "63878b59-69e0-4014-90ac-daa97f8a7711",
+			"expiryLookup": {
+				"status": "FAILED",
+				"found": true
+			},
+			"finalStatus": "EXPIRED"
+		},
+		"neverOpened": {
+			"paymentId": "da7b4b12-3d37-41b1-a68e-863b51dbf650",
+			"expiryLookup": {
+				"status": "PAYMENT_NOT_FOUND",
+				"found": false
+			},
+			"finalStatus": "EXPIRED"
+		}
+	}
+}

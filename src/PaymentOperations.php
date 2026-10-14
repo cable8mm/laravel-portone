@@ -6,6 +6,7 @@ namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Models\Payment;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -63,7 +64,8 @@ class PaymentOperations
     /**
      * 결제를 확정한다. 레코드에 배타 접근을 걸고 PortOne 조회를 수행한다.
      *
-     * PENDING이 아닌 레코드는 PortOne을 호출하지 않고 그대로 반환한다.
+     * PENDING·EXPIRED가 아닌 레코드는 PortOne을 호출하지 않고 그대로 반환한다.
+     * EXPIRED 레코드는 만료 뒤에 결제된 경우를 복구하기 위해 다시 조회한다.
      * 로컬 저장 실패 시 같은 값으로 최대 3회까지 다시 시도한다.
      *
      * @param  Model  $billable  결제를 소유한 Billable 모델
@@ -76,21 +78,45 @@ class PaymentOperations
             $billable,
             $paymentId,
             function (Payment $payment): Payment {
-                if ($payment->status !== 'PENDING') {
+                if (! in_array($payment->status, ['PENDING', 'EXPIRED'], true)) {
                     return $payment;
                 }
 
                 $gatewayPayment = $this->gateway->lookup($payment->payment_id);
                 $outcome = $this->lifecycle->complete($payment, $gatewayPayment, now());
 
-                for ($attempt = 1; ; $attempt++) {
-                    try {
-                        return $this->payments->update($payment, $outcome);
-                    } catch (Throwable $exception) {
-                        if ($attempt >= 3) {
-                            throw $exception;
-                        }
-                    }
+                return $this->write($payment, $outcome);
+            },
+        );
+    }
+
+    /**
+     * 오래된 PENDING 결제 1건을 PortOne에 확인해 PAID 또는 EXPIRED로 바꾼다.
+     *
+     * 레코드가 없거나 더 이상 PENDING이 아니면 아무것도 하지 않는다.
+     * 판단할 수 없는 조회 결과면 그대로 두어 다음 만료 검사에서 다시 확인한다.
+     * 설정 누락·PortOne 실패·저장 실패는 감싸지 않고 전파한다.
+     *
+     * @param  string  $billableType  소유 Billable 모델의 morph 타입
+     * @param  string  $billableId  소유 Billable 모델의 키
+     * @param  string  $paymentId  PortOne 결제 식별자
+     */
+    public function expire(string $billableType, string $billableId, string $paymentId): void
+    {
+        $this->payments->withExclusiveAccessByReference(
+            $billableType,
+            $billableId,
+            $paymentId,
+            function (Payment $payment): void {
+                if ($payment->status !== 'PENDING') {
+                    return;
+                }
+
+                $gatewayPayment = $this->gateway->lookupForExpiry($payment->payment_id);
+                $outcome = $this->lifecycle->expire($payment, $gatewayPayment, now());
+
+                if ($outcome !== null) {
+                    $this->write($payment, $outcome);
                 }
             },
         );
@@ -121,16 +147,28 @@ class PaymentOperations
                 $outcome = $this->lifecycle->refund($payment, $amount);
                 $this->gateway->cancel($paymentId, $reason, $amount);
 
-                for ($attempt = 1; ; $attempt++) {
-                    try {
-                        return $this->payments->update($payment, $outcome);
-                    } catch (Throwable $exception) {
-                        if ($attempt >= 3) {
-                            throw $exception;
-                        }
-                    }
-                }
+                return $this->write($payment, $outcome);
             },
         );
+    }
+
+    /**
+     * 미리 계산된 결과를 저장한다. 실패하면 같은 값으로 최대 3회까지 시도한다.
+     *
+     * @param  Payment  $payment  갱신할 결제 레코드
+     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}|array{status: string}  $outcome  저장할 절대값
+     * @return Payment 갱신된 결제 레코드
+     */
+    private function write(Payment $payment, array $outcome): Payment
+    {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return $this->payments->update($payment, $outcome);
+            } catch (Throwable $exception) {
+                if ($attempt >= 3) {
+                    throw $exception;
+                }
+            }
+        }
     }
 }

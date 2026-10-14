@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
@@ -13,6 +15,8 @@ use Illuminate\Support\Carbon;
  * 한 Billable 모델이 소유하며, PortOne 결제 식별자(payment_id)는 전역 유니크이다.
  * 상태 전이: PENDING → PAID → PARTIALLY_CANCELLED → CANCELLED
  * (PAID에서 바로 CANCELLED로 전액 환불될 수도 있다).
+ * 버려진 결제는 PENDING → EXPIRED가 되고, 나중에 결제되면 EXPIRED → PAID로 복구된다.
+ * model:prune은 보관 기간이 지난 EXPIRED 레코드만 지운다.
  *
  * @property string $payment_id
  * @property string $billable_type
@@ -28,6 +32,8 @@ use Illuminate\Support\Carbon;
  */
 class Payment extends Model
 {
+    use MassPrunable;
+
     protected $table = 'portone_payments';
 
     protected $guarded = [];
@@ -39,6 +45,20 @@ class Payment extends Model
             'cancelled_amount' => 'integer',
             'paid_at' => 'datetime',
         ];
+    }
+
+    /**
+     * model:prune이 지울 레코드: portone.expired_retention_days일보다 오래된 EXPIRED 결제만.
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        $days = config('portone.expired_retention_days');
+
+        return static::query()
+            ->where('status', 'EXPIRED')
+            ->where('updated_at', '<', now()->subDays(is_numeric($days) ? (int) $days : 90));
     }
 
     /**

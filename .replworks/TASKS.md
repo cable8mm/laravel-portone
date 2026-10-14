@@ -286,7 +286,7 @@
     - The human confirms which results mean "never paid"; PRODUCT_SPEC.md External Systems is updated with them and the [UNVERIFIED] mark is cleared only after that confirmation.
     - Secrets are not recorded.
 
-- [ ] T-022 Expire and prune abandoned PENDING payments
+- [X] T-022 Expire and prune abandoned PENDING payments
   - Satisfies: PRODUCT_SPEC.md SCR-007 (EL-031, EL-032, EL-035), SCR-004 (EL-033, EL-034), FR-021, FR-022, FR-057 to FR-065, FLOW-006, ERR-008, ERR-016, AC-057 to AC-066; ARCHITECTURE.md SF-7, SF-8, CMP-15, CMP-16, RD-25 to RD-29; TECH_STACK.md §1 (illuminate/console, illuminate/queue), §3 (Artisan command, ShouldQueue job, MassPrunable)
   - Depends on: T-021 (done; FR-061 results: PAYMENT_NOT_FOUND, READY, FAILED)
   - External boundary: yes (the expiry job looks up live PortOne)

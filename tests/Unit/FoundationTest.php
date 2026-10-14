@@ -20,5 +20,7 @@ class FoundationTest extends TestCase
         $this->assertNull(config('portone.base_url'));
         $this->assertNull(config('portone.store_id'));
         $this->assertNull(config('portone.channel_key'));
+        $this->assertSame(1440, config('portone.pending_expire_after'));
+        $this->assertSame(90, config('portone.expired_retention_days'));
     }
 }

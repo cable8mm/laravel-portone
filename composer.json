@@ -7,7 +7,9 @@
     "php": "^8.2",
     "illuminate/database": "^12.0 || ^13.0",
     "illuminate/support": "^12.0 || ^13.0",
-    "cable8mm/portone-php": "^0.4"
+    "cable8mm/portone-php": "^0.4",
+    "illuminate/console": "^12.0 || ^13.0",
+    "illuminate/queue": "^12.0 || ^13.0"
   },
   "require-dev": {
     "orchestra/testbench": "^10.0 || ^11.0",
