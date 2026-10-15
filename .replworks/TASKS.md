@@ -340,3 +340,48 @@
     - Unit tests cover AC-016, AC-021, AC-061, AC-062, AC-069 to AC-072 with test doubles traced to the T-003 and T-010 recordings.
     - An E2E test pays a prepared payment on live PortOne, makes the record's amount differ from the paid total (what PortOne and the Package see when the browser's totalAmount is tampered), and checks for both completePayment and the expiry job that PortOne reports the payment cancelled and the record is AMOUNT_MISMATCH_CANCELLED; a repeated completePayment sends no PortOne request.
     - README and CHANGELOG describe the behavior, the new statuses, and the configuration key, and CHANGELOG marks the new statuses as a compatibility note.
+
+- [X] T-026 Publish only missing migrations on upgrade
+  - Satisfies: PRODUCT_SPEC.md FR-003a, AC-073; ARCHITECTURE.md RD-34
+  - External boundary: no
+  - Acceptance criteria:
+    - vendor:publish --tag=portone-migrations in an Application that already published the create migrations under other dates copies only the missing migrations; a second run copies nothing.
+    - README has an upgrade section with the exact steps per version.
+
+- [X] T-027 Document configuration keys added per version
+  - Satisfies: PRODUCT_SPEC.md SCR-004
+  - External boundary: no
+  - Acceptance criteria:
+    - README lists the configuration keys added in each version since v0.3.0 with their environment variables and defaults.
+    - docs/CONVENTIONS.md requires updating that list whenever a configuration key is added.
+
+- [X] T-028 Dispatch an event per transaction webhook type
+  - Satisfies: PRODUCT_SPEC.md SCR-005 (EL-038 to EL-041), FR-073 to FR-075, AC-074, AC-075; ARCHITECTURE.md RD-36
+  - External boundary: yes (PortOne delivers the webhooks)
+  - Acceptance criteria:
+    - Paid, Cancelled, PartialCancelled, and Failed transaction webhooks dispatch PaymentPaid, PaymentCancelled, PaymentPartiallyCancelled, and PaymentFailed after WebhookReceived, each with paymentId, webhook, and webhookId.
+    - Every other webhook dispatches only WebhookReceived.
+    - Unit tests use the recorded Paid and Cancelled bodies and, for PartialCancelled and Failed, bodies in the documented shape.
+    - An E2E test receives PartialCancelled and Failed webhooks from live PortOne through ngrok, checks the typed events, and records the bodies.
+
+- [X] T-029 Complete a payment by Payment ID
+  - Satisfies: PRODUCT_SPEC.md SCR-008 (EL-042), FR-076, FR-077, ERR-017, AC-076; ARCHITECTURE.md RD-37
+  - External boundary: no (uses the lookup and cancellation verified by T-003, T-010, T-025)
+  - Acceptance criteria:
+    - PaymentOperations::completeByPaymentId follows the rules of completePayment for any Billable model and throws PaymentNotFoundException for an unknown Payment ID.
+
+- [X] T-030 Expose the raw PortOne payment response
+  - Satisfies: PRODUCT_SPEC.md SCR-008 (EL-043, EL-044), FR-078 to FR-080, AC-077; ARCHITECTURE.md RD-38
+  - External boundary: yes (PortOne payment lookup)
+  - Acceptance criteria:
+    - PortOneGateway::paymentResponse returns the lookup response unchanged.
+    - portone:payment prints it as JSON with the keys of FR-079 redacted, and unchanged with --raw.
+    - An E2E test runs the command against a live paid test payment and records the redacted response.
+
+- [X] T-031 Record paid_amount for every confirmed payment
+  - Satisfies: PRODUCT_SPEC.md FR-023, FR-060, AC-078; ARCHITECTURE.md INV-07, RD-35
+  - External boundary: no
+  - Acceptance criteria:
+    - Completion and the expiry job set paid_amount to the PortOne total when they set PAID.
+    - A migration backfills paid_amount = amount for PAID, PARTIALLY_CANCELLED, and CANCELLED records with a null paid_amount.
+    - The Payment model PHPDoc describes the new meaning.

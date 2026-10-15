@@ -36,6 +36,23 @@ class PortOneGateway implements PaymentGateway
     }
 
     /**
+     * PortOne 결제 조회 응답을 받은 그대로 반환한다. 테스트용 응답 기록 등에 쓴다.
+     *
+     * 응답에는 고객 개인정보와 카드·계좌 정보가 들어 있을 수 있다. 기록하기 전에
+     * PaymentResponseRedactor로 가리거나 portone:payment 명령을 쓴다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return array<string, mixed> 디코딩한 PortOne 응답 본문
+     *
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
+     */
+    public function paymentResponse(string $paymentId): array
+    {
+        return $this->client()->payment->getPayment($paymentId)->data;
+    }
+
+    /**
      * 만료 확인용으로 결제 1건을 조회한다. PortOne이 결제를 모르면 found가 false이다.
      *
      * PAYMENT_NOT_FOUND는 T-003·T-021에서 결제창을 연 적 없는 결제에 대해 관측된 응답이다.

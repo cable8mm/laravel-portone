@@ -1,0 +1,73 @@
+{
+	"recordedAt": "2026-10-15T16:05:25+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"paymentId": "cc3b1b95-d643-48bb-afb2-1f3dd2bf0d65",
+	"redactedResponse": {
+		"status": "PAID",
+		"id": "cc3b1b95-d643-48bb-afb2-1f3dd2bf0d65",
+		"transactionId": "01a1404f-1056-9cbe-6cb3-fee538ee8d34",
+		"merchantId": "merchant-6761d14e-1125-4524-9682-c541fc9175f5",
+		"storeId": "store-720c15ca-0a45-4811-9e40-c8321ca05e8e",
+		"method": {
+			"type": "PaymentMethodCard",
+			"card": {
+				"publisher": "HYUNDAI_CARD",
+				"issuer": "HYUNDAI_CARD",
+				"brand": "AMEX",
+				"type": "CREDIT",
+				"ownerType": "PERSONAL",
+				"bin": "[REDACTED]",
+				"name": "[REDACTED]",
+				"number": "[REDACTED]"
+			},
+			"approvalNumber": "[REDACTED]",
+			"installment": {
+				"month": 0,
+				"isInterestFree": false
+			},
+			"pointUsed": false
+		},
+		"channel": {
+			"type": "TEST",
+			"id": "channel-id-c8bc6765-5431-423d-b002-0f93d25b670e",
+			"key": "channel-key-bd036437-f816-4652-a791-2965b513b6e7",
+			"name": "[REDACTED]",
+			"pgProvider": "KCP_V2",
+			"pgMerchantId": "A52Q7"
+		},
+		"version": "V2",
+		"webhooks": "[REDACTED]",
+		"requestedAt": "2026-10-15T16:04:45.813563151Z",
+		"updatedAt": "2026-10-15T16:05:24.367815224Z",
+		"statusChangedAt": "2026-10-15T16:05:23Z",
+		"orderName": "PortOne payment command probe",
+		"amount": {
+			"total": 100,
+			"taxFree": 0,
+			"vat": 9,
+			"supply": 91,
+			"discount": 0,
+			"paid": 100,
+			"cancelled": 0,
+			"cancelledTaxFree": 0
+		},
+		"currency": "KRW",
+		"customer": {
+			"id": "4a9205ec-f4f7-4810-af7c-7766f02d0bd5"
+		},
+		"origin": {
+			"platformType": "PC",
+			"userAgent": "[REDACTED]",
+			"url": "http://127.0.0.1:8001",
+			"ipAddress": "[REDACTED]"
+		},
+		"promotionId": "",
+		"isCulturalExpense": false,
+		"paidAt": "2026-10-15T16:05:23Z",
+		"pgTxId": "26919073536809",
+		"pgResponse": "[REDACTED]",
+		"receiptUrl": "[REDACTED]",
+		"disputes": []
+	},
+	"secretsRecorded": false
+}

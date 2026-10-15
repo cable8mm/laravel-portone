@@ -106,6 +106,7 @@ class PaymentExpiryTest extends TestCase
         $payment->refresh();
         $this->assertSame('PAID', $payment->status);
         $this->assertNotNull($payment->paid_at);
+        $this->assertSame(100, $payment->paid_amount);
     }
 
     /**
@@ -272,6 +273,31 @@ class PaymentExpiryTest extends TestCase
 
         $this->expectException(InvalidPaymentStatusException::class);
         $billable->refund($payment->payment_id, 'Customer request');
+    }
+
+    /**
+     * RD-35: records made PAID before paid_amount was recorded are backfilled with amount.
+     */
+    public function test_backfill_sets_paid_amount_only_for_paid_records_without_one(): void
+    {
+        $billable = $this->billable(101);
+        $rows = [];
+
+        foreach (['PAID' => null, 'PARTIALLY_CANCELLED' => null, 'CANCELLED' => null, 'PENDING' => null, 'EXPIRED' => null, 'AMOUNT_MISMATCH_CANCELLED' => 100] as $status => $paidAmount) {
+            $payment = $this->pending($billable, minutesOld: 0, amount: 1000);
+            Payment::query()->whereKey($payment->getKey())->update(['status' => $status, 'paid_amount' => $paidAmount]);
+            $rows[$status] = $payment;
+        }
+
+        $migration = require dirname(__DIR__, 2).'/database/migrations/2026_10_16_000000_backfill_paid_amount_on_portone_payments_table.php';
+        $migration->up();
+
+        foreach (['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'] as $status) {
+            $this->assertSame(1000, $rows[$status]->fresh()->paid_amount, $status);
+        }
+        $this->assertNull($rows['PENDING']->fresh()->paid_amount);
+        $this->assertNull($rows['EXPIRED']->fresh()->paid_amount);
+        $this->assertSame(100, $rows['AMOUNT_MISMATCH_CANCELLED']->fresh()->paid_amount);
     }
 
     public function test_the_package_registers_no_schedule(): void

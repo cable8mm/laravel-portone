@@ -13,6 +13,7 @@ use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\GatewayPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
+use Cable8mm\LaravelPortone\PaymentOperations;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Database\Eloquent\Model;
@@ -50,8 +51,63 @@ class PaymentCompletionTest extends TestCase
 
         $this->assertSame('PAID', $completed->status);
         $this->assertNotNull($completed->paid_at);
+        $this->assertSame(100, $completed->paid_amount);
         $this->assertCompletionInvariant($completed);
         $this->assertSame('PAID', $payment->fresh()->status);
+        $this->assertSame(100, $payment->fresh()->paid_amount);
+    }
+
+    /**
+     * AC-076: a webhook handler knows only the Payment ID.
+     */
+    public function test_payment_is_completed_by_payment_id_alone(): void
+    {
+        $this->migratePackageTables();
+        $gateway = $this->gatewayMock();
+        $payment = $this->billable(101)->preparePayment(100, 'Order A');
+        $gateway->expects($this->once())
+            ->method('lookup')
+            ->with($payment->payment_id)
+            ->willReturn(new GatewayPayment('PAID', 100));
+        $operations = $this->app->make(PaymentOperations::class);
+
+        $completed = $operations->completeByPaymentId($payment->payment_id);
+        $again = $operations->completeByPaymentId($payment->payment_id);
+
+        $this->assertSame('PAID', $completed->status);
+        $this->assertSame(100, $completed->paid_amount);
+        $this->assertSame($completed->paid_at?->toISOString(), $again->paid_at?->toISOString());
+        $this->assertCompletionInvariant($payment->fresh());
+    }
+
+    public function test_completion_by_payment_id_applies_the_amount_mismatch_rules(): void
+    {
+        $this->migratePackageTables();
+        $gateway = $this->gatewayMock();
+        $payment = $this->billable(101)->preparePayment(10000, 'Order A');
+        $gateway->expects($this->once())->method('lookup')->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->once())->method('cancel')->with($payment->payment_id, '결제 금액 불일치로 자동 취소', null);
+        $operations = $this->app->make(PaymentOperations::class);
+
+        for ($call = 1; $call <= 2; $call++) {
+            try {
+                $operations->completeByPaymentId($payment->payment_id);
+                $this->fail('Expected a mismatched amount to be rejected.');
+            } catch (AmountMismatchException $exception) {
+                $this->assertTrue($exception->wasCancelled());
+            }
+        }
+
+        $this->assertSame('AMOUNT_MISMATCH_CANCELLED', $payment->fresh()->status);
+    }
+
+    public function test_completion_by_unknown_payment_id_is_rejected_without_lookup(): void
+    {
+        $this->migratePackageTables();
+        $this->gatewayMock()->expects($this->never())->method('lookup');
+
+        $this->expectException(PaymentNotFoundException::class);
+        $this->app->make(PaymentOperations::class)->completeByPaymentId('unknown-payment-id');
     }
 
     public function test_non_pending_payment_is_returned_without_a_gateway_request(): void
@@ -62,7 +118,7 @@ class PaymentCompletionTest extends TestCase
         $billable = $this->billable(101);
         $payment = $billable->preparePayment(100, 'Order A');
         $paidAt = now()->subMinute();
-        $payment->forceFill(['status' => 'PAID', 'paid_at' => $paidAt])->save();
+        $payment->forceFill(['status' => 'PAID', 'paid_at' => $paidAt, 'paid_amount' => 100])->save();
         $payment->refresh();
         $this->assertNotNull($payment->paid_at);
         $paidAt = $payment->paid_at;
@@ -488,7 +544,7 @@ class PaymentCompletionTest extends TestCase
 
         $this->assertSame('PAID', $payment->status);
         $this->assertSame(0, $payment->cancelled_amount);
-        $this->assertNull($payment->paid_amount);
+        $this->assertSame($payment->amount, $payment->paid_amount);
         $this->assertNotNull($payment->paid_at);
     }
 

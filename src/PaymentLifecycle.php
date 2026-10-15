@@ -24,7 +24,7 @@ class PaymentLifecycle
      * @param  Payment  $payment  확정할 PENDING 또는 EXPIRED 결제 레코드
      * @param  GatewayPayment  $gatewayPayment  PortOne 조회 결과
      * @param  Carbon  $paidAt  paid_at에 기록할 시각
-     * @return array{status: string, paid_at: Carbon} 저장할 확정 값
+     * @return array{status: string, paid_at: Carbon, paid_amount: int} 저장할 확정 값
      *
      * @throws PaymentNotPaidException PortOne 상태가 PAID가 아닐 때
      * @throws AmountMismatchException 실결제액을 알 수 없을 때(실결제액이 다르면 호출 전에 isAmountMismatch()로 걸러진다)
@@ -42,6 +42,7 @@ class PaymentLifecycle
         return [
             'status' => 'PAID',
             'paid_at' => $paidAt,
+            'paid_amount' => $gatewayPayment->totalAmount,
         ];
     }
 
@@ -95,7 +96,7 @@ class PaymentLifecycle
      * @param  Payment  $payment  확인할 PENDING 결제 레코드
      * @param  GatewayPayment  $gatewayPayment  만료 확인용 PortOne 조회 결과
      * @param  Carbon  $paidAt  PAID일 때 paid_at에 기록할 시각
-     * @return array{status: string, paid_at: Carbon}|array{status: string}|null 저장할 값, 변경이 없으면 null
+     * @return array{status: string, paid_at: Carbon, paid_amount: int}|array{status: string}|null 저장할 값, 변경이 없으면 null
      */
     public function expire(Payment $payment, GatewayPayment $gatewayPayment, Carbon $paidAt): ?array
     {
@@ -107,6 +108,7 @@ class PaymentLifecycle
             return [
                 'status' => 'PAID',
                 'paid_at' => $paidAt,
+                'paid_amount' => $gatewayPayment->totalAmount,
             ];
         }
 

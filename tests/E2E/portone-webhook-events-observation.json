@@ -1,0 +1,40 @@
+{
+	"recordedAt": "2026-10-15T16:23:12+00:00",
+	"paid": {
+		"event": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentPaid",
+			"paymentId": "b2c8a016-cc5c-4be7-a00a-11fd01c3c1e0",
+			"webhookId": "msg-01a1405f-d6c3-827d-0fb9-96d0e8c7e2e3",
+			"webhookType": "Transaction.Paid"
+		},
+		"body": "{\"type\":\"Transaction.Paid\",\"timestamp\":\"2026-10-15T16:23:04Z\",\"data\":{\"transactionId\":\"01a1405e-3b3b-08dd-60e7-aae7e8107b69\",\"paymentId\":\"b2c8a016-cc5c-4be7-a00a-11fd01c3c1e0\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\"}}"
+	},
+	"partialCancelled": {
+		"event": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentPartiallyCancelled",
+			"paymentId": "b2c8a016-cc5c-4be7-a00a-11fd01c3c1e0",
+			"webhookId": "msg-01a1405f-f0fd-4e34-1eec-84e2243edd1e",
+			"webhookType": "Transaction.PartialCancelled"
+		},
+		"body": "{\"type\":\"Transaction.PartialCancelled\",\"timestamp\":\"2026-10-15T16:23:11.837011974Z\",\"data\":{\"transactionId\":\"01a1405e-3b3b-08dd-60e7-aae7e8107b69\",\"paymentId\":\"b2c8a016-cc5c-4be7-a00a-11fd01c3c1e0\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\",\"cancellationId\":\"01a1405f-f017-d191-80d2-75b44d3199c5\"}}"
+	},
+	"cancelled": {
+		"event": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentCancelled",
+			"paymentId": "b2c8a016-cc5c-4be7-a00a-11fd01c3c1e0",
+			"webhookId": "msg-01a1405f-f325-87bb-59e3-ad4951913d48",
+			"webhookType": "Transaction.Cancelled"
+		},
+		"body": "{\"type\":\"Transaction.Cancelled\",\"timestamp\":\"2026-10-15T16:23:12.391733778Z\",\"data\":{\"transactionId\":\"01a1405e-3b3b-08dd-60e7-aae7e8107b69\",\"paymentId\":\"b2c8a016-cc5c-4be7-a00a-11fd01c3c1e0\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\",\"cancellationId\":\"01a1405f-f239-27da-e6f8-444940445bdb\"}}"
+	},
+	"failed": {
+		"event": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentFailed",
+			"paymentId": "e2fe5424-b99a-4c1c-bedc-f1491292b97c",
+			"webhookId": "msg-01a1405f-ef00-7246-3b95-49bd78479d0c",
+			"webhookType": "Transaction.Failed"
+		},
+		"body": "{\"type\":\"Transaction.Failed\",\"timestamp\":\"2026-10-15T16:23:11.326685140Z\",\"data\":{\"transactionId\":\"01a1405f-d8c0-aa84-9f56-3a82d394bcff\",\"paymentId\":\"e2fe5424-b99a-4c1c-bedc-f1491292b97c\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\"}}"
+	},
+	"secretsRecorded": false
+}

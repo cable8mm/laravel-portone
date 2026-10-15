@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Console\ExpirePendingPaymentsCommand;
+use Cable8mm\LaravelPortone\Console\ShowPaymentCommand;
 use Cable8mm\LaravelPortone\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -39,17 +40,18 @@ class PortOneServiceProvider extends ServiceProvider
         )->name('portone.webhook');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExpirePendingPaymentsCommand::class]);
+            $this->commands([ExpirePendingPaymentsCommand::class, ShowPaymentCommand::class]);
 
             $this->publishes([
                 __DIR__.'/../config/portone.php' => $this->app->configPath('portone.php'),
             ], 'portone-config');
 
-            $this->publishesMigrations([
-                __DIR__.'/../database/migrations/2026_10_13_000000_create_portone_customers_table.php' => $this->app->databasePath('migrations/2026_10_13_000000_create_portone_customers_table.php'),
-                __DIR__.'/../database/migrations/2026_10_13_000001_create_portone_payments_table.php' => $this->app->databasePath('migrations/2026_10_13_000001_create_portone_payments_table.php'),
-                __DIR__.'/../database/migrations/2026_10_15_000000_add_paid_amount_to_portone_payments_table.php' => $this->app->databasePath('migrations/2026_10_15_000000_add_paid_amount_to_portone_payments_table.php'),
-            ], 'portone-migrations');
+            $this->publishesMigrations($this->unpublishedMigrations([
+                '2026_10_13_000000_create_portone_customers_table.php',
+                '2026_10_13_000001_create_portone_payments_table.php',
+                '2026_10_15_000000_add_paid_amount_to_portone_payments_table.php',
+                '2026_10_16_000000_backfill_paid_amount_on_portone_payments_table.php',
+            ]), 'portone-migrations');
 
             $this->publishes([
                 __DIR__.'/../stubs/resources/views/portone/checkout.blade.php' => $this->app->resourcePath('views/portone/checkout.blade.php'),
@@ -59,5 +61,31 @@ class PortOneServiceProvider extends ServiceProvider
                 __DIR__.'/../stubs/routes/portone.php' => $this->app->basePath('routes/portone.php'),
             ], 'portone-stubs');
         }
+    }
+
+    /**
+     * 앱에 아직 발행되지 않은 마이그레이션만 발행 대상으로 돌려준다.
+     *
+     * vendor:publish는 발행 시각으로 파일명 앞부분을 바꾸므로, 이미 발행된 마이그레이션을 원래 이름으로는
+     * 찾지 못해 다시 복사한다. 날짜 접두사를 뺀 이름이 앱의 migrations 디렉터리에 있으면 건너뛴다.
+     *
+     * @param  list<string>  $files  패키지 마이그레이션 파일명
+     * @return array<string, string> 원본 경로 => 앱 경로
+     */
+    private function unpublishedMigrations(array $files): array
+    {
+        $paths = [];
+
+        foreach ($files as $file) {
+            $name = substr($file, strlen('2026_10_13_000000_'));
+
+            if ((glob($this->app->databasePath('migrations/*_'.$name)) ?: []) !== []) {
+                continue;
+            }
+
+            $paths[__DIR__.'/../database/migrations/'.$file] = $this->app->databasePath('migrations/'.$file);
+        }
+
+        return $paths;
     }
 }

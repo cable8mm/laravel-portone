@@ -15,11 +15,11 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 ## 주요 기능
 
 - `Billable` 트레이트로 어떤 모델에도 결제 기능 추가
-- 결제 사전 생성 (`PENDING`), 브라우저 결제 후 검증·확정 (`PAID`)
+- 결제 사전 생성 (`PENDING`), 브라우저 결제 후 검증·확정 (`PAID`), 웹훅용 결제 ID만으로 확정
 - 실결제액이 준비 금액과 다르면 PortOne 결제를 자동 전액 취소 (`AMOUNT_MISMATCH_CANCELLED`)
 - 전액 / 부분 환불 (`PARTIALLY_CANCELLED` / `CANCELLED`)
 - 모델별 결제 내역 조회
-- 포트원 웹훅을 Laravel 이벤트(`WebhookReceived`)로 수신
+- 포트원 웹훅을 Laravel 이벤트로 수신 (`WebhookReceived`, 종류별 `PaymentPaid`·`PaymentCancelled`·`PaymentPartiallyCancelled`·`PaymentFailed`)
 - 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고, 보관 기간 뒤 정리
 - 수정 가능한 체크아웃 출발 파일(뷰·스크립트·컨트롤러·라우트) 발행
 
@@ -83,8 +83,58 @@ php artisan migrate
 - `portone_customers`: Billable 모델별 `customer_id` 1건 저장
 - `portone_payments`: 결제 기록 (`payment_id` 전역 유니크)
 
-v0.3.0부터 마이그레이션이 하나 늘었습니다(`add_paid_amount_to_portone_payments_table`). 이미 설치한 앱은
-`vendor:publish --tag=portone-migrations` 후 `php artisan migrate`를 다시 실행하세요.
+이미 설치한 앱을 새 버전으로 올릴 때는 [업그레이드](#업그레이드)를 보세요.
+
+## 업그레이드
+
+### 마이그레이션
+
+새 버전에서 마이그레이션이 늘었으면 같은 명령을 다시 실행합니다.
+
+```bash
+php artisan vendor:publish --tag=portone-migrations
+php artisan migrate
+```
+
+v0.4.0부터 `vendor:publish`는 **앱의 `database/migrations`에 이미 있는 마이그레이션을 건너뜁니다.**
+Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므로, 날짜를 뺀 이름(예: `create_portone_payments_table.php`)으로
+비교합니다. 새 마이그레이션만 복사되므로 그대로 `migrate`하면 됩니다.
+
+> **v0.3.0에서 올리는 경우:** v0.3.0의 `vendor:publish`는 이미 있는 `create_portone_customers_table`·`create_portone_payments_table`을
+> 새 날짜로 **다시 복사**했습니다. 그 상태로 `migrate`하다 실패했다면, 새로 복사된 중복 파일(날짜만 다르고 이름이 같은 파일 중
+> 아직 실행되지 않은 것)을 지운 뒤 위 명령을 다시 실행하세요. `php artisan migrate:status`에서 `Pending`인 것이 중복본입니다.
+
+| 버전   | 추가된 마이그레이션                              | 내용                                                                                           |
+| ------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| v0.3.0 | `add_paid_amount_to_portone_payments_table`      | `paid_amount` 컬럼 추가                                                                        |
+| v0.4.0 | `backfill_paid_amount_on_portone_payments_table` | 이미 결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 레코드의 `paid_amount`를 `amount`로 채움 |
+
+### 버전별로 추가된 설정 키
+
+이미 발행한 `config/portone.php`에는 새 키가 없습니다. 기본값이 있어 그대로도 동작하지만, 값을 바꾸려면 아래 줄을
+`config/portone.php`에 추가하거나 환경 변수만 설정하세요.
+
+| 버전   | 설정 키                         | 환경 변수                               | 기본값                         |
+| ------ | ------------------------------- | --------------------------------------- | ------------------------------ |
+| v0.3.0 | `amount_mismatch_cancel_reason` | `PORTONE_AMOUNT_MISMATCH_CANCEL_REASON` | `결제 금액 불일치로 자동 취소` |
+
+```php
+// config/portone.php (v0.3.0에서 추가)
+'amount_mismatch_cancel_reason' => env('PORTONE_AMOUNT_MISMATCH_CANCEL_REASON') ?: '결제 금액 불일치로 자동 취소',
+```
+
+### 버전별 동작 변경
+
+앱 코드에 영향이 있을 수 있는 변경입니다.
+
+- **v0.4.0**
+  - `paid_amount` 의미 변경: 금액 불일치 때만이 아니라 **PAID로 확정하는 모든 경우**에 PortOne이 알려 준 실결제액을 저장합니다.
+    `PENDING`·`EXPIRED`만 `null`입니다. `paid_amount !== null`을 "금액 불일치"로 판단하던 코드는 `status`로 바꾸세요.
+  - 새 이벤트: 거래 웹훅이면 `WebhookReceived` 다음에 `PaymentPaid`·`PaymentCancelled`·`PaymentPartiallyCancelled`·`PaymentFailed`
+    중 하나가 추가로 발송됩니다. `WebhookReceived`는 그대로입니다. 두 이벤트를 모두 들으면 같은 웹훅을 두 번 처리하지 않게 하세요.
+  - 새 공개 API: `PaymentOperations::completeByPaymentId()`, `PortOneGateway::paymentResponse()`, `php artisan portone:payment`.
+- **v0.3.0**
+  - 새 상태값 `AMOUNT_MISMATCH_CANCELLED`·`AMOUNT_MISMATCH`. 금액 불일치 결제는 PortOne에서 자동 전액 취소됩니다.
 
 ## 빠른 시작
 
@@ -268,39 +318,51 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 
 동작 요약:
 
-- 서명 유효 → `WebhookReceived` 1건 발송 + `200` 빈 응답
+- 서명 유효 → `WebhookReceived` 1건 발송 (+ 거래 웹훅이면 아래 결제 이벤트 1건) + `200` 빈 응답
 - 서명 무효·헤더 누락·타임스탬프 범위 초과 → `400`, 이벤트 없음
 - `PORTONE_WEBHOOK_SECRET` 미설정 → `500`, 이벤트 없음
 - 웹훅은 고객·결제 레코드를 읽거나 쓰지 않습니다
 
-결제 레코드에 반영하는 것은 앱이 정합니다. 예를 들어 결제 완료 웹훅으로 결제를 확정하려면
-리스너에서 `completePayment()`를 호출합니다. `completePayment()`는 PortOne에 다시 조회해
-검증하므로 웹훅 내용만 믿고 상태를 바꾸지 않습니다. 오래 걸릴 수 있으니 큐 잡으로 처리하세요.
+### 결제 이벤트
+
+서명 검증이 끝난 거래 웹훅은 `WebhookReceived` 다음에 종류별 이벤트로도 발송됩니다. `type`을 직접 거를 필요가 없습니다.
+
+| PortOne 웹훅 `type`            | 이벤트                      |
+| ------------------------------ | --------------------------- |
+| `Transaction.Paid`             | `PaymentPaid`               |
+| `Transaction.Cancelled`        | `PaymentCancelled`          |
+| `Transaction.PartialCancelled` | `PaymentPartiallyCancelled` |
+| `Transaction.Failed`           | `PaymentFailed`             |
+
+그 밖의 종류(`Transaction.Ready`·`VirtualAccountIssued`·`PayPending`·`CancelPending`·`DisputeCreated`, `BillingKey.*`, 알 수 없는 종류)는
+`WebhookReceived`로만 받습니다. 각 이벤트(`Cable8mm\LaravelPortone\Events\*`)에는 `paymentId`, 원본 `webhook`(`WebhookTransaction`),
+`webhookId`가 들어 있습니다.
+
+### 웹훅으로 결제 확정
+
+결제 레코드에 반영하는 것은 앱이 정합니다. 결제 완료 웹훅으로 결제를 확정하려면 `PaymentPaid`를 듣고
+`PaymentOperations::completeByPaymentId()`를 부르세요. 결제 ID만으로 소유 모델(`billable_type`·`billable_id`)을 찾아
+`completePayment()`와 같은 규칙(잠금, 이미 확정된 결제는 그대로 반환, 금액 불일치 자동 취소)으로 확정합니다. 결제가 없으면
+`PaymentNotFoundException`입니다. PortOne에 다시 조회해 검증하므로 웹훅 내용만 믿고 상태를 바꾸지 않습니다.
+PortOne을 호출하니 큐 잡으로 처리하세요.
 
 ```php
-// 리스너: 결제 완료 웹훅이면 큐 잡을 넣는다
-use Cable8mm\LaravelPortone\Events\WebhookReceived;
-use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
+use Cable8mm\LaravelPortone\Events\PaymentPaid;
+use Cable8mm\LaravelPortone\PaymentOperations;
 
-Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
-    if ($event->webhook instanceof WebhookTransaction && $event->webhook->type === 'Transaction.Paid') {
-        CompletePaymentFromWebhook::dispatch($event->webhook->data->paymentId);
-    }
+Event::listen(PaymentPaid::class, function (PaymentPaid $event) {
+    CompletePaymentFromWebhook::dispatch($event->paymentId);
 });
 
-// 큐 잡의 handle(): 결제를 소유한 Billable 모델로 확정한다 (PENDING·EXPIRED → PAID)
-use Cable8mm\LaravelPortone\Models\Payment;
-use Illuminate\Database\Eloquent\Model;
-
-$payment = Payment::where('payment_id', $this->paymentId)->first();
-$billable = $payment
-    ? Model::getActualClassNameForMorph($payment->billable_type)::find($payment->billable_id)
-    : null;
-$billable?->completePayment($this->paymentId);
+// 큐 잡의 handle()
+public function handle(PaymentOperations $payments): void
+{
+    $payments->completeByPaymentId($this->paymentId); // PENDING·EXPIRED → PAID
+}
 ```
 
-전체 예시는 워크벤치의 `workbench/app/Listeners/QueuePaymentCompletion.php`와
-`workbench/app/Jobs/CompletePaymentFromWebhook.php`입니다.
+워크벤치 예시(`workbench/app/Listeners/QueuePaymentCompletion.php`, `workbench/app/Jobs/CompletePaymentFromWebhook.php`)는
+v0.4.0 이전 방식(`WebhookReceived`에서 `type` 확인, Billable 모델을 찾아 `completePayment()` 호출)을 보여 줍니다. 그 방식도 그대로 동작합니다.
 
 ## 결제 상태
 
@@ -313,6 +375,39 @@ $billable?->completePayment($this->paymentId);
 - `EXPIRED`는 환불할 수 없습니다 (`InvalidPaymentStatusException`)
 - 금액 불일치: `PENDING`·`EXPIRED` → `AMOUNT_MISMATCH_CANCELLED`(자동 취소 성공) 또는 `AMOUNT_MISMATCH`(자동 취소 실패).
   두 상태는 최종 상태이며 환불할 수 없습니다
+
+`paid_amount`는 **PortOne이 알려 준 실결제액**입니다. PAID로 확정할 때와 금액 불일치 때 저장하므로, 상태와 상관없이
+`paid_amount` 하나로 실결제액을 볼 수 있습니다. `PENDING`·`EXPIRED`처럼 PortOne이 아직 실결제액을 알려 주지 않은 결제만 `null`입니다.
+환불해도 `paid_amount`는 바뀌지 않고, 환불액은 `cancelled_amount`에 쌓입니다.
+
+## PortOne 원본 결제 응답 보기
+
+자동 테스트에 쓸 실제 PortOne 응답을 기록하거나 결제를 들여다볼 때 씁니다.
+
+```bash
+php artisan portone:payment {paymentId}        # 개인정보·카드·계좌 정보를 가린 JSON
+php artisan portone:payment {paymentId} --raw  # 가리지 않은 원본 JSON
+```
+
+기본 출력은 다음 키의 값을 깊이와 상관없이 `[REDACTED]`로 바꿉니다. 키는 남겨 두므로 응답 구조는 실제와 같습니다.
+
+- 고객 개인정보: `name`, `birthYear`, `birthMonth`, `birthDay`, `gender`, `email`, `phoneNumber`, `address`, `zipcode`, `customerIdentityNumber`
+- 카드 식별 정보: `number`, `bin`, `approvalNumber`
+- 계좌 식별 정보: `accountNumber`, `remitteeName`, `remitterName`, `depositorName`
+- PG 원본 응답: `pgResponse` (JSON 문자열이라 통째로 가림. 카드번호·승인번호 포함)
+- 접속·전달 기록: `ipAddress`, `userAgent`, `receiptUrl`, `webhooks`(웹훅 전달 기록, 서명 헤더 포함)
+
+`name`은 키 이름으로 가리므로 카드사 상품명처럼 개인정보가 아닌 `name`도 가려집니다. `--raw` 출력은 기록·공유하지 마세요.
+
+코드에서는 `PortOneGateway::paymentResponse($paymentId)`가 원본 배열을 돌려주고, `PaymentResponseRedactor::redact()`로 같은 방식으로 가릴 수 있습니다.
+
+```php
+use Cable8mm\LaravelPortone\PaymentResponseRedactor;
+use Cable8mm\LaravelPortone\PortOneGateway;
+
+$response = app(PortOneGateway::class)->paymentResponse($paymentId);
+$safe = app(PaymentResponseRedactor::class)->redact($response);
+```
 
 ## 결제 금액 불일치 자동 취소
 

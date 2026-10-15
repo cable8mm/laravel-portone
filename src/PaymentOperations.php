@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
+use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Models\Payment;
+use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -80,11 +82,43 @@ class PaymentOperations
      */
     public function complete(Model $billable, string $paymentId): Payment
     {
+        return $this->completeLocked(
+            fn (Closure $operation): Payment => $this->payments->withExclusiveAccess($billable, $paymentId, $operation),
+        );
+    }
+
+    /**
+     * 결제 ID만으로 결제를 확정한다. 웹훅처럼 소유 Billable을 모를 때 쓴다.
+     *
+     * portone_payments의 billable_type·billable_id가 가리키는 모델의 결제로 보고,
+     * complete()와 같은 잠금·멱등성·예외 규칙을 따른다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return Payment 확정된(또는 기존 상태 그대로인) 결제 레코드
+     *
+     * @throws PaymentNotFoundException 해당 결제 레코드가 없을 때
+     * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
+     */
+    public function completeByPaymentId(string $paymentId): Payment
+    {
+        return $this->completeLocked(
+            fn (Closure $operation): Payment => $this->payments->withExclusiveAccessByPaymentId($paymentId, $operation),
+        );
+    }
+
+    /**
+     * 잠금을 잡은 레코드에 확정 규칙을 적용한다. complete()와 completeByPaymentId()가 공유한다.
+     *
+     * @param  Closure(Closure(Payment): Payment): Payment  $lock  레코드를 잠그고 연산을 실행하는 함수
+     * @return Payment 확정된(또는 기존 상태 그대로인) 결제 레코드
+     *
+     * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
+     */
+    private function completeLocked(Closure $lock): Payment
+    {
         $mismatch = null;
 
-        $payment = $this->payments->withExclusiveAccess(
-            $billable,
-            $paymentId,
+        $payment = $lock(
             function (Payment $payment) use (&$mismatch): Payment {
                 if (in_array($payment->status, ['AMOUNT_MISMATCH_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
                     $mismatch = AmountMismatchException::fromPayment($payment);
@@ -233,7 +267,7 @@ class PaymentOperations
      * 미리 계산된 결과를 저장한다. 실패하면 같은 값으로 최대 3회까지 시도한다.
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
+     * @param  array{status: string, paid_at: Carbon, paid_amount: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
      * @return Payment 갱신된 결제 레코드
      */
     private function write(Payment $payment, array $outcome): Payment
