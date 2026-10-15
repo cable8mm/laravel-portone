@@ -12,7 +12,7 @@ use Cable8mm\LaravelPortone\Models\Payment;
 use Illuminate\Support\Carbon;
 
 /**
- * 결제 확정·환불·만료의 상태 전이를 순수하게 계산하는 클래스.
+ * 결제 확정·환불·만료·취소 동기화의 상태 전이를 순수하게 계산하는 클래스.
  *
  * DB도 PortOne도 건드리지 않으며, 저장할 절대값만 반환한다.
  */
@@ -110,6 +110,50 @@ class PaymentLifecycle
                 'paid_at' => $paidAt,
                 'paid_amount' => $gatewayPayment->totalAmount,
             ];
+        }
+
+        return null;
+    }
+
+    /**
+     * PortOne 취소 상태를 로컬 레코드에 맞추는 결과를 계산한다(취소 동기화).
+     *
+     * PAID·PARTIALLY_CANCELLED 레코드는 PortOne CANCELLED(취소 총액 = amount)면 CANCELLED,
+     * PARTIAL_CANCELLED(0 < 취소 총액 < amount, 기존 cancelled_amount 이상)면 PARTIALLY_CANCELLED가 된다.
+     * AMOUNT_MISMATCH 레코드는 PortOne CANCELLED(취소 총액 = paid_amount)면 AMOUNT_MISMATCH_CANCELLED가 된다.
+     * 그 밖의 조합(PortOne이 아직 PAID, 취소 총액 없음 등)은 변경 없음(null)이다.
+     *
+     * @param  Payment  $payment  확인할 결제 레코드
+     * @param  GatewayPayment  $gatewayPayment  PortOne 조회 결과
+     * @return array{status: string, cancelled_amount: int}|null 저장할 값, 변경이 없으면 null
+     */
+    public function syncCancellation(Payment $payment, GatewayPayment $gatewayPayment): ?array
+    {
+        $cancelledAmount = $gatewayPayment->cancelledAmount;
+
+        if ($cancelledAmount === null) {
+            return null;
+        }
+
+        if (in_array($payment->status, ['PAID', 'PARTIALLY_CANCELLED'], true)) {
+            if ($gatewayPayment->status === 'CANCELLED' && $cancelledAmount === $payment->amount) {
+                return ['status' => 'CANCELLED', 'cancelled_amount' => $cancelledAmount];
+            }
+
+            if ($gatewayPayment->status === 'PARTIAL_CANCELLED'
+                && $cancelledAmount > 0
+                && $cancelledAmount < $payment->amount
+                && $cancelledAmount >= $payment->cancelled_amount) {
+                return ['status' => 'PARTIALLY_CANCELLED', 'cancelled_amount' => $cancelledAmount];
+            }
+
+            return null;
+        }
+
+        if ($payment->status === 'AMOUNT_MISMATCH'
+            && $gatewayPayment->status === 'CANCELLED'
+            && $cancelledAmount === $payment->paid_amount) {
+            return ['status' => 'AMOUNT_MISMATCH_CANCELLED', 'cancelled_amount' => $cancelledAmount];
         }
 
         return null;

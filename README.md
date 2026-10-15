@@ -17,10 +17,11 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 - `Billable` 트레이트로 어떤 모델에도 결제 기능 추가
 - 결제 사전 생성 (`PENDING`), 브라우저 결제 후 검증·확정 (`PAID`), 웹훅용 결제 ID만으로 확정
 - 실결제액이 준비 금액과 다르면 PortOne 결제를 자동 전액 취소 (`AMOUNT_MISMATCH_CANCELLED`)
-- 전액 / 부분 환불 (`PARTIALLY_CANCELLED` / `CANCELLED`)
+- 전액 / 부분 환불 (`PARTIALLY_CANCELLED` / `CANCELLED`), 콘솔 환불은 취소 웹훅·`syncByPaymentId()`로 레코드에 반영
 - 모델별 결제 내역 조회
 - 포트원 웹훅을 Laravel 이벤트로 수신 (`WebhookReceived`, 종류별 `PaymentPaid`·`PaymentCancelled`·`PaymentPartiallyCancelled`·`PaymentFailed`)
-- 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고, 보관 기간 뒤 정리
+- 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고 결과를 이벤트로 알림, 보관 기간 뒤 정리
+- 테스트용 가짜 게이트웨이(`FakePaymentGateway`)와 서명된 웹훅 도우미, 로컬 웹훅 재전송 명령(`portone:webhook-replay`)
 - 수정 가능한 체크아웃 출발 파일(뷰·스크립트·컨트롤러·라우트) 발행
 
 ## 요구 사항
@@ -127,6 +128,18 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
 
 앱 코드에 영향이 있을 수 있는 변경입니다.
 
+- **v0.5.0**
+  - **취소 웹훅 때 결제 레코드 갱신(동작 변경):** `Transaction.Cancelled`·`Transaction.PartialCancelled` 웹훅을 받으면 이벤트를 보내기 **전에**
+    PortOne에 결제를 조회해 `status`와 `cancelled_amount`를 맞춥니다(`CANCELLED`·`PARTIALLY_CANCELLED`, 콘솔에서 취소한 `AMOUNT_MISMATCH`는
+    `AMOUNT_MISMATCH_CANCELLED`). 이전에는 웹훅이 레코드를 바꾸지 않았습니다. 취소 웹훅을 받아 직접 레코드를 고치던 코드는 지우거나,
+    이미 맞춰진 레코드를 다시 고치지 않는지 확인하세요. 자세한 규칙은 [취소 웹훅과 결제 레코드 동기화](#취소-웹훅과-결제-레코드-동기화).
+  - 취소 웹훅을 처리하려면 **`PORTONE_API_SECRET`이 필요합니다.** 조회가 실패하면 웹훅 요청이 오류로 끝나고(이벤트 없음) PortOne이 다시 보냅니다.
+  - **새 이벤트:** 만료 확인 잡이 결과마다 `PaymentExpired`·`PaymentPaidOnExpiry`·`PaymentAmountMismatchedOnExpiry`를 보냅니다.
+    만료 결과를 따로 다시 훑던 스케줄은 이 이벤트로 바꿀 수 있습니다.
+  - 새 공개 API: `PaymentOperations::syncByPaymentId()`, `GatewayPayment::$cancelledAmount`, 테스트용 `Testing\FakePaymentGateway`·`Testing\InteractsWithPortOneWebhooks`,
+    로컬 확인용 `php artisan portone:webhook-replay`.
+  - 의존성: `cable8mm/portone-php` `^0.4.1`(웹훅 서명기 `WebhookSigner`), `illuminate/http`가 추가로 필요합니다. `composer update`로 함께 올라갑니다.
+  - `PaymentGateway`를 직접 구현한 클래스는 바꿀 필요가 없습니다. 다만 `cancelledAmount`를 채우지 않으면(`null`) 취소 동기화가 레코드를 바꾸지 않습니다.
 - **v0.4.0**
   - `paid_amount` 의미 변경: 금액 불일치 때만이 아니라 **PAID로 확정하는 모든 경우**에 PortOne이 알려 준 실결제액을 저장합니다.
     `PENDING`·`EXPIRED`만 `null`입니다. `paid_amount !== null`을 "금액 불일치"로 판단하던 코드는 `status`로 바꾸세요.
@@ -321,7 +334,7 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 - 서명 유효 → `WebhookReceived` 1건 발송 (+ 거래 웹훅이면 아래 결제 이벤트 1건) + `200` 빈 응답
 - 서명 무효·헤더 누락·타임스탬프 범위 초과 → `400`, 이벤트 없음
 - `PORTONE_WEBHOOK_SECRET` 미설정 → `500`, 이벤트 없음
-- 웹훅은 고객·결제 레코드를 읽거나 쓰지 않습니다
+- 취소 웹훅(`Transaction.Cancelled`·`Transaction.PartialCancelled`)만 이벤트 전에 결제 레코드를 PortOne과 맞춥니다([아래](#취소-웹훅과-결제-레코드-동기화)). 그 밖의 웹훅은 고객·결제 레코드를 읽거나 쓰지 않습니다
 
 ### 결제 이벤트
 
@@ -337,6 +350,32 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 그 밖의 종류(`Transaction.Ready`·`VirtualAccountIssued`·`PayPending`·`CancelPending`·`DisputeCreated`, `BillingKey.*`, 알 수 없는 종류)는
 `WebhookReceived`로만 받습니다. 각 이벤트(`Cable8mm\LaravelPortone\Events\*`)에는 `paymentId`, 원본 `webhook`(`WebhookTransaction`),
 `webhookId`가 들어 있습니다.
+
+### 취소 웹훅과 결제 레코드 동기화
+
+PortOne 콘솔이나 다른 시스템에서 환불하면 `Transaction.Cancelled`·`Transaction.PartialCancelled` 웹훅이 옵니다. 패키지는 서명을 검증한 뒤
+**이벤트를 보내기 전에** PortOne에 결제를 다시 조회해 레코드를 맞춥니다. 그래서 `WebhookReceived`·`PaymentCancelled`·`PaymentPartiallyCancelled`
+리스너는 이미 갱신된 레코드를 읽습니다. 웹훅 내용이 아니라 PortOne 조회 결과(`amount.cancelled`)를 기준으로 합니다.
+
+| 로컬 상태                    | PortOne 조회 결과                             | 결과                                                  |
+| ---------------------------- | --------------------------------------------- | ----------------------------------------------------- |
+| `PAID`·`PARTIALLY_CANCELLED` | `CANCELLED`, 취소 총액 = `amount`             | `CANCELLED`, `cancelled_amount` = 취소 총액           |
+| `PAID`·`PARTIALLY_CANCELLED` | `PARTIAL_CANCELLED`, 0 < 취소 총액 < `amount` | `PARTIALLY_CANCELLED`, `cancelled_amount` = 취소 총액 |
+| `AMOUNT_MISMATCH`            | `CANCELLED`, 취소 총액 = `paid_amount`        | `AMOUNT_MISMATCH_CANCELLED`                           |
+| 그 밖                        | 그 밖(아직 `PAID` 등)                         | 그대로. 이벤트는 평소처럼 보냄                        |
+
+- `refund()`와 같은 잠금을 쓰고 절대값으로 저장하므로 같은 웹훅이 여러 번 와도 결과가 같습니다.
+- `PENDING`·`EXPIRED`·`CANCELLED` 레코드나 이 패키지가 만들지 않은 결제는 PortOne을 조회하지 않고 이벤트만 보냅니다.
+- PortOne 조회가 실패하면(설정 누락 포함) 이벤트 없이 웹훅 요청이 오류로 끝나 PortOne이 다시 보냅니다. 레코드는 그대로입니다.
+- `amount`·`paid_at`·`paid_amount`는 바꾸지 않습니다.
+
+웹훅 없이 같은 동기화를 하려면 `syncByPaymentId()`를 부르세요. 결제 ID만으로 레코드를 찾으며, 없으면 `PaymentNotFoundException`입니다.
+
+```php
+use Cable8mm\LaravelPortone\PaymentOperations;
+
+$payment = app(PaymentOperations::class)->syncByPaymentId($paymentId);
+```
 
 ### 웹훅으로 결제 확정
 
@@ -374,7 +413,9 @@ v0.4.0 이전 방식(`WebhookReceived`에서 `type` 확인, Billable 모델을 �
 - 버려진 결제: `PENDING` → `EXPIRED`. 만료 뒤에 결제되면 `completePayment()`로 `EXPIRED` → `PAID` 복구
 - `EXPIRED`는 환불할 수 없습니다 (`InvalidPaymentStatusException`)
 - 금액 불일치: `PENDING`·`EXPIRED` → `AMOUNT_MISMATCH_CANCELLED`(자동 취소 성공) 또는 `AMOUNT_MISMATCH`(자동 취소 실패).
-  두 상태는 최종 상태이며 환불할 수 없습니다
+  두 상태는 환불할 수 없습니다. `AMOUNT_MISMATCH`를 PortOne 콘솔에서 취소하면 [취소 동기화](#취소-웹훅과-결제-레코드-동기화)가
+  `AMOUNT_MISMATCH_CANCELLED`로 바꿉니다
+- PortOne 콘솔 등에서 환불한 결제는 취소 웹훅이나 `syncByPaymentId()`로 `PARTIALLY_CANCELLED`·`CANCELLED`가 됩니다
 
 `paid_amount`는 **PortOne이 알려 준 실결제액**입니다. PAID로 확정할 때와 금액 불일치 때 저장하므로, 상태와 상관없이
 `paid_amount` 하나로 실결제액을 볼 수 있습니다. `PENDING`·`EXPIRED`처럼 PortOne이 아직 실결제액을 알려 주지 않은 결제만 `null`입니다.
@@ -472,6 +513,26 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
 - `EXPIRED`는 "확인 시점에 결제되지 않음"입니다. 같은 결제 ID로 나중에 결제될 수 있으므로
   (실제 관측), `completePayment()`를 부르면 `PAID`로 복구됩니다. 웹훅으로 자동 복구하려면
   [웹훅](#웹훅)의 리스너 예시를 참고하세요.
+- 잡은 레코드를 바꾼 뒤(커밋 뒤) 결과를 이벤트로 알립니다. 바꾼 것이 없으면 보내지 않습니다.
+
+  | 결과                                | 이벤트                                             |
+  | ----------------------------------- | -------------------------------------------------- |
+  | 미결제 확정 → `EXPIRED`             | `PaymentExpired`                                   |
+  | 뒤늦은 결제(금액 일치) → `PAID`     | `PaymentPaidOnExpiry`                              |
+  | 다른 금액으로 결제 → 자동 취소 규칙 | `PaymentAmountMismatchedOnExpiry` (`wasCancelled`) |
+
+  각 이벤트에는 `paymentId`, 갱신된 `payment`, 소유 모델 참조 `billableType`·`billableId`가 들어 있습니다. 자동 취소가 실패하면
+  (`wasCancelled` false, `AMOUNT_MISMATCH`) 이벤트를 보낸 다음 잡이 PortOne 예외로 실패합니다.
+
+  ```php
+  use Cable8mm\LaravelPortone\Events\PaymentExpired;
+
+  Event::listen(PaymentExpired::class, function (PaymentExpired $event) {
+      $order = Order::firstWhere('payment_id', $event->paymentId);
+      $order?->markAbandoned();
+  });
+  ```
+
 - `model:prune`은 `PORTONE_EXPIRED_RETENTION_DAYS`일이 지난 `EXPIRED` 결제만 지웁니다.
   결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 기록과 금액 불일치(`AMOUNT_MISMATCH_CANCELLED`·`AMOUNT_MISMATCH`) 기록은 절대 지우지 않습니다.
 - 웹 요청(예: 관리자 화면의 버튼)에서 만료 검사를 바로 돌리려면 `Artisan::queue('portone:expire-pending')`를
@@ -489,6 +550,66 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
 | `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락                                                      |
 | `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)                                                 |
 
+## 테스트 도우미
+
+앱의 테스트에서 PortOne 대신 쓸 가짜 게이트웨이입니다. PortOne에 요청하지 않고, 지정한 조회 응답을 돌려주며 호출을 기록합니다.
+
+```php
+use Cable8mm\LaravelPortone\Testing\FakePaymentGateway;
+
+$gateway = FakePaymentGateway::bind() // 컨테이너의 PaymentGateway로 바인딩
+    ->payment($paymentId, 'PAID', totalAmount: 10000, cancelledAmount: 0);
+
+$user->completePayment($paymentId);
+$user->refund($paymentId, '구매자 요청', 3000);
+
+$gateway->assertLookedUp($paymentId, times: 1);
+$gateway->assertCancelled($paymentId, fn (string $reason, ?int $amount) => $amount === 3000);
+$gateway->assertNothingCancelled(); // 취소 요청이 없어야 할 때
+```
+
+- `payment($id, $status, $totalAmount, $cancelledAmount)`: 결제 ID별 조회 응답. `$status`는 PortOne 값(`PAID`, `PARTIAL_CANCELLED`, `CANCELLED`, `READY`, `FAILED` 등)입니다.
+- 지정하지 않은 결제 ID는 PortOne이 모르는 결제로 봅니다. `lookup()`은 `PAYMENT_NOT_FOUND` 예외, 만료 확인 조회는 `found` false입니다.
+- `failLookup($id, $exception)`, `failCancel($id, $exception)`: 조회·취소 실패. 실패한 취소 요청도 기록됩니다.
+- `cancel()`은 기록만 하고 응답을 바꾸지 않습니다. 취소 뒤의 조회 결과가 필요하면 `payment()`로 다시 지정하세요.
+- 확인 메서드: `assertLookedUp($id, ?times)`, `assertNotLookedUp($id)`, `assertNothingLookedUp()`, `assertCancelled($id, ?callback)`,
+  `assertNotCancelled($id)`, `assertNothingCancelled()`. 기록은 `lookupCount(?id)`, `cancellations()`로 읽습니다.
+- PHPUnit이 필요하므로 테스트에서만 쓰세요.
+
+### 서명된 웹훅 보내기
+
+`InteractsWithPortOneWebhooks`를 테스트 케이스에 넣으면 설정된 `PORTONE_WEBHOOK_SECRET`으로 서명한 웹훅을 패키지 웹훅 경로로 보냅니다.
+서명은 `cable8mm/portone-php`의 `WebhookSigner`로 만들므로 실제 웹훅처럼 검증, 이벤트 발송, 취소 동기화를 모두 거칩니다.
+
+```php
+use Cable8mm\LaravelPortone\Testing\InteractsWithPortOneWebhooks;
+
+class RefundListenerTest extends TestCase
+{
+    use InteractsWithPortOneWebhooks;
+
+    public function test_cancelled_webhook(): void
+    {
+        $this->postPortOneWebhook('Transaction.Cancelled', $paymentId, ['cancellationId' => 'c-1'])->assertOk();
+    }
+}
+```
+
+본문의 `data`에는 결제 ID와 `PORTONE_STORE_ID`가 들어가고, 세 번째 인자가 같은 키를 덮어씁니다.
+
+### 로컬에서 웹훅 재전송
+
+공개 주소(ngrok 등) 없이 로컬 앱의 웹훅 흐름을 확인할 때 씁니다. 서명한 웹훅을 `APP_URL` 아래 웹훅 경로로 **HTTP 전송**하므로 앱이 떠 있어야 합니다.
+
+```bash
+php artisan portone:webhook-replay Transaction.Cancelled <paymentId>
+php artisan portone:webhook-replay Transaction.PartialCancelled <paymentId> --data='{"cancellationId":"c-1"}'
+```
+
+- `transactionId`는 PortOne 결제 조회로 가져오므로 `PORTONE_API_SECRET`이 필요합니다. `--data`의 JSON 객체는 `data`에 더해집니다.
+- 응답 상태를 출력하며, 2xx가 아니면 실패 코드로 끝납니다.
+- **운영(`production`) 환경에서는 `--force` 없이 실행되지 않습니다.**
+
 ## 실서비스 적용 전 확인 사항
 
 ### 검증된 범위
@@ -501,8 +622,11 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
 - 전액 취소, 여러 번 나눠 하는 부분 취소, PortOne이 거절한 취소
 - 금액 불일치 자동 취소: `completePayment()`와 만료 검사 모두 PortOne에서 `CANCELLED`로 바뀜
 - 웹훅 서명 검증과 `WebhookReceived` 발송 (ngrok 공개 URL)
+- 포트원 콘솔에서 한 부분 취소·전액 취소가 웹훅으로 결제 레코드에 반영됨(`PARTIALLY_CANCELLED` 300원 → `CANCELLED` 1,000원, 이벤트 전에 갱신)
+- `portone:webhook-replay`로 보낸 서명 웹훅이 앱의 검증을 통과하고 취소 동기화가 실행됨
 - 결제 대기 건 만료: 결제창을 연 적 없음 `PAYMENT_NOT_FOUND`, 결제창이 열려 있음 `READY`, 닫음 `FAILED`,
   같은 결제 ID로 나중에 결제됨 `PAID`
+- 만료 확인 결과 이벤트: 뒤늦은 결제 `PaymentPaidOnExpiry`, 창 닫기·결제창 미오픈 `PaymentExpired`
 
 **검증하지 않은 것**: 운영(live) 채널, KCP 외 PG, 카드 외 결제 수단(가상계좌·간편결제 등), 원화 외 통화.
 

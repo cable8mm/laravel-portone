@@ -11,6 +11,7 @@ use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
 use Cable8mm\LaravelPortone\Events\PaymentWebhookEvent;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
+use Cable8mm\PortonePhp\Webhook\WebhookSigner;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
@@ -22,7 +23,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
  *
  * Transaction.Paid and Transaction.Cancelled bodies are the live recordings in
  * tests/E2E/portone-webhook-observation.json; Transaction.PartialCancelled and Transaction.Failed
- * have the shape recorded in tests/E2E/portone-webhook-events-observation.json (T-028).
+ * have the shape recorded in tests/E2E/portone-webhook-events-observation.json (T-028). The recorded bodies are
+ * signed with the cable8mm/portone-php WebhookSigner (T-036).
  */
 class WebhookPaymentEventsTest extends TestCase
 {
@@ -45,6 +47,16 @@ class WebhookPaymentEventsTest extends TestCase
     protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('portone.webhook_secret', self::SECRET);
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Cancellation webhooks look for the Payment record before dispatching (T-034).
+        foreach (glob(dirname(__DIR__, 2).'/database/migrations/*.php') ?: [] as $migration) {
+            $this->artisan('migrate', ['--path' => $migration, '--realpath' => true, '--force' => true])->assertExitCode(0);
+        }
     }
 
     /**
@@ -135,15 +147,12 @@ class WebhookPaymentEventsTest extends TestCase
      */
     private function postWebhook(string $body): TestResponse
     {
-        $timestamp = (string) time();
-        $secret = base64_decode(self::SECRET, true);
-        $this->assertIsString($secret);
-        $signature = base64_encode(hash_hmac('sha256', 'webhook-test-id.'.$timestamp.'.'.$body, $secret, true));
+        $headers = (new WebhookSigner(self::SECRET))->headers($body, 'webhook-test-id');
 
         return $this->call('POST', '/portone/webhook', [], [], [], [
-            'HTTP_WEBHOOK_ID' => 'webhook-test-id',
-            'HTTP_WEBHOOK_SIGNATURE' => 'v1,'.$signature,
-            'HTTP_WEBHOOK_TIMESTAMP' => $timestamp,
+            'HTTP_WEBHOOK_ID' => $headers['webhook-id'],
+            'HTTP_WEBHOOK_SIGNATURE' => $headers['webhook-signature'],
+            'HTTP_WEBHOOK_TIMESTAMP' => $headers['webhook-timestamp'],
         ], $body);
     }
 }

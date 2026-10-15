@@ -7,7 +7,8 @@
 - The Package MUST NOT require laravel/framework.
 - Eloquent ORM and Laravel migrations: as provided by the illuminate/\* version in use.
 - illuminate/console and illuminate/queue: ^12.0 || ^13.0; required for the expiry command (EL-031) and the expiry job (EL-032).
-- cable8mm/portone-php: ^0.4
+- cable8mm/portone-php: ^0.4.1 (Webhook\WebhookSigner is required by EL-050 and EL-051)
+- illuminate/http: ^12.0 || ^13.0; required for the HTTP request of the webhook replay command (EL-051)
 - Composer: PSR-4 autoload, Laravel package discovery through composer.json extra.laravel.providers
 - orchestra/testbench: ^10.0 || ^11.0, including Workbench
 - PHPUnit: ^11.5 || ^12
@@ -130,6 +131,8 @@
 
 - Webhook verification MUST use the webhook verifier of cable8mm/portone-php.
 - Custom webhook signature verification MUST NOT be implemented.
+- Webhook signatures for tests and local replay (EL-050, EL-051) MUST be produced by the webhook signer of cable8mm/portone-php; custom signing MUST NOT be implemented.
+- The webhook replay command MUST refuse to run in the production environment unless --force is given.
 - Webhook verification MUST run on the raw request body before JSON decoding.
 - CSRF verification MUST be excluded for the webhook route only.
 - CSRF verification MUST NOT be excluded for any other route of the Package.

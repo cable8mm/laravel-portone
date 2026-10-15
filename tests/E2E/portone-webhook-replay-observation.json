@@ -1,0 +1,15 @@
+{
+	"recordedAt": "2026-10-15T18:03:52+00:00",
+	"paymentId": "12a73a29-1c72-423c-b8bf-a64d38eb60d8",
+	"webhookType": "Transaction.Cancelled",
+	"commandOutput": "POST <served app>/webhook -> HTTP 200",
+	"recordBefore": {
+		"status": "PAID",
+		"cancelledAmount": 0
+	},
+	"recordAfter": {
+		"status": "CANCELLED",
+		"cancelledAmount": 100
+	},
+	"secretsRecorded": false
+}

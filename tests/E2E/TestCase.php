@@ -256,4 +256,52 @@ abstract class TestCase extends DuskTestCase
             '--force' => true,
         ])->assertExitCode(0);
     }
+
+    /**
+     * Wait until the Workbench app records the typed event in the observation directory, and return it with the webhook body.
+     *
+     * @return array{event: array<string, mixed>, body: string}
+     */
+    protected function waitForPaymentEvent(string $observationDirectory, string $eventClass, string $paymentId): array
+    {
+        $deadline = time() + self::PAYER_TIMEOUT;
+
+        while (time() < $deadline) {
+            foreach ($this->readJsonLines($observationDirectory.'/payment-events.jsonl') as $event) {
+                if (($event['event'] ?? null) !== $eventClass || ($event['paymentId'] ?? null) !== $paymentId) {
+                    continue;
+                }
+
+                foreach ($this->readJsonLines($observationDirectory.'/requests.jsonl') as $request) {
+                    if (($request['headers']['webhook-id'] ?? null) === ($event['webhookId'] ?? null)) {
+                        self::assertSame(200, $request['response']['status'] ?? null);
+
+                        return ['event' => $event, 'body' => (string) ($request['body'] ?? '')];
+                    }
+                }
+            }
+
+            usleep(250_000);
+        }
+
+        throw new \RuntimeException("Timed out waiting for {$eventClass} for payment {$paymentId}.");
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function readJsonLines(string $path): array
+    {
+        if (! is_file($path)) {
+            return [];
+        }
+
+        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        self::assertIsArray($lines);
+
+        return array_map(
+            static fn (string $line): array => json_decode($line, true, 512, JSON_THROW_ON_ERROR),
+            $lines,
+        );
+    }
 }

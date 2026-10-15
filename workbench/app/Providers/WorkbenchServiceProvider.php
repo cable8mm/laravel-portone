@@ -93,11 +93,16 @@ class WorkbenchServiceProvider extends ServiceProvider
 
         foreach ([PaymentPaid::class, PaymentCancelled::class, PaymentPartiallyCancelled::class, PaymentFailed::class] as $paymentEvent) {
             Event::listen($paymentEvent, static function (PaymentWebhookEvent $event) use ($observationDirectory): void {
+                // The record as the listener sees it: cancellation webhooks sync it first (T-034).
+                $payment = Payment::query()->where('payment_id', $event->paymentId)->first();
+
                 self::appendJsonLine($observationDirectory.'/payment-events.jsonl', [
                     'event' => $event::class,
                     'paymentId' => $event->paymentId,
                     'webhookId' => $event->webhookId,
                     'webhookType' => $event->webhook->type,
+                    'recordStatus' => $payment?->status,
+                    'recordCancelledAmount' => $payment?->cancelled_amount,
                 ]);
             });
         }

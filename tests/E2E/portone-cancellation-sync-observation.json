@@ -1,0 +1,37 @@
+{
+	"recordedAt": "2026-10-15T18:10:05+00:00",
+	"paymentId": "f44e59bf-325c-455c-8701-bec2f84ee649",
+	"amount": 1000,
+	"partialCancelled": {
+		"event": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentPartiallyCancelled",
+			"paymentId": "f44e59bf-325c-455c-8701-bec2f84ee649",
+			"webhookId": "msg-01a140c1-93fe-319d-c13f-b15d1d662206",
+			"webhookType": "Transaction.PartialCancelled",
+			"recordStatus": "PARTIALLY_CANCELLED",
+			"recordCancelledAmount": 300
+		},
+		"body": "{\"type\":\"Transaction.PartialCancelled\",\"timestamp\":\"2026-10-15T18:09:50.554881179Z\",\"data\":{\"transactionId\":\"01a140bf-2ddc-1272-df62-997e98dc1daf\",\"paymentId\":\"f44e59bf-325c-455c-8701-bec2f84ee649\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\",\"cancellationId\":\"01a140c1-9318-5959-32a7-d2176608eb47\"}}"
+	},
+	"cancelled": {
+		"event": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentCancelled",
+			"paymentId": "f44e59bf-325c-455c-8701-bec2f84ee649",
+			"webhookId": "msg-01a140c1-cc0f-f3ac-1fc6-8d184e96b64a",
+			"webhookType": "Transaction.Cancelled",
+			"recordStatus": "CANCELLED",
+			"recordCancelledAmount": 1000
+		},
+		"body": "{\"type\":\"Transaction.Cancelled\",\"timestamp\":\"2026-10-15T18:10:04.906658573Z\",\"data\":{\"transactionId\":\"01a140bf-2ddc-1272-df62-997e98dc1daf\",\"paymentId\":\"f44e59bf-325c-455c-8701-bec2f84ee649\",\"storeId\":\"store-720c15ca-0a45-4811-9e40-c8321ca05e8e\",\"cancellationId\":\"01a140c1-cace-d93b-27f1-c5437a5cb196\"}}"
+	},
+	"lookupAfterCancellation": {
+		"status": "CANCELLED",
+		"totalAmount": 1000,
+		"cancelledAmount": 1000
+	},
+	"finalRecord": {
+		"status": "CANCELLED",
+		"cancelledAmount": 1000
+	},
+	"secretsRecorded": false
+}

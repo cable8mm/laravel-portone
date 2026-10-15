@@ -127,22 +127,4 @@ class PortOneWebhookTest extends TestCase
 
         throw new RuntimeException("Timed out waiting for live {$expectedType} webhook delivery.");
     }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function readJsonLines(string $path): array
-    {
-        if (! is_file($path)) {
-            return [];
-        }
-
-        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        self::assertIsArray($lines);
-
-        return array_map(
-            static fn (string $line): array => json_decode($line, true, 512, JSON_THROW_ON_ERROR),
-            $lines,
-        );
-    }
 }
