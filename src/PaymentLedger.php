@@ -77,6 +77,33 @@ class PaymentLedger
     }
 
     /**
+     * 결제 ID만으로 레코드를 잠그고 콜백을 실행한다. 레코드가 없으면 예외가 발생한다.
+     *
+     * 웹훅처럼 결제 ID만 아는 결제 완료(completeByPaymentId) 전용이다. 소유 Billable은 따지지 않는다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @param  Closure(Payment): Payment  $operation  잠금 안에서 실행할 연산
+     * @return Payment 콜백이 반환한 결제 레코드
+     *
+     * @throws PaymentNotFoundException 해당 결제 레코드가 없을 때
+     */
+    public function withExclusiveAccessByPaymentId(string $paymentId, Closure $operation): Payment
+    {
+        return DB::transaction(function () use ($paymentId, $operation): Payment {
+            $payment = Payment::query()
+                ->where('payment_id', $paymentId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($payment === null) {
+                throw new PaymentNotFoundException('The payment does not exist.');
+            }
+
+            return $operation($payment);
+        });
+    }
+
+    /**
      * Billable 참조(타입·키)로 범위를 정해 레코드를 잠그고 콜백을 실행한다.
      *
      * 만료 잡 전용이다. 레코드가 없으면(이미 삭제됐거나 범위 밖) 아무것도 하지 않는다.
@@ -123,7 +150,7 @@ class PaymentLedger
      * 미리 계산된 결과 값을 레코드에 그대로 쓴다. 증가분이 아닌 절대값이다.
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
+     * @param  array{status: string, paid_at: Carbon, paid_amount: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
      * @return Payment 갱신된 결제 레코드
      */
     public function update(Payment $payment, array $values): Payment

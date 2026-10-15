@@ -167,11 +167,13 @@ composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 | `PortOnePaymentCancellationTest` | 100원 결제 2회 완료                 | —                                                                                 |
 | `PortOnePaymentCompletionTest`   | 100원 결제 1회 완료                 | 조회 probe 관측                                                                   |
 | `PortOneAmountMismatchTest`      | 100원 결제 2회 완료                 | — (결제 뒤 레코드 금액을 1000원으로 바꿔 불일치를 만들고, 자동 취소를 확인)       |
+| `PortOnePaymentCommandTest`      | 100원 결제 1회 완료                 | — (`portone:payment` 출력을 확인하고, 가린 응답을 기록한 뒤 취소)                 |
+| `PortOneWebhookEventsTest`       | 1,000원 결제 1회 완료, 1회 창 닫기  | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)              |
 | `PortOnePaymentRefundTest`       | 100원 1회 + 10,000원 2회 결제 완료  | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능)                                |
 | `PortOnePaymentExpiryTest`       | 100원 결제 1회 완료, 1회 창 닫기    | 버려진 결제 probe 관측(`tools/probes/portone-abandoned-payment-observation.json`) |
 | `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)              |
 
-- `PortOneWebhookTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
+- `PortOneWebhookTest`·`PortOneWebhookEventsTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
 - 각 테스트는 **단독으로 실행**할 수 있습니다. 소모하는 결제는 테스트가 직접 만들고,
   다른 테스트가 먼저 돌 필요가 없습니다. 미결제·취소 상태로 고정된 결제 ID처럼 몇 번이든
   다시 쓸 수 있는 기록만 재사용합니다.

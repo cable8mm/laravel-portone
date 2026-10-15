@@ -28,7 +28,8 @@ use Illuminate\Support\Carbon;
  * @property int $amount
  * @property string $status
  * @property int $cancelled_amount
- * @property int|null $paid_amount 금액 불일치 때 PortOne이 알려 준 실결제액, 그 밖에는 null
+ * @property int|null $paid_amount PortOne이 확인해 준 실결제액(원). PAID 확정과 금액 불일치 때 저장하며, PortOne이 아직
+ *                                 실결제액을 알려 주지 않은 PENDING·EXPIRED는 null이다
  * @property Carbon|null $paid_at
  * @property Carbon $created_at
  * @property Carbon $updated_at

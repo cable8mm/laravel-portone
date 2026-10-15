@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Workbench\App\Providers;
 
+use Cable8mm\LaravelPortone\Events\PaymentCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentFailed;
+use Cable8mm\LaravelPortone\Events\PaymentPaid;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentWebhookEvent;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
@@ -85,6 +90,17 @@ class WorkbenchServiceProvider extends ServiceProvider
                 'webhookType' => $event->webhook::class,
             ]);
         });
+
+        foreach ([PaymentPaid::class, PaymentCancelled::class, PaymentPartiallyCancelled::class, PaymentFailed::class] as $paymentEvent) {
+            Event::listen($paymentEvent, static function (PaymentWebhookEvent $event) use ($observationDirectory): void {
+                self::appendJsonLine($observationDirectory.'/payment-events.jsonl', [
+                    'event' => $event::class,
+                    'paymentId' => $event->paymentId,
+                    'webhookId' => $event->webhookId,
+                    'webhookType' => $event->webhook->type,
+                ]);
+            });
+        }
 
         $this->app->make(Kernel::class)->pushMiddleware(RecordWebhookExchange::class);
     }

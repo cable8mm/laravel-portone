@@ -133,7 +133,7 @@ class PaymentPreparationTest extends TestCase
 
         $paths = glob($this->app->databasePath('migrations/*_portone_*_table.php'));
         $this->assertIsArray($paths);
-        $this->assertCount(3, $paths);
+        $this->assertCount(4, $paths);
         array_push($this->publishedMigrations, ...$paths);
 
         foreach ($paths as $migration) {

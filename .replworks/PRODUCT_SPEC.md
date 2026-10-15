@@ -57,11 +57,12 @@
 - Payment record field amount: integer.
 - Payment record field status: exactly one of PENDING, PAID, PARTIALLY_CANCELLED, CANCELLED, EXPIRED, AMOUNT_MISMATCH_CANCELLED, AMOUNT_MISMATCH.
 - Payment record field cancelled_amount: integer, initial value 0.
-- Payment record field paid_amount: integer or null, initial value null. Set only when PortOne reports a total paid amount different from amount (FR-069, FR-070).
+- Payment record field paid_amount: integer or null, initial value null. The total paid amount PortOne reported when the Package confirmed the payment: set together with PAID (FR-023, FR-060) and with the amount-mismatch statuses (FR-069, FR-070). Null means PortOne has not reported a paid amount for the record.
 - Payment record field paid_at: timestamp or null, initial value null.
 - Payment record fields created_at and updated_at: timestamps.
 - Method return values: defined per element in SCR-001 and SCR-002.
-- Event: WebhookReceived, defined by EL-021.
+- Events: WebhookReceived, defined by EL-021; PaymentPaid, PaymentCancelled, PaymentPartiallyCancelled, PaymentFailed, defined by EL-038 through EL-041.
+- Console output: the PortOne payment response printed by EL-044.
 - Published files: defined by EL-025, EL-028, EL-029, EL-030, EL-036.
 - Webhook HTTP responses: defined by EL-014.
 - Exceptions and error responses: defined by ERR-001 through ERR-016.
@@ -103,6 +104,11 @@
 
 - The Package relies on PortOne sending HTTP POST requests with the headers webhook-id, webhook-signature, webhook-timestamp.
 - The Package relies on PortOne signing each request with the webhook secret.
+- Transaction webhook types and their data (paymentId, transactionId, storeId, and cancellationId for cancellations) follow the PortOne webhook documentation as modelled by cable8mm/portone-php. Transaction.Paid and Transaction.Cancelled were observed live (tests/E2E/portone-webhook-observation.json). Transaction.PartialCancelled (after a partial refund) and Transaction.Failed (after the Payer closed the payment window) were observed live by T-028 (tests/E2E/portone-webhook-events-observation.json).
+
+### PortOne V2 payment lookup response
+
+- The keys listed in FR-079 follow the PortOne payment response documentation (customer, method, cashReceipt) and the live response recorded by T-030 (tests/E2E/portone-payment-command-observation.json): pgResponse is the PG's raw response as a JSON string and contains the card number and approval number; origin holds the Payer's ipAddress and userAgent; webhooks holds the webhook delivery history with URLs and signature headers.
 
 ### PortOne browser SDK
 
@@ -222,13 +228,18 @@
 - Purpose: the Laravel event dispatched for each verified webhook.
 - Elements:
   - EL-021: WebhookReceived event with property webhook (the verified webhook object) and property webhookId (the value of the webhook-id header). Purpose: let the Developer react to webhooks. User action: listen.
+  - EL-038: PaymentPaid event for the webhook type Transaction.Paid. Purpose: let the Developer react to a paid payment without checking the webhook type. User action: listen.
+  - EL-039: PaymentCancelled event for the webhook type Transaction.Cancelled. Purpose: as EL-038, for a fully cancelled payment. User action: listen.
+  - EL-040: PaymentPartiallyCancelled event for the webhook type Transaction.PartialCancelled. Purpose: as EL-038, for a partially cancelled payment. User action: listen.
+  - EL-041: PaymentFailed event for the webhook type Transaction.Failed. Purpose: as EL-038, for a failed payment. User action: listen.
+  - EL-038 through EL-041 each have the properties paymentId (the payment ID in the webhook data), webhook (the verified transaction webhook object), and webhookId (the value of the webhook-id header).
 - States:
   - Initial: no event dispatched.
   - Populated: event dispatched.
   - Error: not applicable.
 - Navigation: None.
 - Interactions:
-  - Verified webhook received -> FR-036.
+  - Verified webhook received -> FR-036, FR-073 through FR-075.
 
 ### SCR-006 Published Checkout Stubs
 
@@ -275,6 +286,24 @@
 - Interactions:
   - Run EL-031 -> FR-057.
   - EL-032 runs -> FR-058 through FR-062.
+
+### SCR-008 Payment Service Interface
+
+- ID: SCR-008
+- Purpose: Package entry points that work from a Payment ID alone, for webhook handlers and test recording.
+- Elements:
+  - EL-042: PaymentOperations::completeByPaymentId(string $paymentId): Payment. Purpose: complete a payment when only its Payment ID is known (for example from a webhook). User action: call.
+  - EL-043: PortOneGateway::paymentResponse(string $paymentId): array. Purpose: return the PortOne payment lookup response as PortOne sent it. User action: call.
+  - EL-044: Artisan command portone:payment {paymentId} {--raw}. Purpose: print the PortOne payment lookup response as JSON for recording test data. User action: run.
+- States:
+  - Initial: not called.
+  - Populated: a Payment record or a PortOne response is returned or printed.
+  - Error: defined by ERR-001, ERR-011, ERR-017.
+- Navigation: None.
+- Interactions:
+  - Call EL-042 -> FR-076, FR-077.
+  - Call EL-043 -> FR-078.
+  - Run EL-044 -> FR-079, FR-080.
   - Run model:prune for the Payment model -> FR-063, FR-064.
 
 ## Functional Requirements
@@ -284,6 +313,7 @@
 - FR-001: The Package MUST be usable after installation without manual service provider registration.
 - FR-002: The Package MUST publish its configuration file when vendor:publish runs with EL-019.
 - FR-003: The Package MUST publish its migrations when vendor:publish runs with EL-020.
+- FR-003a: When vendor:publish runs with EL-020, the Package MUST NOT publish a migration whose name without the date prefix already exists in the migrations directory of the Application, so that an Application that published an earlier version receives only the new migrations.
 - FR-004: The Package MUST read configuration values from the Laravel configuration key portone.
 - FR-005: When EL-017 is unset, the Package MUST send PortOne API requests to the PortOne default API base URL.
 - FR-006: When EL-017 is set, the Package MUST send PortOne API requests to the value of EL-017.
@@ -312,7 +342,7 @@
 - FR-020: EL-005 MUST look up the Payment record by the given Payment ID only among the Payment records belonging to the Billable model.
 - FR-021: EL-005 MUST request the payment from PortOne by Payment ID when the Payment record status is PENDING or EXPIRED.
 - FR-022: EL-005 MUST return the Payment record unchanged and MUST NOT send any request to PortOne when the Payment record status is PAID, PARTIALLY_CANCELLED, or CANCELLED.
-- FR-023: EL-005 MUST set status to PAID and paid_at to the current time when the PortOne payment status is paid and the total paid amount equals the amount of the Payment record.
+- FR-023: EL-005 MUST set status to PAID, paid_at to the current time, and paid_amount to the total paid amount when the PortOne payment status is paid and the total paid amount equals the amount of the Payment record.
 - FR-024: EL-005 MUST return the Payment record after applying FR-023.
 
 ### Amount mismatch
@@ -346,6 +376,17 @@
 - FR-037: The Package MUST dispatch WebhookReceived for a verified webhook of any type, including a type the Package does not recognize.
 - FR-038: The Package MUST respond with HTTP 200 and an empty body after dispatching WebhookReceived.
 - FR-039: The Package MUST NOT create, modify, or delete any Customer record or Payment record while handling a webhook request.
+- FR-073: After dispatching WebhookReceived for a verified transaction webhook, the Package MUST dispatch exactly one of EL-038 through EL-041 when the webhook type is Transaction.Paid, Transaction.Cancelled, Transaction.PartialCancelled, or Transaction.Failed respectively.
+- FR-074: The Package MUST NOT dispatch EL-038 through EL-041 for any other webhook type, including Transaction.Ready, Transaction.VirtualAccountIssued, Transaction.PayPending, Transaction.CancelPending, Transaction.DisputeCreated, BillingKey webhooks, and unrecognized webhooks.
+- FR-075: WebhookReceived MUST still be dispatched for every verified webhook as stated in FR-036 and FR-037.
+
+### Payment service
+
+- FR-076: EL-042 MUST find the Payment record by the given Payment ID across all Billable models and complete it under the same rules as EL-005: FR-021 through FR-024, FR-068 through FR-071, ERR-001, ERR-006, ERR-007, ERR-011, and the exclusive access of EL-005.
+- FR-077: EL-042 MUST return the Payment record after applying FR-076.
+- FR-078: EL-043 MUST return the decoded PortOne payment lookup response for the given Payment ID without changing any field.
+- FR-079: EL-044 MUST print the response of EL-043 as JSON. Without --raw, it MUST replace the value of every key named name, birthYear, birthMonth, birthDay, gender, email, phoneNumber, address, zipcode, number, bin, approvalNumber, accountNumber, remitteeName, remitterName, depositorName, customerIdentityNumber, pgResponse, ipAddress, userAgent, receiptUrl, or webhooks, at any depth, with the string [REDACTED].
+- FR-080: With --raw, EL-044 MUST print the response of EL-043 unchanged. EL-044 MUST NOT create, modify, or delete any record.
 
 ### Published checkout stubs
 
@@ -375,7 +416,7 @@
 - FR-057: EL-031 MUST dispatch exactly one EL-032 for each Payment record whose status is PENDING and whose created_at is older than EL-033 minutes, and MUST NOT send any request to PortOne.
 - FR-058: EL-032 MUST change nothing and MUST NOT send any request to PortOne when, at the time it runs, the Payment record no longer exists or its status is not PENDING.
 - FR-059: EL-032 MUST request the payment from PortOne by Payment ID when the Payment record status is PENDING.
-- FR-060: When the PortOne payment status is paid and the total paid amount equals the amount of the Payment record, EL-032 MUST set status to PAID and paid_at to the current time.
+- FR-060: When the PortOne payment status is paid and the total paid amount equals the amount of the Payment record, EL-032 MUST set status to PAID, paid_at to the current time, and paid_amount to the total paid amount.
 - FR-061: When the lookup reports a result that means the payment is not paid at the time of the check, as listed under External Systems "PortOne V2 lookup of abandoned payments" (PAYMENT_NOT_FOUND, READY, FAILED), EL-032 MUST set status to EXPIRED. An EXPIRED record that is paid later is completed by EL-005 (FR-021).
 - FR-062: In every other case EL-032 MUST leave the Payment record unchanged, so that a later run of EL-031 checks it again.
 - FR-063: EL-035 MUST select only Payment records whose status is EXPIRED and whose updated_at is older than EL-034 days.
@@ -447,6 +488,7 @@
 - ERR-013: EL-025 is rendered while EL-022 or EL-023 is unset or empty -> EL-025 renders in the Error state with EL-026 disabled.
 - ERR-014: EL-005 throws PaymentNotFoundException, PaymentNotPaidException, or AmountMismatchException inside the complete action -> respond HTTP 422 with JSON containing the key error.
 - ERR-015: EL-005 throws ConfigurationException or the PortOne exception inside the complete action -> respond HTTP 500 with JSON containing the key error.
+- ERR-017: EL-042 receives a Payment ID with no Payment record -> throw PaymentNotFoundException; send no request.
 - ERR-016: EL-015 is unset or empty, or the PortOne lookup fails for a reason other than those of FR-061, when EL-032 runs -> EL-032 fails with ConfigurationException or the PortOne exception unwrapped; leave the Payment record unchanged. A failed cancellation request of FR-068 is handled by FR-070 and FR-072.
 
 ## Non-Goals
@@ -533,3 +575,9 @@
 - AC-070: A second EL-005 call on the record of AC-016 or AC-069 sends no request to PortOne and throws AmountMismatchException with the same paidAmount and wasCancelled (FR-071).
 - AC-071: EL-032 for a PENDING record that PortOne reports paid with a different total paid amount sends exactly one cancellation request as in AC-016, sets status AMOUNT_MISMATCH_CANCELLED with paid_amount and cancelled_amount equal to the total paid amount, and finishes without an exception; when the cancellation request fails, it sets status AMOUNT_MISMATCH and fails with the PortOne exception (FR-068 to FR-070, FR-072).
 - AC-072: EL-037 reads PORTONE_AMOUNT_MISMATCH_CANCEL_REASON with default 결제 금액 불일치로 자동 취소 (SCR-004).
+- AC-073: In an Application whose migrations directory already holds the create migrations of the Package under other date prefixes, vendor:publish with EL-020 publishes only the migrations that are missing, and running it twice publishes nothing the second time (FR-003a).
+- AC-074: A verified Transaction.Paid, Transaction.Cancelled, Transaction.PartialCancelled, or Transaction.Failed webhook dispatches WebhookReceived and exactly one EL-038, EL-039, EL-040, or EL-041 whose paymentId, webhook, and webhookId match the request (FR-073, FR-075).
+- AC-075: A verified webhook of any other type dispatches WebhookReceived and none of EL-038 through EL-041 (FR-074).
+- AC-076: EL-042 completes a PENDING record of any Billable model as EL-005 would, returns an already PAID record unchanged without a PortOne request, and throws PaymentNotFoundException for an unknown Payment ID (FR-076, FR-077, ERR-017).
+- AC-077: EL-043 returns the PortOne lookup response unchanged; EL-044 prints it with the keys of FR-079 replaced by [REDACTED], and unchanged with --raw (FR-078 to FR-080).
+- AC-078: EL-005 and EL-032 set paid_amount equal to the total paid amount when they set PAID (FR-023, FR-060).
