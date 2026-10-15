@@ -13,10 +13,12 @@ final class GatewayPayment
      * @param  string  $status  PortOne 결제 상태(예: PAID). PortOne이 결제를 모르면 PAYMENT_NOT_FOUND
      * @param  int|null  $totalAmount  PortOne 실결제 총액(원, 미결제 시 null 가능)
      * @param  bool  $found  PortOne이 결제를 알고 있는지(만료 확인용 조회에서만 false가 될 수 있다)
+     * @param  int|null  $cancelledAmount  PortOne 취소 총액(원, amount.cancelled. 응답에 없으면 null)
      */
     public function __construct(
         public readonly string $status,
         public readonly ?int $totalAmount,
         public readonly bool $found = true,
+        public readonly ?int $cancelledAmount = null,
     ) {}
 }

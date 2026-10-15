@@ -172,8 +172,10 @@ composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 | `PortOnePaymentRefundTest`       | 100원 1회 + 10,000원 2회 결제 완료  | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능)                                |
 | `PortOnePaymentExpiryTest`       | 100원 결제 1회 완료, 1회 창 닫기    | 버려진 결제 probe 관측(`tools/probes/portone-abandoned-payment-observation.json`) |
 | `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)              |
+| `PortOneCancellationSyncTest`    | 1,000원 결제 1회 완료               | ngrok (§2.5), 포트원 콘솔에서 300원 부분 취소 → 나머지 700원 취소 (안내에 따라)   |
+| `PortOneWebhookReplayTest`       | 없음                                | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능), `PORTONE_WEBHOOK_SECRET`      |
 
-- `PortOneWebhookTest`·`PortOneWebhookEventsTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
+- `PortOneWebhookTest`·`PortOneWebhookEventsTest`·`PortOneCancellationSyncTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
 - 각 테스트는 **단독으로 실행**할 수 있습니다. 소모하는 결제는 테스트가 직접 만들고,
   다른 테스트가 먼저 돌 필요가 없습니다. 미결제·취소 상태로 고정된 결제 ID처럼 몇 번이든
   다시 쓸 수 있는 기록만 재사용합니다.
@@ -189,7 +191,8 @@ composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 >>> Complete the 10,000 KRW PortOne test payment in the browser window.
 ```
 
-안내에 따라 Chrome 창의 포트원 테스트 결제창에서 **결제 완료** 또는 **창만 닫기**를 하면,
+안내에 따라 Chrome 창의 포트원 테스트 결제창에서 **결제 완료** 또는 **창만 닫기**를 하면(`PortOneCancellationSyncTest`는
+포트원 콘솔에서 안내된 결제 ID를 **부분 취소·전액 취소**),
 테스트가 화면 상태와 DB·포트원 조회 결과를 검증하고 다음으로 넘어갑니다. 실패하면
 스크린샷과 콘솔 로그가 `tests/E2E/debug/`에 남습니다(gitignore됨).
 

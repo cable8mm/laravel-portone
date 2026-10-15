@@ -19,7 +19,7 @@ class PortOneGateway implements PaymentGateway
      * PortOne에서 결제 1건을 조회한다.
      *
      * @param  string  $paymentId  PortOne 결제 식별자
-     * @return GatewayPayment PortOne 결제 상태와 실결제액
+     * @return GatewayPayment PortOne 결제 상태, 실결제액, 취소 총액
      *
      * @throws ConfigurationException API Secret이 설정되지 않았을 때
      * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
@@ -27,12 +27,28 @@ class PortOneGateway implements PaymentGateway
     public function lookup(string $paymentId): GatewayPayment
     {
         $payment = $this->client()->payment->getPayment($paymentId);
-        $amount = $payment->data['amount'] ?? null;
+
+        return $this->gatewayPayment($payment->variant, $payment->data);
+    }
+
+    /**
+     * PortOne 결제 응답을 조회 결과로 바꾼다. 실결제액은 amount.total, 취소 총액은 amount.cancelled이다.
+     *
+     * @param  string  $status  PortOne 결제 상태(응답의 status)
+     * @param  array<string, mixed>  $data  디코딩한 PortOne 응답 본문
+     * @return GatewayPayment PortOne 결제 상태, 실결제액, 취소 총액
+     */
+    protected function gatewayPayment(string $status, array $data): GatewayPayment
+    {
+        $amount = $data['amount'] ?? null;
         $totalAmount = is_array($amount) && is_int($amount['total'] ?? null)
             ? $amount['total']
             : null;
+        $cancelledAmount = is_array($amount) && is_int($amount['cancelled'] ?? null)
+            ? $amount['cancelled']
+            : null;
 
-        return new GatewayPayment($payment->variant, $totalAmount);
+        return new GatewayPayment($status, $totalAmount, cancelledAmount: $cancelledAmount);
     }
 
     /**

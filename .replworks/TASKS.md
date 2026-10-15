@@ -385,3 +385,51 @@
     - Completion and the expiry job set paid_amount to the PortOne total when they set PAID.
     - A migration backfills paid_amount = amount for PAID, PARTIALLY_CANCELLED, and CANCELLED records with a null paid_amount.
     - The Payment model PHPDoc describes the new meaning.
+
+- [X] T-032 Report the cancelled amount in the gateway result
+  - Satisfies: PRODUCT_SPEC.md External Systems "PortOne V2 payment lookup" (cancelled amount); ARCHITECTURE.md Core Concepts (Gateway result), CMP-08
+  - External boundary: no (amount.cancelled was recorded live by T-010 and T-030)
+  - Acceptance criteria:
+    - GatewayPayment has cancelledAmount (int or null), read from amount.cancelled of the lookup response; existing constructor calls keep working.
+    - Unit tests use values traced to the T-010 and T-030 recordings.
+
+- [X] T-033 Gateway test double
+  - Satisfies: PRODUCT_SPEC.md SCR-009 (EL-049), FR-089 to FR-091, AC-086; ARCHITECTURE.md CMP-18
+  - Depends on: T-032
+  - External boundary: no (mirrors CMP-08 behavior recorded by T-003, T-010, T-021)
+  - Acceptance criteria:
+    - FakePaymentGateway serves per-Payment-ID responses including cancelledAmount, set lookup or cancellation failures, PAYMENT_NOT_FOUND for unset IDs (found false on the expiry lookup).
+    - Assertions on lookup counts and cancellation requests; one call binds it into the container.
+    - README documents it.
+
+- [X] T-034 Synchronize cancellations from PortOne
+  - Satisfies: PRODUCT_SPEC.md FR-039, FR-081 to FR-084, ERR-018, SCR-003, SCR-005, SCR-008 (EL-045), AC-034, AC-079 to AC-084; ARCHITECTURE.md SF-4, SF-10, DF-9, CMP-06, CMP-07, CMP-10, RD-39, INV-05, INV-14
+  - Depends on: T-032
+  - External boundary: yes (PortOne delivers the cancellation webhooks; the sync looks PortOne up)
+  - Acceptance criteria:
+    - Transaction.Cancelled and Transaction.PartialCancelled webhooks sync the record before WebhookReceived and the typed event; repeated webhooks change nothing more.
+    - PortOne not matching, non-syncable statuses, and unknown records leave records unchanged and still dispatch events; lookup failures dispatch nothing and fail the request.
+    - PaymentOperations::syncByPaymentId applies the same rules and throws PaymentNotFoundException for unknown IDs.
+    - Unit tests cover AC-034, AC-079 to AC-084 with values traced to recordings.
+    - An E2E test receives live Cancelled and PartialCancelled webhooks after refunds made in the PortOne console through ngrok, checks the synced record, and records the result.
+    - README's 업그레이드 section lists the behavior change as a compatibility note.
+
+- [X] T-035 Dispatch expiry result events
+  - Satisfies: PRODUCT_SPEC.md SCR-007 (EL-046 to EL-048), FR-085 to FR-088, AC-085; ARCHITECTURE.md SF-7, CMP-07, RD-40
+  - Depends on: T-022, T-025
+  - External boundary: yes (the expiry job looks up live PortOne)
+  - Acceptance criteria:
+    - PaymentExpired, PaymentPaidOnExpiry, and PaymentAmountMismatchedOnExpiry are dispatched once after the committed write with paymentId, payment, billableType, billableId (and wasCancelled); none when nothing is written.
+    - Unit tests cover AC-085.
+    - The live expiry E2E test checks the events for a paid, a closed-window, and a never-opened payment and records them.
+    - README's 업그레이드 section lists the new events.
+
+- [X] T-036 Signed webhook test helper and local replay command
+  - Satisfies: PRODUCT_SPEC.md SCR-009 (EL-050, EL-051), FR-092 to FR-094, ERR-019, AC-087, AC-088; ARCHITECTURE.md CMP-19, CMP-20, RD-41
+  - Depends on: cable8mm/portone-php v0.4.1 with Webhook\WebhookSigner (requested by the owner separately)
+  - External boundary: yes (the replay command sends HTTP to the served Application)
+  - Acceptance criteria:
+    - TECH_STACK.md raises cable8mm/portone-php to ^0.4.1 and adds illuminate/http (owner-confirmed) before the code changes.
+    - Signing uses the portone-php signer; the package's own unit tests use the helper.
+    - portone:webhook-replay refuses production without --force and prints the response status.
+    - README documents both.

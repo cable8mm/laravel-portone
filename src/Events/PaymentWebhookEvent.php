@@ -9,7 +9,8 @@ use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
 /**
  * 서명 검증에 성공한 거래(Transaction.*) 웹훅을 종류별로 알리는 이벤트의 공통 부분.
  *
- * WebhookReceived 다음에 발송된다. 고객·결제 레코드를 읽거나 쓰지 않는다.
+ * WebhookReceived 다음에 발송된다. 취소 웹훅(PaymentCancelled·PaymentPartiallyCancelled)이면 발송 전에
+ * 결제 레코드의 취소 상태를 PortOne과 맞춰 두므로, 리스너는 최신 레코드를 읽는다.
  */
 abstract class PaymentWebhookEvent
 {

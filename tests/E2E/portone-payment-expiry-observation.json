@@ -1,29 +1,32 @@
 {
-	"recordedAt": "2026-10-14T12:46:08+00:00",
+	"recordedAt": "2026-10-15T18:11:30+00:00",
 	"payments": {
 		"paid": {
-			"paymentId": "777c9e0c-f8f0-4320-bea3-3ea2b71d31c2",
+			"paymentId": "f3740cb7-cdcb-4c4f-9c60-14a7c0f543cc",
 			"expiryLookup": {
 				"status": "PAID",
 				"found": true
 			},
-			"finalStatus": "PAID"
+			"finalStatus": "PAID",
+			"event": "PaymentPaidOnExpiry"
 		},
 		"closed": {
-			"paymentId": "63878b59-69e0-4014-90ac-daa97f8a7711",
+			"paymentId": "9697fd97-1a27-4f4c-919f-3b9b8272c9ee",
 			"expiryLookup": {
 				"status": "FAILED",
 				"found": true
 			},
-			"finalStatus": "EXPIRED"
+			"finalStatus": "EXPIRED",
+			"event": "PaymentExpired"
 		},
 		"neverOpened": {
-			"paymentId": "da7b4b12-3d37-41b1-a68e-863b51dbf650",
+			"paymentId": "5d9c4f89-7aab-438e-917f-1a8e0961e970",
 			"expiryLookup": {
 				"status": "PAYMENT_NOT_FOUND",
 				"found": false
 			},
-			"finalStatus": "EXPIRED"
+			"finalStatus": "EXPIRED",
+			"event": "PaymentExpired"
 		}
 	}
 }

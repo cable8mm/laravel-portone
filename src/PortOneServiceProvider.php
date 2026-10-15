@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Console\ExpirePendingPaymentsCommand;
+use Cable8mm\LaravelPortone\Console\ReplayWebhookCommand;
 use Cable8mm\LaravelPortone\Console\ShowPaymentCommand;
 use Cable8mm\LaravelPortone\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
@@ -40,7 +41,7 @@ class PortOneServiceProvider extends ServiceProvider
         )->name('portone.webhook');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExpirePendingPaymentsCommand::class, ShowPaymentCommand::class]);
+            $this->commands([ExpirePendingPaymentsCommand::class, ShowPaymentCommand::class, ReplayWebhookCommand::class]);
 
             $this->publishes([
                 __DIR__.'/../config/portone.php' => $this->app->configPath('portone.php'),

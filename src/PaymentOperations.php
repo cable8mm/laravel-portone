@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone;
 
+use Cable8mm\LaravelPortone\Events\PaymentAmountMismatchedOnExpiry;
+use Cable8mm\LaravelPortone\Events\PaymentExpired;
+use Cable8mm\LaravelPortone\Events\PaymentPaidOnExpiry;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Models\Payment;
@@ -107,6 +110,35 @@ class PaymentOperations
     }
 
     /**
+     * 결제 ID로 레코드를 찾아 PortOne의 취소 상태를 반영한다(취소 동기화).
+     *
+     * 소유 Billable은 따지지 않는다. refund()와 같은 배타 접근을 잡고, PAID·PARTIALLY_CANCELLED·
+     * AMOUNT_MISMATCH 레코드만 PortOne에 조회한다. PortOne이 CANCELLED·PARTIAL_CANCELLED이고 취소 총액이
+     * 맞을 때만 status와 cancelled_amount를 바꾸며, 그 밖에는 그대로 둔다. 같은 PortOne 상태로 다시
+     * 호출해도 결과가 같다. 취소 웹훅(Transaction.Cancelled·Transaction.PartialCancelled)도 이 메서드를 쓴다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return Payment 동기화된(또는 그대로인) 결제 레코드
+     *
+     * @throws PaymentNotFoundException 해당 결제 레코드가 없을 때
+     */
+    public function syncByPaymentId(string $paymentId): Payment
+    {
+        return $this->payments->withExclusiveAccessByPaymentId(
+            $paymentId,
+            function (Payment $payment): Payment {
+                if (! in_array($payment->status, ['PAID', 'PARTIALLY_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
+                    return $payment;
+                }
+
+                $outcome = $this->lifecycle->syncCancellation($payment, $this->gateway->lookup($payment->payment_id));
+
+                return $outcome === null ? $payment : $this->write($payment, $outcome);
+            },
+        );
+    }
+
+    /**
      * 잠금을 잡은 레코드에 확정 규칙을 적용한다. complete()와 completeByPaymentId()가 공유한다.
      *
      * @param  Closure(Closure(Payment): Payment): Payment  $lock  레코드를 잠그고 연산을 실행하는 함수
@@ -160,6 +192,8 @@ class PaymentOperations
      * 실결제액이 준비 금액과 다르면 complete()와 같이 자동 전액 취소한다. 취소가 성공하면
      * 예외 없이 끝나고, 실패하면 AMOUNT_MISMATCH를 저장한 뒤 PortOne 예외를 전파한다.
      * 설정 누락·PortOne 실패·저장 실패는 감싸지 않고 전파한다.
+     * 저장한 결과는 커밋 뒤에 이벤트로 알린다: EXPIRED면 PaymentExpired, PAID면 PaymentPaidOnExpiry,
+     * 금액 불일치면 PaymentAmountMismatchedOnExpiry(wasCancelled). 저장한 것이 없으면 보내지 않는다.
      *
      * @param  string  $billableType  소유 Billable 모델의 morph 타입
      * @param  string  $billableId  소유 Billable 모델의 키
@@ -168,12 +202,13 @@ class PaymentOperations
     public function expire(string $billableType, string $billableId, string $paymentId): void
     {
         $cancellationFailure = null;
+        $event = null;
 
         $this->payments->withExclusiveAccessByReference(
             $billableType,
             $billableId,
             $paymentId,
-            function (Payment $payment) use (&$cancellationFailure): void {
+            function (Payment $payment) use (&$cancellationFailure, &$event, $billableType, $billableId): void {
                 if ($payment->status !== 'PENDING') {
                     return;
                 }
@@ -181,7 +216,9 @@ class PaymentOperations
                 $gatewayPayment = $this->gateway->lookupForExpiry($payment->payment_id);
 
                 if ($this->lifecycle->isAmountMismatch($payment, $gatewayPayment)) {
-                    $cancellationFailure = $this->cancelAmountMismatch($payment, $gatewayPayment)->getPrevious();
+                    $mismatch = $this->cancelAmountMismatch($payment, $gatewayPayment);
+                    $cancellationFailure = $mismatch->getPrevious();
+                    $event = new PaymentAmountMismatchedOnExpiry($payment->payment_id, $payment, $billableType, $billableId, $mismatch->wasCancelled());
 
                     return;
                 }
@@ -190,9 +227,17 @@ class PaymentOperations
 
                 if ($outcome !== null) {
                     $this->write($payment, $outcome);
+                    $event = $outcome['status'] === 'PAID'
+                        ? new PaymentPaidOnExpiry($payment->payment_id, $payment, $billableType, $billableId)
+                        : new PaymentExpired($payment->payment_id, $payment, $billableType, $billableId);
                 }
             },
         );
+
+        // 커밋된 저장만 알린다. 이벤트는 잠금 트랜잭션이 끝난 뒤, 취소 실패 전파보다 먼저 보낸다.
+        if ($event !== null) {
+            event($event);
+        }
 
         // AMOUNT_MISMATCH 저장이 롤백되지 않도록 커밋 뒤에 취소 실패를 전파한다.
         if ($cancellationFailure !== null) {

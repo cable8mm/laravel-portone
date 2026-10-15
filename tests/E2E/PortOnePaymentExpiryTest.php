@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\E2E;
 
+use Cable8mm\LaravelPortone\Events\PaymentExpired;
+use Cable8mm\LaravelPortone\Events\PaymentExpiryEvent;
+use Cable8mm\LaravelPortone\Events\PaymentPaidOnExpiry;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
+use Illuminate\Support\Facades\Event;
 use Laravel\Dusk\Browser;
 use Workbench\Database\Factories\UserFactory;
 
@@ -45,6 +49,10 @@ class PortOnePaymentExpiryTest extends TestCase
 
         // Run the jobs the command queues right away so they reach live PortOne in this test.
         config(['queue.default' => 'sync']);
+        $events = [];
+        Event::listen([PaymentExpired::class, PaymentPaidOnExpiry::class], static function (PaymentExpiryEvent $event) use (&$events): void {
+            $events[$event->paymentId] = ['event' => class_basename($event), 'status' => $event->payment->status];
+        });
         $this->artisan('portone:expire-pending')->assertExitCode(0);
 
         $final = array_map(static fn (Payment $payment): Payment => $payment->fresh(), $payments);
@@ -53,12 +61,19 @@ class PortOnePaymentExpiryTest extends TestCase
         self::assertSame('EXPIRED', $final['closed']->status);
         self::assertSame('EXPIRED', $final['neverOpened']->status);
 
+        // T-035: one event per written outcome, carrying the updated record.
+        self::assertSame(['event' => 'PaymentPaidOnExpiry', 'status' => 'PAID'], $events[$final['paid']->payment_id] ?? null);
+        self::assertSame(['event' => 'PaymentExpired', 'status' => 'EXPIRED'], $events[$final['closed']->payment_id] ?? null);
+        self::assertSame(['event' => 'PaymentExpired', 'status' => 'EXPIRED'], $events[$final['neverOpened']->payment_id] ?? null);
+        self::assertCount(3, $events);
+
         $observed = [];
         foreach ($final as $key => $payment) {
             $observed[$key] = [
                 'paymentId' => $payment->payment_id,
                 'expiryLookup' => $lookups[$key],
                 'finalStatus' => $payment->status,
+                'event' => $events[$payment->payment_id]['event'] ?? null,
             ];
         }
 
