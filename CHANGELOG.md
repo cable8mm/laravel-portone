@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.4.0 - 2026-10-15
+
+### What's Changed
+
+* feat!: add webhook payment events, completion by payment ID, and upgrade-safe migrations by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/44
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.3.0...v0.4.0
+
 ## v0.3.0 - 2026-10-15
 
 ### What's Changed
