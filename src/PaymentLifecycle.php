@@ -27,7 +27,7 @@ class PaymentLifecycle
      * @return array{status: string, paid_at: Carbon} 저장할 확정 값
      *
      * @throws PaymentNotPaidException PortOne 상태가 PAID가 아닐 때
-     * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
+     * @throws AmountMismatchException 실결제액을 알 수 없을 때(실결제액이 다르면 호출 전에 isAmountMismatch()로 걸러진다)
      */
     public function complete(Payment $payment, GatewayPayment $gatewayPayment, Carbon $paidAt): array
     {
@@ -42,6 +42,47 @@ class PaymentLifecycle
         return [
             'status' => 'PAID',
             'paid_at' => $paidAt,
+        ];
+    }
+
+    /**
+     * PortOne이 결제 완료라고 했는데 실결제액이 준비 금액과 다른지 판단한다.
+     *
+     * 실결제액을 알 수 없으면(null) 불일치로 보지 않는다. 기록할 수 없는 금액으로 취소하지 않기 위해서다.
+     *
+     * @param  Payment  $payment  확인할 결제 레코드
+     * @param  GatewayPayment  $gatewayPayment  PortOne 조회 결과
+     */
+    public function isAmountMismatch(Payment $payment, GatewayPayment $gatewayPayment): bool
+    {
+        return $gatewayPayment->status === 'PAID'
+            && $gatewayPayment->totalAmount !== null
+            && $gatewayPayment->totalAmount !== $payment->amount;
+    }
+
+    /**
+     * 금액 불일치 자동 취소의 두 결과를 PortOne 취소 요청 전에 계산한다.
+     *
+     * 취소 성공이면 AMOUNT_MISMATCH_CANCELLED(실결제액 전액 취소), 실패면 AMOUNT_MISMATCH이다.
+     * 준비 금액(amount)과 paid_at은 바꾸지 않는다.
+     *
+     * @param  GatewayPayment  $gatewayPayment  isAmountMismatch()가 true인 PortOne 조회 결과
+     * @return array{cancelled: array{status: string, paid_amount: int, cancelled_amount: int}, failed: array{status: string, paid_amount: int}} 취소 성공·실패 때 저장할 값
+     */
+    public function amountMismatch(GatewayPayment $gatewayPayment): array
+    {
+        $paidAmount = (int) $gatewayPayment->totalAmount;
+
+        return [
+            'cancelled' => [
+                'status' => 'AMOUNT_MISMATCH_CANCELLED',
+                'paid_amount' => $paidAmount,
+                'cancelled_amount' => $paidAmount,
+            ],
+            'failed' => [
+                'status' => 'AMOUNT_MISMATCH',
+                'paid_amount' => $paidAmount,
+            ],
         ];
     }
 

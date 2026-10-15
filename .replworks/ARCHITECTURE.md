@@ -20,10 +20,12 @@
   - PAID -> CANCELLED
   - PARTIALLY_CANCELLED -> PARTIALLY_CANCELLED
   - PARTIALLY_CANCELLED -> CANCELLED
-  - CANCELLED is terminal.
+  - PENDING -> AMOUNT_MISMATCH_CANCELLED, PENDING -> AMOUNT_MISMATCH (paid at PortOne with a different total; FR-069, FR-070)
+  - EXPIRED -> AMOUNT_MISMATCH_CANCELLED, EXPIRED -> AMOUNT_MISMATCH
+  - CANCELLED, AMOUNT_MISMATCH_CANCELLED, and AMOUNT_MISMATCH are terminal for the Package. An AMOUNT_MISMATCH record is handled by the Developer outside the Package.
   - Deletion: only EXPIRED records, only through EL-035 (FR-063).
 - **Exclusive access**: a period during which no other operation of the Package can read a given Payment record for a decision or write it. Provided by the Payment Ledger, requested by Payment Operations.
-- **Precomputed outcome**: the complete set of absolute field values (status, cancelled_amount, paid_at) computed before any PortOne request that changes remote state. Written to the record as absolute values, never as increments.
+- **Precomputed outcome**: the complete set of absolute field values (status, cancelled_amount, paid_at, paid_amount) computed before any PortOne request that changes remote state. Written to the record as absolute values, never as increments.
 - **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status and, when paid, the total paid amount. For an expiry check only, it can also say that PortOne does not know the payment.
 - **Stale PENDING record**: a PENDING record whose created_at is older than EL-033.
 - **Verified webhook**: a webhook whose authenticity was established by the Webhook Verifier. The only kind of webhook the Package acts on.
@@ -52,11 +54,11 @@
 1. Facade passes the Billable reference and Payment ID to Payment Operations.
 2. Payment Ledger finds the record inside the Billable reference's scope, otherwise ERR-003.
 3. Payment Operations takes exclusive access and reads the record's current state.
-4. A record that is neither PENDING nor EXPIRED is returned unchanged (FR-022).
+4. A PAID, PARTIALLY_CANCELLED, or CANCELLED record is returned unchanged (FR-022). An AMOUNT_MISMATCH_CANCELLED or AMOUNT_MISMATCH record ends the sequence with ERR-007 built from the stored record, with no PortOne request (FR-071).
 5. PortOne Gateway looks up the payment.
-6. Payment Lifecycle decides: not paid -> ERR-006; total differs -> ERR-007; otherwise produces the Precomputed outcome (PAID, paid_at).
+6. Payment Lifecycle decides: not paid -> ERR-006; paid with a different total -> the amount-mismatch sequence (SF-9); otherwise produces the Precomputed outcome (PAID, paid_at).
 7. Payment Operations writes the Precomputed outcome through the Payment Ledger under the persistence retry rule (RD-11).
-8. Exclusive access ends; the record is returned.
+8. Exclusive access ends; the record is returned, or ERR-007 is raised (RD-31).
 
 ### SF-3 Refund (FLOW-002)
 
@@ -103,9 +105,18 @@
 4. The queue worker runs the Expiry Job; it passes the Billable reference and Payment ID to Payment Operations.
 5. Payment Operations takes exclusive access and reads the record's current state. A missing or non-PENDING record ends the job with no change (FR-058).
 6. PortOne Gateway looks up the payment in its expiry form (RD-28).
-7. Payment Lifecycle decides: paid with the same total -> Precomputed outcome PAID; a "not paid at the time of the check" result -> Precomputed outcome EXPIRED; anything else -> no change (FR-060 to FR-062).
+7. Payment Lifecycle decides: paid with the same total -> Precomputed outcome PAID; paid with a different total -> the amount-mismatch sequence (SF-9); a "not paid at the time of the check" result -> Precomputed outcome EXPIRED; anything else -> no change (FR-060 to FR-062).
 8. Payment Operations writes the outcome through the Payment Ledger under the persistence retry rule (RD-11), or writes nothing.
-9. Exclusive access ends. ConfigurationException and PortOne failures propagate out of the job unwrapped (ERR-016, RD-27).
+9. Exclusive access ends. ConfigurationException and PortOne failures propagate out of the job unwrapped (ERR-016, RD-27). After SF-9, the job ends without an exception when PortOne accepted the cancellation, and fails with the PortOne exception of the cancellation otherwise (FR-072).
+
+### SF-9 Amount mismatch (FLOW-001 step 5, FLOW-006 step 4a)
+
+Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid with a total that differs from the record's amount.
+
+1. Payment Lifecycle produces two Precomputed outcomes before any cancellation: AMOUNT_MISMATCH_CANCELLED with paid_amount and cancelled_amount equal to the total paid amount (FR-069), and AMOUNT_MISMATCH with paid_amount equal to the total paid amount (FR-070).
+2. Payment Operations reads EL-037 and asks the PortOne Gateway to cancel the payment with that reason and no amount (FR-068).
+3. Accepted -> Payment Operations writes the AMOUNT_MISMATCH_CANCELLED outcome. Failed -> it writes the AMOUNT_MISMATCH outcome and keeps the PortOne exception. Both writes use the persistence retry rule (RD-11).
+4. SF-2 raises ERR-007 after exclusive access ends; SF-7 ends as in its step 9.
 
 ### SF-8 Prune (FLOW-006 step 6)
 
@@ -187,6 +198,7 @@
   - Refund decision: given a record, a reason-validated request and an optional amount, either report ERR-008 or ERR-010, or produce the Precomputed outcome with absolute cancelled_amount and status (FR-028, FR-029).
   - Expiry decision: given a PENDING record, a Gateway result in its expiry form, and the current time, produce the Precomputed outcome PAID (paid_at = current time) when paid with the same total, the Precomputed outcome EXPIRED when the result means "not paid at the time of the check", or no change otherwise (FR-060 to FR-062). Which results mean that follows PRODUCT_SPEC External Systems "PortOne V2 lookup of abandoned payments".
   - Completion decision accepts an EXPIRED record as it accepts a PENDING one (FR-021).
+  - Amount-mismatch decision: given a record and a Gateway result, tell whether PortOne reported paid with a total that differs from amount, and produce both Precomputed outcomes of SF-9 (FR-068 to FR-070).
   - Define the allowed transitions listed in Core Concepts.
 - Inputs: Payment record state; Gateway result; refund amount; current time (supplied by the caller).
 - Outputs: a Precomputed outcome or a named error condition.
@@ -203,7 +215,8 @@
   - Hold exclusive access from the state read to the end of the write (RD-10).
   - Supply the current time to Payment Lifecycle.
   - Apply the persistence retry rule (RD-11).
-  - Let PortOne exceptions and persistence failures pass without wrapping (ERR-011).
+  - Let PortOne exceptions and persistence failures pass without wrapping (ERR-011), except the failed cancellation of SF-9, which it records (FR-070) and attaches to ERR-007 as the previous exception.
+  - Run SF-9 and read EL-037 for it.
 - Inputs: Billable reference, Payment ID, amount, order name, reason, refund amount.
 - Outputs: the Payment record after the operation; named exceptions of ERR-001, ERR-003 to ERR-011; persistence failure.
 - Owns: operation sequencing, check order, exclusive access scope, persistence retry, the guarantee that a failed operation changes no record (except RD-11).
@@ -223,7 +236,7 @@
 - Outputs: Gateway result; cancellation acceptance; ConfigurationException or the PortOne exception.
 - Owns: the single door to PortOne and the use of the api secret.
 - Does not own: interpreting the Gateway result (Lifecycle), any record, any retry of PortOne requests.
-- Depends on lookup and cancellation assumptions at the external boundary. Lookup behavior was verified by T-003, payment completion through the Package by T-011, and cancellation by T-010; observations are recorded for each. The lookup of abandoned payments was verified by T-021.
+- Depends on lookup and cancellation assumptions at the external boundary. Lookup behavior was verified by T-003, payment completion through the Package by T-011, and cancellation by T-010; observations are recorded for each. The lookup of abandoned payments was verified by T-021, and the automatic cancellation of SF-9 by T-025.
 
 ### CMP-09 Webhook Verifier
 
@@ -360,6 +373,8 @@ Each responsibility has exactly one owner.
 | Expiry decision                                                             | CMP-06                       | FR-060, FR-061, FR-062                                               |
 | Expiry sequencing and the no-op for non-PENDING records                     | CMP-07                       | FR-058, FR-059                                                       |
 | Prunable selection of expired records                                       | CMP-05                       | FR-063, FR-064                                                       |
+| Amount-mismatch decision and its two outcomes                               | CMP-06                       | FR-069, FR-070                                                       |
+| Amount-mismatch sequence, automatic cancellation, repeat completion         | CMP-07                       | FR-068, FR-071, FR-072, ERR-007                                      |
 
 ## Responsibility Boundaries
 
@@ -522,7 +537,9 @@ Steps 7 to 9 happen only when the record is still PENDING. Written data: status,
 | unknown Payment ID or other model's ID (ERR-003)                     | CMP-05 via CMP-07 | CMP-07                        | none                                                                                  | PaymentNotFoundException                                           |
 | invalid arguments (ERR-004, ERR-005, ERR-009)                        | CMP-07            | CMP-07                        | none; no Customer record either                                                       | InvalidArgumentException                                           |
 | status not paid at PortOne (ERR-006)                                 | CMP-06            | CMP-07                        | unchanged                                                                             | PaymentNotPaidException                                            |
-| paid amount differs (ERR-007)                                        | CMP-06            | CMP-07                        | unchanged                                                                             | AmountMismatchException                                            |
+| paid amount differs (ERR-007)                                        | CMP-06            | CMP-07                        | AMOUNT_MISMATCH_CANCELLED after PortOne cancelled it (SF-9)                           | AmountMismatchException; expiry job ends normally                  |
+| automatic cancellation fails (FR-070)                                | CMP-08            | CMP-07                        | AMOUNT_MISMATCH; the Developer handles it                                             | AmountMismatchException (wasCancelled false); expiry job fails     |
+| local write fails after PortOne accepted the automatic cancellation  | CMP-05            | CMP-07 retry, then propagates | stays PENDING or EXPIRED while PortOne shows cancelled: **known divergence**          | persistence failure                                                |
 | status not refundable (ERR-008)                                      | CMP-06            | CMP-07                        | unchanged                                                                             | InvalidPaymentStatusException                                      |
 | refund amount invalid (ERR-010)                                      | CMP-06            | CMP-07                        | unchanged                                                                             | InvalidRefundAmountException                                       |
 | PortOne request fails or PortOne does not know the payment (ERR-011) | CMP-08            | not contained; passes through | unchanged                                                                             | the PortOne exception                                              |
@@ -573,11 +590,11 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 - INV-02: A Billable reference has at most one Customer record. Customer IDs are unique across all Customer records.
 - INV-03: Payment IDs are unique across all Payment records and are never reused.
 - INV-04: A Payment record's customer_id equals the Customer ID of its owner at the time of creation.
-- INV-05: Status transitions follow only the transitions listed in Core Concepts. CANCELLED never changes. EXPIRED changes only to PAID.
-- INV-06: `0 <= cancelled_amount <= amount` always; cancelled_amount never decreases.
-- INV-07: PENDING and EXPIRED imply cancelled_amount = 0 and paid_at = null. PAID implies cancelled_amount = 0 and paid_at non-null. PARTIALLY_CANCELLED implies `0 < cancelled_amount < amount` and paid_at non-null. CANCELLED implies cancelled_amount = amount and paid_at non-null.
+- INV-05: Status transitions follow only the transitions listed in Core Concepts. CANCELLED, AMOUNT_MISMATCH_CANCELLED, and AMOUNT_MISMATCH never change. EXPIRED changes only to PAID, AMOUNT_MISMATCH_CANCELLED, or AMOUNT_MISMATCH.
+- INV-06: `0 <= cancelled_amount <= amount` always, except AMOUNT_MISMATCH_CANCELLED, where cancelled_amount = paid_amount; cancelled_amount never decreases. amount never changes after preparation.
+- INV-07: PENDING and EXPIRED imply cancelled_amount = 0 and paid_at = null. PAID implies cancelled_amount = 0 and paid_at non-null. PARTIALLY_CANCELLED implies `0 < cancelled_amount < amount` and paid_at non-null. CANCELLED implies cancelled_amount = amount and paid_at non-null. AMOUNT_MISMATCH_CANCELLED implies paid_amount non-null and different from amount, cancelled_amount = paid_amount, and paid_at = null. AMOUNT_MISMATCH implies paid_amount non-null and different from amount, cancelled_amount = 0, and paid_at = null. Every other status implies paid_amount = null.
 - INV-08: A record becomes PAID only in a completion or an expiry check in which PortOne reported paid and the total paid amount equalled the record's amount.
-- INV-09: No PortOne request is sent when ERR-003, ERR-004, ERR-005, ERR-008, ERR-009, ERR-010 apply, when a record is neither PENDING nor EXPIRED at completion, when a record is not PENDING when an expiry job runs, or during preparation, any webhook handling, CMP-15, or pruning.
+- INV-09: No PortOne request is sent when ERR-003, ERR-004, ERR-005, ERR-008, ERR-009, ERR-010 apply, when a record is neither PENDING nor EXPIRED at completion (FR-022, FR-071), when a record is not PENDING when an expiry job runs, or during preparation, any webhook handling, CMP-15, or pruning.
 - INV-10: A completion or refund that fails before the local write leaves the record unchanged. The one exception is the post-acceptance write failure of a refund (RD-11).
 - INV-11: Between reading a record for a decision and writing the resulting outcome, no other operation of the Package reads that record for a decision or writes it.
 - INV-12: Every PortOne request originates in CMP-08. Every authenticity decision originates in CMP-09.
@@ -635,3 +652,6 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-28: Ambiguous: RD-12 makes "PortOne does not know the payment" a passed-through failure, but for an abandoned payment it is the expected answer. Decided: CMP-08 offers an expiry form of the lookup that returns it as a Gateway result; completion keeps RD-12. Why: knowledge of PortOne error shapes stays in CMP-08 (AR-11).
 - RD-29 (owner-confirmed): Defaults: EL-033 = 1440 minutes, EL-034 = 90 days.
 - RD-30 (owner-confirmed): Ambiguous: T-021 showed that no lookup result is final (a FAILED payment ID can still be paid). Decided: after EL-033, PAYMENT_NOT_FOUND, READY, and FAILED all expire the record; recovery of a later payment is EL-005 on the EXPIRED record. Why: a stale READY would otherwise stay PENDING and be looked up on every run, and recovery is always available.
+- RD-31 (owner-confirmed, T-025): Ambiguous: ERR-007 must both change the record and throw, but a throw inside exclusive access would undo the write. Decided: CMP-07 writes the SF-9 outcome, ends exclusive access, then raises ERR-007. Why: the record must keep the result so a repeated completion (browser and webhook at once) returns the same exception without another PortOne request (FR-071).
+- RD-32 (owner-confirmed, T-025): Ambiguous: what the expiry job does after SF-9. Decided: an accepted cancellation ends the job normally (the record shows the result); a failed cancellation fails the job with the PortOne exception so the Application's queue records it, the same way as RD-27. Why: the payment was handled; only the failure needs attention.
+- RD-33: Ambiguous: PortOne reports paid without a total paid amount. Decided: SF-9 does not run; completion raises ERR-007 with no paidAmount and leaves the record unchanged, and the expiry job makes no change (FR-062). Why: PRODUCT_SPEC relies on PortOne returning the total when paid, and the Package never cancels a payment whose paid amount it cannot record.

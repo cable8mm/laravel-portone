@@ -324,3 +324,19 @@
     - Unit tests (PHPUnit, Vitest) cover the new route, the response, and the navigation; the live checkout flow test reaches the completion page after a completed payment.
     - README describes the completion page.
 
+
+- [X] T-025 Cancel a payment automatically when the paid amount differs
+  - Satisfies: PRODUCT_SPEC.md FR-022, FR-064, FR-068 to FR-072, ERR-007, ERR-008, ERR-011, ERR-016, SCR-002, SCR-004 (EL-037), FLOW-001 step 5, FLOW-006 step 4a, AC-016, AC-021, AC-061, AC-062, AC-069 to AC-072; ARCHITECTURE.md SF-2, SF-7, SF-9, CMP-06, CMP-07, INV-05 to INV-07, RD-31 to RD-33
+  - Depends on: T-010 (cancellation observed), T-022
+  - External boundary: yes (the automatic cancellation is a live PortOne request)
+  - Acceptance criteria:
+    - The Payment status set includes AMOUNT_MISMATCH_CANCELLED and AMOUNT_MISMATCH, and a new migration adds the nullable paid_amount column without editing the existing migrations.
+    - completePayment on a PENDING or EXPIRED record that PortOne reports paid with a different total sends one full cancellation with the EL-037 reason, stores the result, and throws AmountMismatchException with paidAmount() and wasCancelled(); amount and paid_at do not change.
+    - A failed cancellation stores AMOUNT_MISMATCH and throws AmountMismatchException with wasCancelled() false and the PortOne exception as previous.
+    - A repeated completePayment on either status sends no PortOne request and throws the same exception.
+    - The expiry job applies the same cancellation, ends normally when it is accepted, and fails with the PortOne exception when it is not.
+    - refund rejects both statuses; model:prune never deletes them; normal completion, refund, and expiry are unchanged.
+    - amount_mismatch_cancel_reason (PORTONE_AMOUNT_MISMATCH_CANCEL_REASON, default 결제 금액 불일치로 자동 취소) is in config/portone.php and .env.example.
+    - Unit tests cover AC-016, AC-021, AC-061, AC-062, AC-069 to AC-072 with test doubles traced to the T-003 and T-010 recordings.
+    - An E2E test pays a prepared payment on live PortOne, makes the record's amount differ from the paid total (what PortOne and the Package see when the browser's totalAmount is tampered), and checks for both completePayment and the expiry job that PortOne reports the payment cancelled and the record is AMOUNT_MISMATCH_CANCELLED; a repeated completePayment sends no PortOne request.
+    - README and CHANGELOG describe the behavior, the new statuses, and the configuration key, and CHANGELOG marks the new statuses as a compatibility note.

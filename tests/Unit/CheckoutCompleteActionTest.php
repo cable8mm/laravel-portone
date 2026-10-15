@@ -155,7 +155,7 @@ class CheckoutCompleteActionTest extends TestCase
             ->assertJsonStructure(['error']);
 
         $this->assertSame('PENDING', $notPaidPayment->fresh()->status);
-        $this->assertSame('PENDING', $mismatchedPayment->fresh()->status);
+        $this->assertSame('AMOUNT_MISMATCH_CANCELLED', $mismatchedPayment->fresh()->status);
     }
 
     public function test_missing_api_secret_and_portone_failures_return_http_500(): void

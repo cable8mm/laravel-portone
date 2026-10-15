@@ -22,5 +22,6 @@ class FoundationTest extends TestCase
         $this->assertNull(config('portone.channel_key'));
         $this->assertSame(1440, config('portone.pending_expire_after'));
         $this->assertSame(90, config('portone.expired_retention_days'));
+        $this->assertSame('결제 금액 불일치로 자동 취소', config('portone.amount_mismatch_cancel_reason'));
     }
 }

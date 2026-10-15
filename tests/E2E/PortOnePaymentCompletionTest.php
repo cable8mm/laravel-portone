@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\E2E;
 
-use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\PortonePhp\Exception\PortOneException;
@@ -41,21 +40,7 @@ class PortOnePaymentCompletionTest extends TestCase
 
         $this->assertSame('PENDING', $payment->fresh()->status);
 
-        $payment->forceFill(['amount' => 101])->save();
-        try {
-            $user->completePayment($payment->payment_id);
-            $this->fail('Expected the live payment amount to differ from the local amount.');
-        } catch (AmountMismatchException) {
-            $this->assertSame('PENDING', $payment->fresh()->status);
-            $this->assertSame(101, $payment->fresh()->amount);
-        }
-        $observation['amountMismatch'] = [
-            'result' => 'rejected by PaymentLifecycle',
-            'exception' => AmountMismatchException::class,
-            'recordStatus' => $payment->fresh()->status,
-        ];
-
-        $payment->forceFill(['amount' => 100])->save();
+        // The amount mismatch case cancels the payment at PortOne, so it lives in PortOneAmountMismatchTest (T-025).
         $realApiSecret = config('portone.api_secret');
         self::assertIsString($realApiSecret);
         $invalidApiSecret = 'invalid-live-probe-credential';

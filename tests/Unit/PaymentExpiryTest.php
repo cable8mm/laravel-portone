@@ -28,7 +28,9 @@ use PHPUnit\Framework\MockObject\MockObject;
  *
  * Gateway results are traced to tools/probes/portone-payment-lookup-observation.json (T-003)
  * and tools/probes/portone-abandoned-payment-observation.json (T-021): PAID 100,
- * READY 100, FAILED 100, and PAYMENT_NOT_FOUND (UnknownException, HTTP 404).
+ * READY 100, FAILED 100, and PAYMENT_NOT_FOUND (UnknownException, HTTP 404). Cancellation results are
+ * traced to tests/E2E/portone-payment-refund-observation.json (T-010): CANCELLED and
+ * PAYMENT_ALREADY_CANCELLED (UnknownException, HTTP 409).
  */
 class PaymentExpiryTest extends TestCase
 {
@@ -135,12 +137,55 @@ class PaymentExpiryTest extends TestCase
     {
         $billable = $this->billable(101);
         $payment = $this->pending($billable, minutesOld: 2000, amount: 100);
-        // A paid total that differs from the prepared amount is not a decision either way.
-        $this->gatewayMock()->expects($this->once())->method('lookupForExpiry')->willReturn(new GatewayPayment('PAID', 99));
+        // T-010: a cancelled payment is neither paid nor "not paid at the time of the check".
+        $this->gatewayMock()->expects($this->once())->method('lookupForExpiry')->willReturn(new GatewayPayment('CANCELLED', 100));
 
         $this->runJob($billable, $payment->payment_id);
 
         $this->assertSame('PENDING', $payment->fresh()->status);
+    }
+
+    /**
+     * AC-071: a stale payment paid with a different total is cancelled, and the job ends normally.
+     */
+    public function test_job_cancels_a_payment_paid_with_a_different_amount(): void
+    {
+        $billable = $this->billable(101);
+        $payment = $this->pending($billable, minutesOld: 2000, amount: 10000);
+        $gateway = $this->gatewayMock();
+        $gateway->expects($this->once())->method('lookupForExpiry')->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->once())->method('cancel')->with($payment->payment_id, '결제 금액 불일치로 자동 취소', null);
+
+        $this->runJob($billable, $payment->payment_id);
+
+        $payment->refresh();
+        $this->assertSame('AMOUNT_MISMATCH_CANCELLED', $payment->status);
+        $this->assertSame(10000, $payment->amount);
+        $this->assertSame(100, $payment->paid_amount);
+        $this->assertSame(100, $payment->cancelled_amount);
+        $this->assertNull($payment->paid_at);
+    }
+
+    public function test_job_records_a_failed_automatic_cancellation_and_fails(): void
+    {
+        $billable = $this->billable(101);
+        $payment = $this->pending($billable, minutesOld: 2000, amount: 10000);
+        $portOneException = new UnknownException('cancelPayment', 'PortOne rejected the cancellation.', 409, null, null, 'PAYMENT_ALREADY_CANCELLED');
+        $gateway = $this->gatewayMock();
+        $gateway->expects($this->once())->method('lookupForExpiry')->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->once())->method('cancel')->willThrowException($portOneException);
+
+        try {
+            $this->runJob($billable, $payment->payment_id);
+            $this->fail('The cancellation failure must fail the job.');
+        } catch (UnknownException $exception) {
+            $this->assertSame($portOneException, $exception);
+        }
+
+        $payment->refresh();
+        $this->assertSame('AMOUNT_MISMATCH', $payment->status);
+        $this->assertSame(100, $payment->paid_amount);
+        $this->assertSame(0, $payment->cancelled_amount);
     }
 
     public function test_job_lets_configuration_and_portone_failures_propagate_and_leaves_the_payment_pending(): void
@@ -186,7 +231,7 @@ class PaymentExpiryTest extends TestCase
     public function test_prune_deletes_only_expired_payments_older_than_the_retention(): void
     {
         $billable = $this->billable(101);
-        $statuses = ['EXPIRED' => [91, 89], 'PAID' => [400], 'PARTIALLY_CANCELLED' => [400], 'CANCELLED' => [400], 'PENDING' => [400]];
+        $statuses = ['EXPIRED' => [91, 89], 'PAID' => [400], 'PARTIALLY_CANCELLED' => [400], 'CANCELLED' => [400], 'PENDING' => [400], 'AMOUNT_MISMATCH_CANCELLED' => [400], 'AMOUNT_MISMATCH' => [400]];
         $kept = [];
         $deleted = null;
 

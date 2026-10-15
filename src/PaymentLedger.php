@@ -123,7 +123,7 @@ class PaymentLedger
      * 미리 계산된 결과 값을 레코드에 그대로 쓴다. 증가분이 아닌 절대값이다.
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}|array{status: string}  $values  저장할 절대값
+     * @param  array{status: string, paid_at: Carbon}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
      * @return Payment 갱신된 결제 레코드
      */
     public function update(Payment $payment, array $values): Payment

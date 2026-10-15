@@ -11,4 +11,5 @@ return [
     'channel_key' => env('PORTONE_CHANNEL_KEY'),
     'pending_expire_after' => (int) (env('PORTONE_PENDING_EXPIRE_AFTER') ?: 1440),
     'expired_retention_days' => (int) (env('PORTONE_EXPIRED_RETENTION_DAYS') ?: 90),
+    'amount_mismatch_cancel_reason' => env('PORTONE_AMOUNT_MISMATCH_CANCEL_REASON') ?: '결제 금액 불일치로 자동 취소',
 ];

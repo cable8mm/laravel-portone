@@ -1,0 +1,20 @@
+{
+	"recordedAt": "2026-10-15T13:35:11+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"completion": {
+		"paymentId": "a359a4b7-e0a2-44ba-9463-857f05f5a154",
+		"paidAmount": 100,
+		"preparedAmount": 1000,
+		"recordStatus": "AMOUNT_MISMATCH_CANCELLED",
+		"portOneStatusAfterCancel": "CANCELLED",
+		"repeatedCompletion": "same exception, no PortOne request"
+	},
+	"secretsRecorded": false,
+	"expiry": {
+		"paymentId": "efee8469-0657-4a6c-be7d-13ee9d53bfde",
+		"paidAmount": 100,
+		"preparedAmount": 1000,
+		"recordStatus": "AMOUNT_MISMATCH_CANCELLED",
+		"portOneStatusAfterCancel": "CANCELLED"
+	}
+}
