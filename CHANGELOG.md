@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.5.0 - 2026-10-15
+
+### What's Changed
+
+* feat!: sync cancellations from PortOne, add expiry events and testing helpers by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/45
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.4.0...v0.5.0
+
 ## v0.4.0 - 2026-10-15
 
 ### What's Changed
