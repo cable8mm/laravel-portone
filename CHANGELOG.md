@@ -1,21 +1,5 @@
 # Release Notes
 
-## v0.3.0 - Unreleased
-
-### What's Changed
-
-* feat: automatically cancel a payment whose PortOne paid amount differs from the prepared amount
-
-  * `completePayment()` and the expiry job cancel the full paid amount at PortOne, store the result, and `completePayment()` throws `AmountMismatchException` with `paidAmount()` and `wasCancelled()`.
-  * A repeated `completePayment()` on such a payment sends no PortOne request and throws the same exception.
-  * New config key `amount_mismatch_cancel_reason` (`PORTONE_AMOUNT_MISMATCH_CANCEL_REASON`, default `결제 금액 불일치로 자동 취소`).
-
-### Compatibility notes
-
-* **New payment statuses**: `AMOUNT_MISMATCH_CANCELLED` (cancelled automatically) and `AMOUNT_MISMATCH` (the automatic cancellation failed; handle it yourself). Code that assumes `status` is only `PENDING`, `PAID`, `PARTIALLY_CANCELLED`, `CANCELLED` or `EXPIRED` (for example a `match` without a default) must handle them.
-* **Behavior change**: on an amount mismatch the Payment record no longer stays `PENDING`, and the payment is cancelled at PortOne.
-* **New migration**: `add_paid_amount_to_portone_payments_table` adds a nullable `paid_amount` column. Run `php artisan vendor:publish --tag=portone-migrations` and `php artisan migrate` after upgrading.
-
 ## v0.2.1 - 2026-10-14
 
 ### What's Changed
