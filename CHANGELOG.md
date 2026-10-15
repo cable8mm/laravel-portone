@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.3.0 - 2026-10-15
+
+### What's Changed
+
+* feat!: cancel a payment automatically when the paid amount differs by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/42
+* chore: remove the hand-written v0.3.0 CHANGELOG entry by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/43
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.2.1...v0.3.0
+
 ## v0.2.1 - 2026-10-14
 
 ### What's Changed
