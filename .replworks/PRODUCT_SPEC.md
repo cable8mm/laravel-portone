@@ -55,8 +55,9 @@
 - Payment record field customer_id: string.
 - Payment record field order_name: string.
 - Payment record field amount: integer.
-- Payment record field status: exactly one of PENDING, PAID, PARTIALLY_CANCELLED, CANCELLED, EXPIRED.
+- Payment record field status: exactly one of PENDING, PAID, PARTIALLY_CANCELLED, CANCELLED, EXPIRED, AMOUNT_MISMATCH_CANCELLED, AMOUNT_MISMATCH.
 - Payment record field cancelled_amount: integer, initial value 0.
+- Payment record field paid_amount: integer or null, initial value null. Set only when PortOne reports a total paid amount different from amount (FR-069, FR-070).
 - Payment record field paid_at: timestamp or null, initial value null.
 - Payment record fields created_at and updated_at: timestamps.
 - Method return values: defined per element in SCR-001 and SCR-002.
@@ -96,6 +97,7 @@
 - The Package relies on PortOne accepting a cancellation request containing a payment ID and a reason.
 - The Package relies on PortOne cancelling the full remaining amount when the request omits the amount.
 - The Package relies on PortOne cancelling the given amount when the request includes an amount.
+- The automatic cancellation of FR-068 is the same request as a full refund: PortOne does not know the amount the Package prepared, so a payment paid with a different amount is an ordinary paid payment to PortOne. Verified by T-025 (tests/E2E/portone-amount-mismatch-observation.json): after the automatic cancellation through EL-005 and through EL-032, PortOne reports the payment CANCELLED.
 
 ### PortOne V2 webhook delivery
 
@@ -143,7 +145,7 @@
   - Call EL-002 -> FR-009.
   - Call EL-003 -> FR-010, FR-011.
   - Call EL-004 -> FR-013 through FR-017.
-  - Call EL-005 -> FR-021 through FR-024.
+  - Call EL-005 -> FR-021 through FR-024, FR-068 through FR-071.
   - Call EL-006 -> FR-025 through FR-030.
   - Call EL-007 -> FR-031.
   - Call EL-008 -> FR-032.
@@ -159,6 +161,7 @@
   - Initial: status is PENDING.
   - Populated: status is PAID, PARTIALLY_CANCELLED, or CANCELLED.
   - Expired: status is EXPIRED.
+  - Amount mismatch: status is AMOUNT_MISMATCH_CANCELLED (the payment was cancelled automatically) or AMOUNT_MISMATCH (the automatic cancellation failed; the Developer handles it).
   - Error: not applicable.
 - Navigation: None.
 - Interactions:
@@ -200,6 +203,7 @@
   - EL-024: publish tag portone-stubs. Purpose: copy the files of SCR-006 into the Application.
   - EL-033: pending_expire_after, environment variable PORTONE_PENDING_EXPIRE_AFTER. Optional. Default: 1440. Unit: minutes. Purpose: set how old a PENDING Payment record must be before EL-031 checks it.
   - EL-034: expired_retention_days, environment variable PORTONE_EXPIRED_RETENTION_DAYS. Optional. Default: 90. Unit: days. Purpose: set how long an EXPIRED Payment record is kept before EL-035 selects it.
+  - EL-037: amount_mismatch_cancel_reason, environment variable PORTONE_AMOUNT_MISMATCH_CANCEL_REASON. Optional. Default: 결제 금액 불일치로 자동 취소. Purpose: set the reason sent with the cancellation request of FR-068.
 - States:
   - Initial: configuration file not published.
   - Populated: configuration file published.
@@ -307,9 +311,17 @@
 
 - FR-020: EL-005 MUST look up the Payment record by the given Payment ID only among the Payment records belonging to the Billable model.
 - FR-021: EL-005 MUST request the payment from PortOne by Payment ID when the Payment record status is PENDING or EXPIRED.
-- FR-022: EL-005 MUST return the Payment record unchanged and MUST NOT send any request to PortOne when the Payment record status is neither PENDING nor EXPIRED.
+- FR-022: EL-005 MUST return the Payment record unchanged and MUST NOT send any request to PortOne when the Payment record status is PAID, PARTIALLY_CANCELLED, or CANCELLED.
 - FR-023: EL-005 MUST set status to PAID and paid_at to the current time when the PortOne payment status is paid and the total paid amount equals the amount of the Payment record.
 - FR-024: EL-005 MUST return the Payment record after applying FR-023.
+
+### Amount mismatch
+
+- FR-068: When EL-005 or EL-032 finds that the PortOne payment status is paid and the total paid amount differs from the amount of the Payment record, the Package MUST send a cancellation request containing the Payment ID and the reason set by EL-037, without an amount.
+- FR-069: After PortOne accepts the cancellation request of FR-068, the Package MUST set status to AMOUNT_MISMATCH_CANCELLED, paid_amount to the total paid amount, and cancelled_amount to the total paid amount. It MUST NOT change amount or paid_at.
+- FR-070: When the cancellation request of FR-068 fails, the Package MUST set status to AMOUNT_MISMATCH and paid_amount to the total paid amount. It MUST NOT change amount, cancelled_amount, or paid_at.
+- FR-071: EL-005 on a Payment record whose status is AMOUNT_MISMATCH_CANCELLED or AMOUNT_MISMATCH MUST NOT send any request to PortOne and MUST throw the exception of ERR-007 built from the stored record.
+- FR-072: After FR-069, EL-032 MUST finish without an exception. After FR-070, EL-032 MUST fail with the PortOne exception of the cancellation request, unwrapped.
 
 ### Refund
 
@@ -367,7 +379,7 @@
 - FR-061: When the lookup reports a result that means the payment is not paid at the time of the check, as listed under External Systems "PortOne V2 lookup of abandoned payments" (PAYMENT_NOT_FOUND, READY, FAILED), EL-032 MUST set status to EXPIRED. An EXPIRED record that is paid later is completed by EL-005 (FR-021).
 - FR-062: In every other case EL-032 MUST leave the Payment record unchanged, so that a later run of EL-031 checks it again.
 - FR-063: EL-035 MUST select only Payment records whose status is EXPIRED and whose updated_at is older than EL-034 days.
-- FR-064: The Package MUST NOT delete Payment records whose status is PAID, PARTIALLY_CANCELLED, or CANCELLED.
+- FR-064: The Package MUST NOT delete Payment records whose status is PAID, PARTIALLY_CANCELLED, CANCELLED, AMOUNT_MISMATCH_CANCELLED, or AMOUNT_MISMATCH.
 - FR-065: The Package MUST NOT schedule EL-031 or model:prune itself.
 
 ## User Flows
@@ -378,6 +390,7 @@
 - Step 2: Developer calls EL-010 -> array of values for the PortOne browser SDK.
 - Step 3: Developer's Application code opens the PortOne payment window; the Payer pays outside the Package.
 - Step 4: Developer calls EL-005 -> Payment record with status PAID, or an error defined by ERR-006, ERR-007, ERR-011.
+- Step 5: Paid with a different amount -> the payment is cancelled at PortOne -> Payment record with status AMOUNT_MISMATCH_CANCELLED (or AMOUNT_MISMATCH when the cancellation fails) -> AmountMismatchException.
 
 ### FLOW-002 Refund
 
@@ -411,6 +424,7 @@
 - Step 2: EL-032 runs for a record that is still PENDING -> PortOne lookup.
 - Step 3: Paid with the same amount -> Payment record with status PAID.
 - Step 4: Not paid at the time of the check -> Payment record with status EXPIRED.
+- Step 4a: Paid with a different amount -> the payment is cancelled at PortOne -> Payment record with status AMOUNT_MISMATCH_CANCELLED; when the cancellation fails, status AMOUNT_MISMATCH and the job fails.
 - Step 5: Anything else -> Payment record unchanged; checked again by a later run of EL-031.
 - Step 6: The Application's scheduler runs model:prune -> EXPIRED records older than EL-034 are deleted.
 - Step 7: The Developer calls EL-005 for an EXPIRED record that was paid later -> Payment record with status PAID.
@@ -423,17 +437,17 @@
 - ERR-004: EL-004 receives an amount less than or equal to 0 -> throw InvalidArgumentException; create no record.
 - ERR-005: EL-004 receives an empty order name -> throw InvalidArgumentException; create no record.
 - ERR-006: EL-005 finds the PortOne payment status is not paid -> throw PaymentNotPaidException; leave the Payment record unchanged.
-- ERR-007: EL-005 finds the total paid amount differs from the amount of the Payment record -> throw AmountMismatchException; leave the Payment record unchanged.
-- ERR-008: EL-006 receives a Payment ID whose Payment record status is PENDING, EXPIRED, or CANCELLED -> throw InvalidPaymentStatusException; send no request.
+- ERR-007: EL-005 finds the PortOne payment status is paid and the total paid amount differs from the amount of the Payment record -> apply FR-068 through FR-070, then throw AmountMismatchException carrying the total paid amount (paidAmount) and whether PortOne accepted the cancellation (wasCancelled). When the cancellation failed, the exception's previous exception is the PortOne exception.
+- ERR-008: EL-006 receives a Payment ID whose Payment record status is PENDING, EXPIRED, CANCELLED, AMOUNT_MISMATCH_CANCELLED, or AMOUNT_MISMATCH -> throw InvalidPaymentStatusException; send no request.
 - ERR-009: EL-006 receives an empty reason -> throw InvalidArgumentException; send no request.
 - ERR-010: EL-006 receives an amount less than or equal to 0, or greater than amount minus cancelled_amount -> throw InvalidRefundAmountException; send no request.
-- ERR-011: A PortOne request fails in EL-005 or EL-006 -> throw the PortOne exception without wrapping; leave the Payment record unchanged.
+- ERR-011: A PortOne request other than the cancellation request of FR-068 fails in EL-005 or EL-006 -> throw the PortOne exception without wrapping; leave the Payment record unchanged.
 - ERR-012: Webhook verification fails because the signature is invalid, a required header is missing, or the timestamp is outside the allowed range -> respond HTTP 400; dispatch no event; change no record.
 
 - ERR-013: EL-025 is rendered while EL-022 or EL-023 is unset or empty -> EL-025 renders in the Error state with EL-026 disabled.
 - ERR-014: EL-005 throws PaymentNotFoundException, PaymentNotPaidException, or AmountMismatchException inside the complete action -> respond HTTP 422 with JSON containing the key error.
 - ERR-015: EL-005 throws ConfigurationException or the PortOne exception inside the complete action -> respond HTTP 500 with JSON containing the key error.
-- ERR-016: EL-015 is unset or empty, or the PortOne request fails for a reason other than those of FR-061, when EL-032 runs -> EL-032 fails with ConfigurationException or the PortOne exception unwrapped; leave the Payment record unchanged.
+- ERR-016: EL-015 is unset or empty, or the PortOne lookup fails for a reason other than those of FR-061, when EL-032 runs -> EL-032 fails with ConfigurationException or the PortOne exception unwrapped; leave the Payment record unchanged. A failed cancellation request of FR-068 is handled by FR-070 and FR-072.
 
 ## Non-Goals
 
@@ -443,6 +457,7 @@
 - Installation of the npm package @portone/browser-sdk.
 - Deleting, archiving, or managing statutory retention of Payment records whose status is PAID, PARTIALLY_CANCELLED, or CANCELLED.
 - Scheduling, queue configuration, and queue workers of the Application.
+- Retrying a failed automatic cancellation. The Developer finds AMOUNT_MISMATCH records and handles them.
 
 ## Acceptance Criteria
 
@@ -461,12 +476,12 @@
 - AC-013: EL-005 on a PENDING Payment record, where PortOne reports paid and a total paid amount equal to amount, returns a record with status PAID and a non-null paid_at (FR-021, FR-023, FR-024).
 - AC-014: EL-005 on a Payment record whose status is not PENDING returns it unchanged and sends no request (FR-022).
 - AC-015: EL-005 where PortOne reports a status other than paid throws PaymentNotPaidException and leaves the record unchanged (ERR-006).
-- AC-016: EL-005 where the total paid amount differs from amount throws AmountMismatchException and leaves the record unchanged (ERR-007).
+- AC-016: EL-005 on a PENDING record with amount 10000, where PortOne reports paid with a total paid amount of 100, sends exactly one cancellation request with the Payment ID and the reason of EL-037 and no amount, sets status AMOUNT_MISMATCH_CANCELLED, paid_amount 100, cancelled_amount 100, keeps amount 10000 and paid_at null, and throws AmountMismatchException whose paidAmount is 100 and wasCancelled is true (FR-068, FR-069, ERR-007).
 - AC-017: EL-005 and EL-006 with an unknown Payment ID, or the Payment ID of another model's record, throw PaymentNotFoundException (ERR-003).
 - AC-018: EL-006 on a PAID record with no amount sends a request containing the Payment ID and reason without an amount, and returns status CANCELLED with cancelled_amount equal to amount (FR-025, FR-026, FR-028, FR-029, FR-030).
 - AC-019: EL-006 on a PAID record with amount 10000 and a given refund of 3000 sends a request containing 3000, and returns status PARTIALLY_CANCELLED with cancelled_amount 3000 (FR-027, FR-028, FR-029).
 - AC-020: A second EL-006 call for 7000 on the record of AC-019 returns status CANCELLED with cancelled_amount 10000 (FR-029).
-- AC-021: EL-006 on a PENDING or CANCELLED record throws InvalidPaymentStatusException and sends no request (ERR-008).
+- AC-021: EL-006 on a PENDING, CANCELLED, AMOUNT_MISMATCH_CANCELLED, or AMOUNT_MISMATCH record throws InvalidPaymentStatusException and sends no request (ERR-008).
 - AC-022: EL-006 with an empty reason throws InvalidArgumentException and sends no request (ERR-009).
 - AC-023: EL-006 with a refund of 0 or a refund greater than amount minus cancelled_amount throws InvalidRefundAmountException and sends no request (ERR-010).
 - AC-024: When the PortOne request fails in EL-005 or EL-006, the PortOne exception is thrown and the Payment record is unchanged (ERR-011).
@@ -506,11 +521,15 @@
 - AC-058: EL-032 for a record that became PAID or was deleted before it ran sends no PortOne request and changes nothing (FR-058).
 - AC-059: EL-032 for a PENDING record that PortOne reports paid with the same amount sets status PAID and paid_at (FR-059, FR-060).
 - AC-060: EL-032 for a PENDING record whose lookup reports PAYMENT_NOT_FOUND, READY, or FAILED sets status EXPIRED and leaves cancelled_amount 0 and paid_at null (FR-061).
-- AC-061: EL-032 leaves the record PENDING when the lookup reports any other result or a different total paid amount (FR-062), and when ERR-016 applies, in which case it fails with the unwrapped exception (ERR-016).
-- AC-062: model:prune for the Payment model deletes only EXPIRED records whose updated_at is older than EL-034 and never deletes PAID, PARTIALLY_CANCELLED, or CANCELLED records (FR-063, FR-064).
+- AC-061: EL-032 leaves the record PENDING when the lookup reports any other result (FR-062), and when ERR-016 applies, in which case it fails with the unwrapped exception (ERR-016).
+- AC-062: model:prune for the Payment model deletes only EXPIRED records whose updated_at is older than EL-034 and never deletes PAID, PARTIALLY_CANCELLED, CANCELLED, AMOUNT_MISMATCH_CANCELLED, or AMOUNT_MISMATCH records (FR-063, FR-064).
 - AC-063: EL-005 on an EXPIRED record that PortOne reports paid with the same amount sets status PAID (FR-021); on a record that is neither PENDING nor EXPIRED it sends no request (FR-022).
 - AC-064: EL-006 on an EXPIRED record throws InvalidPaymentStatusException and sends no request (ERR-008).
 - AC-065: EL-033 reads PORTONE_PENDING_EXPIRE_AFTER with default 1440, and EL-034 reads PORTONE_EXPIRED_RETENTION_DAYS with default 90 (SCR-004).
 - AC-066: Installing the Package registers no schedule for EL-031 or model:prune (FR-065).
 - AC-067: portone.checkout.completed renders EL-036 with the order name, amount, Payment ID, paid_at, and status for a PAID, PARTIALLY_CANCELLED, or CANCELLED payment of the authenticated user (FR-066, FR-067).
 - AC-068: portone.checkout.completed responds HTTP 404 for a PENDING or EXPIRED payment, for another Billable model's payment, and for an unknown Payment ID, and an unauthenticated request does not reach the action (FR-042, FR-066).
+- AC-069: In the case of AC-016, when the cancellation request fails, the record has status AMOUNT_MISMATCH, paid_amount 100, cancelled_amount 0, and amount 10000, and AmountMismatchException has wasCancelled false and the PortOne exception as its previous exception (FR-070, ERR-007).
+- AC-070: A second EL-005 call on the record of AC-016 or AC-069 sends no request to PortOne and throws AmountMismatchException with the same paidAmount and wasCancelled (FR-071).
+- AC-071: EL-032 for a PENDING record that PortOne reports paid with a different total paid amount sends exactly one cancellation request as in AC-016, sets status AMOUNT_MISMATCH_CANCELLED with paid_amount and cancelled_amount equal to the total paid amount, and finishes without an exception; when the cancellation request fails, it sets status AMOUNT_MISMATCH and fails with the PortOne exception (FR-068 to FR-070, FR-072).
+- AC-072: EL-037 reads PORTONE_AMOUNT_MISMATCH_CANCEL_REASON with default 결제 금액 불일치로 자동 취소 (SCR-004).

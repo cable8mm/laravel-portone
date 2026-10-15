@@ -16,6 +16,8 @@ use Illuminate\Support\Carbon;
  * 상태 전이: PENDING → PAID → PARTIALLY_CANCELLED → CANCELLED
  * (PAID에서 바로 CANCELLED로 전액 환불될 수도 있다).
  * 버려진 결제는 PENDING → EXPIRED가 되고, 나중에 결제되면 EXPIRED → PAID로 복구된다.
+ * PortOne 실결제액이 준비 금액과 다르면 PENDING·EXPIRED → AMOUNT_MISMATCH_CANCELLED
+ * (자동 전액 취소 성공) 또는 AMOUNT_MISMATCH(취소 실패, 운영자가 처리)가 되고 더 바뀌지 않는다.
  * model:prune은 보관 기간이 지난 EXPIRED 레코드만 지운다.
  *
  * @property string $payment_id
@@ -26,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property int $amount
  * @property string $status
  * @property int $cancelled_amount
+ * @property int|null $paid_amount 금액 불일치 때 PortOne이 알려 준 실결제액, 그 밖에는 null
  * @property Carbon|null $paid_at
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -43,6 +46,7 @@ class Payment extends Model
         return [
             'amount' => 'integer',
             'cancelled_amount' => 'integer',
+            'paid_amount' => 'integer',
             'paid_at' => 'datetime',
         ];
     }

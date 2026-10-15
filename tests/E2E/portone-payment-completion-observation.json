@@ -8,11 +8,6 @@
 		"totalAmount": 100,
 		"browserResult": "returned without an error code"
 	},
-	"amountMismatch": {
-		"result": "rejected by PaymentLifecycle",
-		"exception": "Cable8mm\\LaravelPortone\\Exceptions\\AmountMismatchException",
-		"recordStatus": "PENDING"
-	},
 	"invalidApiSecret": {
 		"exception": "Cable8mm\\PortonePhp\\Exception\\UnauthorizedException",
 		"httpStatus": 401,

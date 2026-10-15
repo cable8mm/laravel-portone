@@ -26,6 +26,7 @@ class ConfigurationEnvironmentTest extends TestCase
             'PORTONE_CHANNEL_KEY' => 'test-channel-'.bin2hex(random_bytes(8)),
             'PORTONE_PENDING_EXPIRE_AFTER' => '30',
             'PORTONE_EXPIRED_RETENTION_DAYS' => '7',
+            'PORTONE_AMOUNT_MISMATCH_CANCEL_REASON' => 'Amount tampered',
         ];
 
         foreach ($this->testEnvironment as $name => $value) {
@@ -78,5 +79,6 @@ class ConfigurationEnvironmentTest extends TestCase
         $this->assertSame($this->testEnvironment['PORTONE_CHANNEL_KEY'], config('portone.channel_key'));
         $this->assertSame(30, config('portone.pending_expire_after'));
         $this->assertSame(7, config('portone.expired_retention_days'));
+        $this->assertSame('Amount tampered', config('portone.amount_mismatch_cancel_reason'));
     }
 }

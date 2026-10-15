@@ -7,12 +7,14 @@ namespace Tests\Unit;
 use Cable8mm\LaravelPortone\Concerns\Billable;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
+use Cable8mm\LaravelPortone\Exceptions\InvalidPaymentStatusException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\GatewayPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
+use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -128,23 +130,148 @@ class PaymentCompletionTest extends TestCase
         }
     }
 
-    public function test_amount_mismatch_is_rejected_without_changing_the_record(): void
+    /**
+     * AC-016: the lookup values are traced to T-003 (PAID with the paid total); the prepared amount differs.
+     */
+    public function test_amount_mismatch_cancels_the_full_paid_amount_and_records_it(): void
     {
         $this->migratePackageTables();
         $gateway = $this->gatewayMock();
         $billable = $this->billable(101);
-        $payment = $billable->preparePayment(100, 'Order A');
+        $payment = $billable->preparePayment(10000, 'Order A');
         $gateway->expects($this->once())
             ->method('lookup')
-            ->willReturn(new GatewayPayment('PAID', 99));
+            ->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->once())
+            ->method('cancel')
+            ->with($payment->payment_id, '결제 금액 불일치로 자동 취소', null);
 
         try {
             $billable->completePayment($payment->payment_id);
             $this->fail('Expected a mismatched amount to be rejected.');
-        } catch (AmountMismatchException) {
-            $this->assertSame('PENDING', $payment->fresh()->status);
-            $this->assertNull($payment->fresh()->paid_at);
-            $this->assertCompletionInvariant($payment->fresh());
+        } catch (AmountMismatchException $exception) {
+            $this->assertSame(100, $exception->paidAmount());
+            $this->assertTrue($exception->wasCancelled());
+            $this->assertNull($exception->getPrevious());
+        }
+
+        $stored = $payment->fresh();
+        $this->assertSame('AMOUNT_MISMATCH_CANCELLED', $stored->status);
+        $this->assertSame(10000, $stored->amount);
+        $this->assertSame(100, $stored->paid_amount);
+        $this->assertSame(100, $stored->cancelled_amount);
+        $this->assertCompletionInvariant($stored);
+    }
+
+    public function test_amount_mismatch_uses_the_configured_cancel_reason_and_recovers_an_expired_payment(): void
+    {
+        $this->migratePackageTables();
+        config(['portone.amount_mismatch_cancel_reason' => 'Amount tampered']);
+        $gateway = $this->gatewayMock();
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(10000, 'Order A');
+        $payment->forceFill(['status' => 'EXPIRED'])->save();
+        $gateway->expects($this->once())->method('lookup')->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->once())->method('cancel')->with($payment->payment_id, 'Amount tampered', null);
+
+        $this->expectException(AmountMismatchException::class);
+
+        try {
+            $billable->completePayment($payment->payment_id);
+        } finally {
+            $this->assertSame('AMOUNT_MISMATCH_CANCELLED', $payment->fresh()->status);
+        }
+    }
+
+    /**
+     * AC-069: the cancellation failure is the PAYMENT_ALREADY_CANCELLED error recorded by T-010.
+     */
+    public function test_failed_automatic_cancellation_is_recorded_for_the_operator(): void
+    {
+        $this->migratePackageTables();
+        $gateway = $this->gatewayMock();
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(10000, 'Order A');
+        $portOneException = new UnknownException(
+            'cancelPayment',
+            'PortOne rejected the cancellation.',
+            409,
+            null,
+            null,
+            'PAYMENT_ALREADY_CANCELLED',
+        );
+        $gateway->expects($this->once())->method('lookup')->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->once())->method('cancel')->willThrowException($portOneException);
+
+        try {
+            $billable->completePayment($payment->payment_id);
+            $this->fail('Expected a mismatched amount to be rejected.');
+        } catch (AmountMismatchException $exception) {
+            $this->assertSame(100, $exception->paidAmount());
+            $this->assertFalse($exception->wasCancelled());
+            $this->assertSame($portOneException, $exception->getPrevious());
+        }
+
+        $stored = $payment->fresh();
+        $this->assertSame('AMOUNT_MISMATCH', $stored->status);
+        $this->assertSame(10000, $stored->amount);
+        $this->assertSame(100, $stored->paid_amount);
+        $this->assertSame(0, $stored->cancelled_amount);
+        $this->assertCompletionInvariant($stored);
+    }
+
+    /**
+     * AC-070: browser and webhook completing the same payment must not cancel twice.
+     */
+    public function test_repeated_completion_of_a_mismatched_payment_sends_no_portone_request(): void
+    {
+        $this->migratePackageTables();
+        $gateway = $this->gatewayMock();
+        $billable = $this->billable(101);
+        $cancelled = $billable->preparePayment(10000, 'Order A');
+        $failed = $billable->preparePayment(10000, 'Order B');
+        $gateway->expects($this->exactly(2))->method('lookup')->willReturn(new GatewayPayment('PAID', 100));
+        $gateway->expects($this->exactly(2))->method('cancel')->willReturnCallback(
+            static function (string $paymentId) use ($failed): void {
+                if ($paymentId === $failed->payment_id) {
+                    throw new UnknownException('cancelPayment', 'PortOne rejected the cancellation.', 409, null, null, 'PAYMENT_ALREADY_CANCELLED');
+                }
+            },
+        );
+
+        foreach ([[$cancelled, true], [$failed, false]] as [$payment, $wasCancelled]) {
+            for ($call = 1; $call <= 2; $call++) {
+                try {
+                    $billable->completePayment($payment->payment_id);
+                    $this->fail('Expected a mismatched amount to be rejected.');
+                } catch (AmountMismatchException $exception) {
+                    $this->assertSame(100, $exception->paidAmount());
+                    $this->assertSame($wasCancelled, $exception->wasCancelled());
+                }
+            }
+        }
+
+        $this->assertSame('AMOUNT_MISMATCH_CANCELLED', $cancelled->fresh()->status);
+        $this->assertSame('AMOUNT_MISMATCH', $failed->fresh()->status);
+    }
+
+    public function test_refund_rejects_mismatched_payments_without_contacting_portone(): void
+    {
+        $this->migratePackageTables();
+        $gateway = $this->gatewayMock();
+        $gateway->expects($this->never())->method('cancel');
+        $billable = $this->billable(101);
+
+        foreach (['AMOUNT_MISMATCH_CANCELLED', 'AMOUNT_MISMATCH'] as $status) {
+            $payment = $billable->preparePayment(10000, 'Order A');
+            $payment->forceFill(['status' => $status, 'paid_amount' => 100])->save();
+
+            try {
+                $billable->refund($payment->payment_id, 'Customer request');
+                $this->fail('Expected a mismatched payment to be rejected.');
+            } catch (InvalidPaymentStatusException) {
+                $this->assertSame($status, $payment->fresh()->status);
+            }
         }
     }
 
@@ -344,6 +471,16 @@ class PaymentCompletionTest extends TestCase
     {
         if ($payment->status === 'PENDING') {
             $this->assertSame(0, $payment->cancelled_amount);
+            $this->assertNull($payment->paid_amount);
+            $this->assertNull($payment->paid_at);
+
+            return;
+        }
+
+        if (in_array($payment->status, ['AMOUNT_MISMATCH_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
+            $this->assertNotNull($payment->paid_amount);
+            $this->assertNotSame($payment->amount, $payment->paid_amount);
+            $this->assertSame($payment->status === 'AMOUNT_MISMATCH_CANCELLED' ? $payment->paid_amount : 0, $payment->cancelled_amount);
             $this->assertNull($payment->paid_at);
 
             return;
@@ -351,6 +488,7 @@ class PaymentCompletionTest extends TestCase
 
         $this->assertSame('PAID', $payment->status);
         $this->assertSame(0, $payment->cancelled_amount);
+        $this->assertNull($payment->paid_amount);
         $this->assertNotNull($payment->paid_at);
     }
 
