@@ -128,6 +128,14 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
 
 앱 코드에 영향이 있을 수 있는 변경입니다.
 
+- **v0.6.0**
+  - **체크아웃 단일 리다이렉트 흐름(동작 변경):** `requestPayment`에 `redirectUrl`과 `forceRedirect: true`를 넣어 PC·모바일이 같은 흐름으로 동작합니다.
+    `prepare` 응답이 기존 `checkoutParameters` 배열에서 브라우저 결제 요청값(`storeId`, `channelKey`, `paymentId`, `orderName`,
+    `totalAmount`, `redirectUrl`, `customer`, `forceRedirect`)으로 바뀌었습니다. 스텁 JS는 `complete` 라우트를 호출하지 않고,
+    주문서의 Success 상태는 없어졌습니다. 구 스텁을 발행한 앱은 스텁 5종을 다시 발행하거나, `prepare` 응답 사용처와 완료 처리를 새 흐름에 맞게 고치세요.
+  - **`completed`가 복귀 겸용:** 실패 복귀(`?code=`)는 레코드를 건드리지 않고 실패 화면을 보여 줍니다. `PENDING`·`EXPIRED` 결제는
+    서버에서 먼저 확정한 뒤 Paid·Failed·404 중 하나로 응답합니다.
+  - 의존성: `cable8mm/portone-php` `^0.5.0`. `composer update`로 함께 올라갑니다.
 - **v0.5.0**
   - **취소 웹훅 때 결제 레코드 갱신(동작 변경):** `Transaction.Cancelled`·`Transaction.PartialCancelled` 웹훅을 받으면 이벤트를 보내기 **전에**
     PortOne에 결제를 조회해 `status`와 `cancelled_amount`를 맞춥니다(`CANCELLED`·`PARTIALLY_CANCELLED`, 콘솔에서 취소한 `AMOUNT_MISMATCH`는
@@ -173,13 +181,13 @@ class User extends Authenticatable
 php artisan vendor:publish --tag=portone-stubs
 ```
 
-| 발행 파일                                            | 설명                                                                                     |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `resources/views/portone/checkout.blade.php`         | 주문서(상품명·금액) + 결제 버튼 + 상태 표시 뷰                                           |
-| `resources/views/portone/completed.blade.php`        | 리다이렉트 복귀 화면 (결제 성공 시 주문 완료, 실패 시 실패 안내)                         |
-| `resources/js/portone-checkout.js`                   | `prepare → requestPayment(forceRedirect) → 리다이렉트 복귀` 흐름의 ES 모듈 스크립트      |
+| 발행 파일                                            | 설명                                                                                                 |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `resources/views/portone/checkout.blade.php`         | 주문서(상품명·금액) + 결제 버튼 + 상태 표시 뷰                                                       |
+| `resources/views/portone/completed.blade.php`        | 리다이렉트 복귀 화면 (결제 성공 시 주문 완료, 실패 시 실패 안내)                                     |
+| `resources/js/portone-checkout.js`                   | `prepare → requestPayment(forceRedirect) → 리다이렉트 복귀` 흐름의 ES 모듈 스크립트                  |
 | `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete / completed` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
-| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 4종                                                    |
+| `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 4종                                                                |
 
 발행한 파일을 애플리케이션에 연결합니다.
 
