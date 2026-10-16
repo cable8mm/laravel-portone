@@ -433,3 +433,19 @@
     - Signing uses the portone-php signer; the package's own unit tests use the helper.
     - portone:webhook-replay refuses production without --force and prints the response status.
     - README documents both.
+
+- [X] T-037 Single redirect checkout flow for mobile PG windows
+  - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-052), FR-047, FR-049, FR-051, FR-052, FR-055, FR-056, FR-066, FR-067, FLOW-005; ARCHITECTURE.md SF-5, DF-5, CMP-11, CMP-12, CMP-13, CMP-17
+  - Depends on: cable8mm/portone-php v0.5.0 with Browser\RedirectResult, Browser\BrowserPaymentRequest, and the Payment amount accessors (owner-confirmed)
+  - External boundary: yes (the stub script runs in the browser against live PortOne; the redirect return is a live PortOne navigation)
+  - Acceptance criteria:
+    - TECH_STACK.md raises cable8mm/portone-php to ^0.5.0 (owner-confirmed) before the code changes.
+    - The prepare action responds with the EL-052 values built from the EL-010 array, CARD/KRW, forceRedirect true, and the absolute completed URL as redirectUrl.
+    - The stub script calls requestPayment with the prepare response plus the payment method and currency constants; it never requests the complete route and never navigates on its own; a failed prepare, a failed SDK call, or a result with an error code sets the Error state.
+    - The completed action renders Failed without touching any record for a redirect carrying an error code; otherwise it completes a PENDING/EXPIRED record first and renders Paid for PAID/PARTIALLY_CANCELLED/CANCELLED, Failed when completion raises, and 404 otherwise.
+    - PortOneGateway reads total/cancelled amounts through the portone-php Payment accessors instead of raw arrays.
+    - The Workbench copy of the stubs differs from the published stubs only in the product lookup body, the namespace, and the view layout and styling.
+    - Unit tests (PHPUnit, Vitest) cover the new response, the redirect parsing, and the Paid/Failed/404 branches; the promise-flow assertions of T-015/T-024 are superseded for the stub flow (those tasks keep their IDs and history).
+    - A live desktop run reaches the Paid page after a completed payment; a live mobile (KCP) run opens the mobile PG window and reaches the Paid page; a failed redirect return reaches the Failed page, and a closed PG window returns `?code=FAILURE_TYPE_PG` (user cancel) to the Failed page, with the record still PENDING.
+    - A redirect query captured from the live flow is replayed into portone-php RedirectResult::fromQuery and matches (closes the T-063 re-verification).
+    - README documents the redirect flow and the local-check URL guidance (ngrok/LAN host instead of localhost).

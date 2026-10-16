@@ -47,11 +47,12 @@ class CheckoutPrepareActionTest extends TestCase
         $this->assertSame(0, Payment::query()->count());
     }
 
-    public function test_prepare_uses_the_looked_up_product_and_returns_checkout_parameters(): void
+    public function test_prepare_uses_the_looked_up_product_and_returns_browser_payment_request_values(): void
     {
         $this->migratePackageTables();
         $this->publishAndIncludeRoutes();
         config(['portone.api_secret' => null]);
+        config(['portone.store_id' => 'store-123', 'portone.channel_key' => 'channel-456']);
         $billable = new CheckoutBillableUser;
         $billable->setRawAttributes(['id' => 101]);
         $this->actingAs($billable);
@@ -62,12 +63,17 @@ class CheckoutPrepareActionTest extends TestCase
             'orderName' => 'Untrusted request value',
         ]);
 
+        $paymentId = Payment::query()->sole()->payment_id;
         $response->assertOk();
         $response->assertExactJson([
-            'paymentId' => Payment::query()->sole()->payment_id,
+            'storeId' => 'store-123',
+            'channelKey' => 'channel-456',
+            'paymentId' => $paymentId,
             'orderName' => 'Order A',
             'totalAmount' => 10000,
-            'customerId' => $billable->portOneId(),
+            'redirectUrl' => route('portone.checkout.completed', ['paymentId' => $paymentId]),
+            'customer' => ['customerId' => $billable->portOneId()],
+            'forceRedirect' => true,
         ]);
         $this->assertSame(1, Payment::query()->count());
         $this->assertSame('PENDING', Payment::query()->sole()->status);

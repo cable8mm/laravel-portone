@@ -152,7 +152,11 @@ class WorkbenchSampleShopTest extends TestCase
             ->assertSee('data-portone-completed', false)
             ->assertSee('주문이 완료됐어요!')
             ->assertSee('10,000 KRW');
-        $this->get(route('portone.checkout.completed', ['paymentId' => $pending->payment_id]))->assertNotFound();
+        $this->get(route('portone.checkout.completed', ['paymentId' => $pending->payment_id]))
+            ->assertOk()
+            ->assertSee('data-failed', false)
+            ->assertSee('결제에 실패했어요');
+        $this->assertSame('PENDING', $pending->fresh()->status);
     }
 
     public function test_prepare_rejects_an_unknown_product(): void

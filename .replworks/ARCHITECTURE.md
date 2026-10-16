@@ -87,12 +87,11 @@
 
 1. Payer visits the checkout route; the Application authenticates; Checkout Controller `show` renders Checkout View.
 2. Payer clicks the start-payment button; Checkout Script requests the `prepare` route.
-3. Checkout Controller `prepare` runs SF-1 for the authenticated user with the price and name of the product from its product lookup and responds with the checkoutParameters.
-4. Checkout Script calls the PortOne browser SDK; the Payer pays outside the Package.
-5. On an SDK result without an error code, Checkout Script requests the `complete` route with the Payment ID.
-6. Checkout Controller `complete` runs SF-2 for the authenticated user and responds with the status and, for PAID, the URL of the `completed` route for that Payment ID.
-7. Checkout Script moves Checkout View to the Success or Error state; on Success it navigates the browser to that URL.
-8. Checkout Controller `completed` finds the record through the Facade's scoped lookup (EL-008) and renders Completion View when it has been paid; otherwise it responds HTTP 404.
+3. Checkout Controller `prepare` runs SF-1 for the authenticated user with the price and name of the product from its product lookup and responds with the browser payment-request values (EL-052) built from the EL-010 array, the configured store and channel, the CARD/KRW constants, forceRedirect true, and the absolute `completed` URL of the created Payment ID as redirectUrl.
+4. Checkout Script calls the PortOne browser SDK with exactly those values; the browser leaves the page for PortOne; the Payer pays outside the Package.
+5. PortOne returns the browser to redirectUrl with the redirect query; a pre-start SDK failure (reject/throw) or a result with an error code moves Checkout View to the Error state instead and the flow ends.
+6. Checkout Controller `completed` parses the redirect query with Browser\RedirectResult (path Payment ID as fallback); with an error code it renders Completion View in the Failed state with no record change.
+7. Without an error code, Checkout Controller `completed` finds the record through the Facade's scoped lookup (EL-008), runs SF-2 for it when it is PENDING or EXPIRED, and renders Completion View in the Paid state when it has been paid; an SF-2 failure renders the Failed state; otherwise it responds HTTP 404.
 
 ### SF-6 History and customer queries (FLOW-004, EL-001 to EL-003, EL-007, EL-008)
 
@@ -286,10 +285,10 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 
 - Responsibilities:
   - `show`: read EL-022, EL-023 from Configuration; when either is absent tell Checkout View to render the Error state with the button disabled (ERR-013); otherwise render Checkout View with the looked-up product's name and price and with the values and the product identifier available to Checkout Script (FR-043).
-  - `prepare`: call EL-004 on the authenticated user with the price as the amount and the name as the order name of the product from the product lookup; never read an amount or order name from the request; respond with the EL-010 array (FR-045 to FR-047).
+  - `prepare`: call EL-004 on the authenticated user with the price as the amount and the name as the order name of the product from the product lookup; never read an amount or order name from the request; respond with the EL-052 browser payment-request values built from the EL-010 array of the created record (FR-045 to FR-047).
   - Product lookup: one lookup used by `show` and `prepare`; it may read a product identifier from the request; the published stub returns a sample product the Developer replaces with a database lookup (FR-045a).
   - `complete`: call EL-005 on the authenticated user with the Payment ID from the request; never read an amount; respond with the status of the returned record and, for PAID, the URL of `completed` for that Payment ID (FR-053, FR-054).
-  - `completed`: call EL-008 on the authenticated user with the Payment ID from the path; render Completion View when the record is PAID, PARTIALLY_CANCELLED, or CANCELLED; otherwise respond HTTP 404 (FR-066).
+  - `completed`: parse the redirect query with Browser\RedirectResult (path Payment ID as fallback); with an error code render Completion View in the Failed state with no record change; otherwise call EL-008 on the authenticated user, run SF-2 first when the record is PENDING or EXPIRED, render Completion View in the Paid state when the record is PAID, PARTIALLY_CANCELLED, or CANCELLED, render the Failed state when SF-2 raises, and otherwise respond HTTP 404 (FR-066).
   - Map PaymentNotFoundException, PaymentNotPaidException, AmountMismatchException to HTTP 422 with the key `error`; ConfigurationException and the PortOne exception to HTTP 500 with the key `error` (ERR-014, ERR-015). Every other exception propagates unmodified (RD-18).
 - Inputs: requests via CMP-14 from an authenticated user.
 - Outputs: rendered views; structured responses to Checkout Script.
@@ -300,7 +299,7 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 
 - Responsibilities:
   - Contain the start-payment button (EL-026) and the status slot (EL-027) (FR-044).
-  - Render states: Initial (button enabled, idle), Loading (button disabled, in-progress), Success (button disabled, paid), Error (button enabled, error). Error caused by ERR-013 keeps the button disabled.
+  - Render states: Initial (button enabled, idle), Loading (button disabled, in-progress), Error (button enabled, error). There is no Success state; the browser leaves the page for the redirect flow. Error caused by ERR-013 keeps the button disabled.
   - Show the looked-up product's name and price.
   - Hand the store ID, channel key, and product identifier to Checkout Script.
   - Load Checkout Script as part of the rendered page.
@@ -313,14 +312,12 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 
 - Responsibilities:
   - On click: request `prepare` with the product identifier and set Loading (FR-048).
-  - Call the PortOne browser SDK `requestPayment` with store ID, channel key, paymentId, orderName, totalAmount, customerId, a payment method constant, a currency constant (FR-049). The two constants are defined at the top of the file (FR-050).
-  - On a result with an error code: set Error and do not request `complete` (FR-051).
-  - On a result without an error code: request `complete` with the Payment ID (FR-052).
-  - Set Success only when `complete` responds with status PAID, then navigate to the URL in that response. Every other outcome sets Error and stays (FR-055, FR-056, RD-17).
-- Inputs: Payer click; responses of `prepare` and `complete`; the SDK result.
-- Outputs: requests to CMP-14 routes; state changes to Checkout View.
+  - Call the PortOne browser SDK `requestPayment` with the EL-052 values of the prepare response plus the payment method and currency constants (FR-049). The payment method and currency constants are defined at the top of the file (FR-050).
+  - On a rejected or thrown SDK call, or on a result with an error code: set Error and end the flow (FR-051, FR-052, FR-056). There is no promise result to act on in the redirect flow and no `complete` request from the script.
+- Inputs: Payer click; the `prepare` response; the SDK outcome (pre-start failure only).
+- Outputs: the request to the CMP-14 `prepare` route; state changes to Checkout View.
 - Owns: the browser-side sequence and the currency and payment method constants. The core has no currency concept.
-- Does not own: any amount or order name; any record.
+- Does not own: any amount or order name; any record; the redirect return, which the browser and CMP-11 handle.
 - Depends on the unverified assumptions about the PortOne browser SDK. They are isolated here.
 
 ### CMP-14 Checkout Routes (stub, EL-030)
@@ -335,7 +332,7 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 ### CMP-17 Completion View (stub, EL-036)
 
 - Responsibilities:
-  - Show the order name, amount, Payment ID, paid_at, and current status of one paid Payment record (FR-067).
+  - Show the order name, amount, Payment ID, paid_at, and current status of one paid Payment record (FR-067); in the Failed state show the order information with a way back to the shop instead.
 - Inputs: the Payment record from Checkout Controller `completed`.
 - Outputs: what the Payer sees after paying.
 - Owns: presentation of the completion page; placeholder text, which the Developer replaces.
@@ -534,13 +531,10 @@ For Transaction.Cancelled and Transaction.PartialCancelled, step 4a runs between
 | 1    | Payer -> CMP-12/CMP-13        | click                                                                                                            |
 | 2    | CMP-13 -> CMP-11 (`prepare`)  | product identifier only; no amount, no order name                                                                |
 | 3    | CMP-11 -> CMP-03              | price and name of the looked-up product                                                                          |
-| 4    | CMP-11 -> CMP-13              | EL-010 array                                                                                                     |
-| 5    | CMP-13 -> SDK                 | store ID, channel key, paymentId, orderName, totalAmount, customerId, payment method constant, currency constant |
-| 6    | SDK -> CMP-13                 | result with or without error code                                                                                |
-| 7    | CMP-13 -> CMP-11 (`complete`) | Payment ID only                                                                                                  |
-| 8    | CMP-11 -> CMP-13              | status and, for PAID, the `completed` URL; or error with key `error`                                             |
-| 9    | CMP-13 -> CMP-11 (`completed`) | Payment ID in the path (browser navigation)                                                                      |
-| 10   | CMP-11 -> CMP-03 -> CMP-17    | the scoped Payment record (EL-008)                                                                               |
+| 4    | CMP-11 -> CMP-13              | EL-052 browser payment-request values                                                                            |
+| 5    | CMP-13 -> SDK                 | the EL-052 values plus the payment method and currency constants |
+| 6    | SDK -> PortOne -> CMP-11 (`completed`) | browser redirect to redirectUrl with the redirect query                                                    |
+| 7    | CMP-11 -> CMP-03 -> CMP-17    | the scoped Payment record (EL-008), completed first when PENDING or EXPIRED                                      |
 
 ### DF-6 Queries
 

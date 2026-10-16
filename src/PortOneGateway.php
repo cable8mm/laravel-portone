@@ -7,6 +7,7 @@ namespace Cable8mm\LaravelPortone;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\PortonePhp\Client\PortOneClient;
 use Cable8mm\PortonePhp\Exception\PortOneException;
+use Cable8mm\PortonePhp\Model\Payment as PaymentModel;
 
 /**
  * cable8mm/portone-php 클라이언트로 PortOne V2 API를 호출하는 게이트웨이.
@@ -32,7 +33,7 @@ class PortOneGateway implements PaymentGateway
     }
 
     /**
-     * PortOne 결제 응답을 조회 결과로 바꾼다. 실결제액은 amount.total, 취소 총액은 amount.cancelled이다.
+     * PortOne 결제 응답을 조회 결과로 바꾼다. 금액은 portone-php Payment 접근자로 읽는다.
      *
      * @param  string  $status  PortOne 결제 상태(응답의 status)
      * @param  array<string, mixed>  $data  디코딩한 PortOne 응답 본문
@@ -40,15 +41,9 @@ class PortOneGateway implements PaymentGateway
      */
     protected function gatewayPayment(string $status, array $data): GatewayPayment
     {
-        $amount = $data['amount'] ?? null;
-        $totalAmount = is_array($amount) && is_int($amount['total'] ?? null)
-            ? $amount['total']
-            : null;
-        $cancelledAmount = is_array($amount) && is_int($amount['cancelled'] ?? null)
-            ? $amount['cancelled']
-            : null;
+        $payment = new PaymentModel($data, $status, true);
 
-        return new GatewayPayment($status, $totalAmount, cancelledAmount: $cancelledAmount);
+        return new GatewayPayment($payment->variant, $payment->totalAmount(), cancelledAmount: $payment->cancelledAmount());
     }
 
     /**

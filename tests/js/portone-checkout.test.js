@@ -8,11 +8,15 @@ vi.mock("@portone/browser-sdk/v2", () => ({
   default: { requestPayment },
 }));
 
-const payment = {
+const parameters = {
+  storeId: "store-123",
+  channelKey: "channel-456",
   paymentId: "payment-123",
   orderName: "Order A",
   totalAmount: 10000,
-  customerId: "customer-123",
+  redirectUrl: "http://localhost/portone/checkout/completed/payment-123",
+  customer: { customerId: "customer-123" },
+  forceRedirect: true,
 };
 
 const response = (body, ok = true, status = 200) => ({
@@ -28,7 +32,6 @@ async function renderCheckout() {
 			data-store-id="store-123"
 			data-channel-key="channel-456"
 			data-prepare-url="/portone/checkout/prepare"
-			data-complete-url="/portone/checkout/complete"
 			data-product="1"
 			data-csrf-token="csrf-token"
 			data-state="initial"
@@ -55,16 +58,12 @@ afterEach(() => {
 });
 
 describe("published checkout script", () => {
-  it("prepares the product, requests payment with the observed SDK values, completes as PAID, and opens the completion page", async () => {
-    const redirectUrl = "/portone/checkout/completed/payment-123";
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(response(payment))
-      .mockResolvedValueOnce(response({ status: "PAID", redirectUrl }));
-    const location = { assign: vi.fn() };
+  it("prepares the product and requests payment with the prepare values plus the constants", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response(parameters));
     vi.stubGlobal("fetch", fetch);
+    const location = { assign: vi.fn() };
     vi.stubGlobal("location", location);
-    requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
+    requestPayment.mockResolvedValue(undefined);
     const { root, button, status } = await renderCheckout();
 
     button.click();
@@ -72,15 +71,10 @@ describe("published checkout script", () => {
     expect(root.dataset.state).toBe("loading");
     expect(button.disabled).toBe(true);
     expect(status.textContent).toBe("Loading");
-    await vi.waitFor(() => expect(root.dataset.state).toBe("success"));
+    await vi.waitFor(() => expect(requestPayment).toHaveBeenCalledTimes(1));
 
     expect(requestPayment).toHaveBeenCalledWith({
-      storeId: "store-123",
-      channelKey: "channel-456",
-      paymentId: payment.paymentId,
-      orderName: payment.orderName,
-      totalAmount: payment.totalAmount,
-      customer: { customerId: payment.customerId },
+      ...parameters,
       payMethod: "CARD",
       currency: "KRW",
     });
@@ -93,22 +87,14 @@ describe("published checkout script", () => {
       },
       body: JSON.stringify({ product: "1" }),
     });
-    expect(fetch).toHaveBeenNthCalledWith(2, "/portone/checkout/complete", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-CSRF-TOKEN": "csrf-token",
-      },
-      body: JSON.stringify({ paymentId: payment.paymentId }),
-    });
-    expect(button.disabled).toBe(true);
-    expect(status.textContent).toBe("Success");
-    expect(location.assign).toHaveBeenCalledWith(redirectUrl);
+    // The redirect flow leaves the page; the script never requests complete or navigates.
+    await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(location.assign).not.toHaveBeenCalled();
   });
 
-  it("returns to Error without completing when PortOne reports a cancelled payment", async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(response(payment));
+  it("returns to Error without navigating when PortOne reports an error code", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response(parameters));
     vi.stubGlobal("fetch", fetch);
     requestPayment.mockResolvedValue({ code: "FAILURE_TYPE_PG" });
     const location = { assign: vi.fn() };
@@ -125,7 +111,7 @@ describe("published checkout script", () => {
   });
 
   it("returns to Error when the PortOne SDK rejects", async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(response(payment));
+    const fetch = vi.fn().mockResolvedValueOnce(response(parameters));
     vi.stubGlobal("fetch", fetch);
     requestPayment.mockRejectedValue(new Error("SDK failure"));
     const location = { assign: vi.fn() };
@@ -158,40 +144,28 @@ describe("published checkout script", () => {
     expect(location.assign).not.toHaveBeenCalled();
   });
 
-  it("returns to Error when completion fails", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(response(payment))
-      .mockResolvedValueOnce(response({ error: "failed" }, false, 422));
+  it("returns to Error on back navigation while loading", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response(parameters));
     vi.stubGlobal("fetch", fetch);
-    requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
-    const location = { assign: vi.fn() };
-    vi.stubGlobal("location", location);
-    const { root, button } = await renderCheckout();
+    requestPayment.mockImplementation(() => new Promise(() => {}));
+    const { root, button, status } = await renderCheckout();
 
     button.click();
 
-    await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
-    expect(fetch).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(root.dataset.state).toBe("loading"));
+    window.dispatchEvent(new Event("pageshow"));
+
+    expect(root.dataset.state).toBe("error");
     expect(button.disabled).toBe(false);
-    expect(location.assign).not.toHaveBeenCalled();
+    expect(status.textContent).toBe("Error");
   });
 
-  it("never enters Success when completion responds with a non-PAID status", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(response(payment))
-      .mockResolvedValueOnce(response({ status: "PENDING" }));
-    vi.stubGlobal("fetch", fetch);
-    requestPayment.mockResolvedValue({ paymentId: payment.paymentId });
-    const location = { assign: vi.fn() };
-    vi.stubGlobal("location", location);
-    const { root, button } = await renderCheckout();
+  it("ignores back navigation while not loading", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { root } = await renderCheckout();
 
-    button.click();
+    window.dispatchEvent(new Event("pageshow"));
 
-    await vi.waitFor(() => expect(root.dataset.state).toBe("error"));
-    expect(button.disabled).toBe(false);
-    expect(location.assign).not.toHaveBeenCalled();
+    expect(root.dataset.state).toBe("initial");
   });
 });

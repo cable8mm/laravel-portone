@@ -176,9 +176,9 @@ php artisan vendor:publish --tag=portone-stubs
 | 발행 파일                                            | 설명                                                                                     |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `resources/views/portone/checkout.blade.php`         | 주문서(상품명·금액) + 결제 버튼 + 상태 표시 뷰                                           |
-| `resources/views/portone/completed.blade.php`        | 결제 완료 후 이동하는 주문 완료 화면 (주문명·금액·결제 ID·결제 시각·상태)                |
-| `resources/js/portone-checkout.js`                   | `prepare → requestPayment → complete → 완료 화면 이동` 흐름의 ES 모듈 스크립트           |
-| `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
+| `resources/views/portone/completed.blade.php`        | 리다이렉트 복귀 화면 (결제 성공 시 주문 완료, 실패 시 실패 안내)                         |
+| `resources/js/portone-checkout.js`                   | `prepare → requestPayment(forceRedirect) → 리다이렉트 복귀` 흐름의 ES 모듈 스크립트      |
+| `app/Http/Controllers/PortOneCheckoutController.php` | `show / prepare / complete / completed` 액션과 상품 조회 `product()` (샘플 상품 `Order A`, 10,000원) |
 | `routes/portone.php`                                 | `auth` 미들웨어의 체크아웃 라우트 4종                                                    |
 
 발행한 파일을 애플리케이션에 연결합니다.
@@ -224,13 +224,15 @@ PORTONE_CHANNEL_KEY=
 
 체크아웃 라우트는 `auth` 미들웨어 뒤에 있으므로 로그인 후 `/portone/checkout`에 접속합니다. `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`가 설정되어 있어야 `Start payment` 버튼이 활성화되고, 클릭하면 실제 포트원 결제창이 열립니다.
 
-체크아웃 흐름:
+체크아웃 흐름 (단일 리다이렉트 방식: PC·모바일 동일):
 
 1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare`(상품 ID만 전송) → `PENDING` 레코드 생성
-2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (storeId, channelKey, paymentId, orderName, totalAmount, customerId, `CARD`, `KRW`)
-3. 에러 코드 없이 반환되면 `POST portone.checkout.complete` (`paymentId`만 전송)
-4. `PAID` 응답이면 `Success` 후 응답의 `redirectUrl`(`GET portone.checkout.completed`, `/portone/checkout/completed/{paymentId}`)로 이동, 그 외(준비 실패·SDK 실패·미결제·금액 불일치 등)는 `Error`
-5. 주문 완료 화면은 내 결제이면서 결제된 적 있는 건(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`)만 보여 주고, 그 밖에는 `404`
+2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (`prepare` 응답값 + `CARD`, `KRW`, `redirectUrl`, `forceRedirect: true`) → 브라우저가 포트원으로 이동했다가 `redirectUrl`(`GET portone.checkout.completed/{paymentId}?paymentId=...`)로 복귀
+3. 복귀 시 `completed` 액션이 서버에서 결제를 확정(`completePayment`)하고 주문 완료 화면을 렌더. 실패 복귀(`?code=`)나 확정 실패면 실패 화면, 레코드는 `PENDING` 유지
+4. 준비 실패·SDK 호출 실패·결제창을 닫은 뒤 뒤로가기는 주문서의 `Error` 상태로 끝남
+5. 주문 완료 화면은 내 결제이면서 결제된 적 있는 건(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`)만 보여 주고, 결제 전·알 수 없는 건은 `404`
+
+> 로컬에서 모바일 흐름을 확인할 때는 `redirectUrl`이 휴대폰에서 닿는 주소여야 합니다. `127.0.0.1` 대신 ngrok 공개 URL이나 LAN 호스트로 serve하세요.
 
 ### 5. 화면 커스터마이징
 
@@ -640,7 +642,7 @@ const CURRENCY = "KRW";
 ```
 
 바꾸면 위의 검증 범위를 벗어납니다. 특히 가상계좌처럼 결제창을 닫은 뒤에 입금되는 수단은 스텁 흐름
-(결제창 결과 → 바로 `complete`)과 만료 규칙이 그 수단에 맞는지 확인되지 않았습니다. 테스트 채널에서
+(리다이렉트 복귀 → `completed`에서 바로 확정)과 만료 규칙이 그 수단에 맞는지 확인되지 않았습니다. 테스트 채널에서
 그 수단으로 결제·취소·만료 흐름을 먼저 돌려 보세요.
 
 ### 운영 전환 체크리스트

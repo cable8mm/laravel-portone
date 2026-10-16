@@ -8,6 +8,8 @@ use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
+use Cable8mm\PortonePhp\Browser\BrowserPaymentRequest;
+use Cable8mm\PortonePhp\Browser\RedirectResult;
 use Cable8mm\PortonePhp\Exception\PortOneException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -28,7 +30,6 @@ class PortOneCheckoutController
             'storeId' => $storeId,
             'channelKey' => $channelKey,
             'prepareUrl' => route('portone.checkout.prepare'),
-            'completeUrl' => route('portone.checkout.complete'),
             'missingConfiguration' => $missingConfiguration,
             'state' => $missingConfiguration ? 'error' : 'initial',
             'statusText' => $missingConfiguration ? 'Error' : 'Idle',
@@ -39,8 +40,20 @@ class PortOneCheckoutController
     {
         $product = $this->product($request);
         $payment = auth()->user()->preparePayment($product->price, $product->name);
+        $checkout = $payment->checkoutParameters();
 
-        return response()->json($payment->checkoutParameters());
+        $browser = new BrowserPaymentRequest(
+            storeId: (string) config('portone.store_id'),
+            channelKey: (string) config('portone.channel_key'),
+            paymentId: $checkout['paymentId'],
+            orderName: $checkout['orderName'],
+            totalAmount: $checkout['totalAmount'],
+            redirectUrl: route('portone.checkout.completed', ['paymentId' => $payment->payment_id]),
+            customerId: $checkout['customerId'],
+            forceRedirect: true,
+        );
+
+        return response()->json($browser->toArray());
     }
 
     public function complete(Request $request): JsonResponse
@@ -63,14 +76,33 @@ class PortOneCheckoutController
         ]);
     }
 
-    public function completed(string $paymentId): View
+    public function completed(Request $request, string $paymentId): View
     {
+        // The path Payment ID identifies the record; the query carries the redirect result.
+        $redirect = RedirectResult::fromQuery(['paymentId' => $paymentId] + $request->query());
+
+        if ($redirect->isFailure()) {
+            $payment = auth()->user()->findPayment($redirect->paymentId);
+            abort_unless($payment, 404);
+
+            return view('portone.completed', ['payment' => $payment, 'failed' => true]);
+        }
+
         $payment = auth()->user()->findPayment($paymentId);
+        abort_unless($payment, 404);
+
+        if (in_array($payment->status, ['PENDING', 'EXPIRED'], true)) {
+            try {
+                $payment = auth()->user()->completePayment($paymentId);
+            } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException|ConfigurationException|PortOneException $exception) {
+                return view('portone.completed', ['payment' => $payment->fresh() ?? $payment, 'failed' => true]);
+            }
+        }
 
         // Only a payment that has been paid has an order to show; a later refund keeps the page.
-        abort_unless(in_array($payment?->status, ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'], true), 404);
+        abort_unless(in_array($payment->status, ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'], true), 404);
 
-        return view('portone.completed', ['payment' => $payment]);
+        return view('portone.completed', ['payment' => $payment, 'failed' => false]);
     }
 
     /**
