@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.6.0 - 2026-10-16
+
+### What's Changed
+
+* feat: single redirect checkout flow for mobile PG windows by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/46
+* docs: changing force-redirect flow by [@cable8mm](https://github.com/cable8mm) in https://github.com/cable8mm/laravel-portone/pull/47
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.5.0...v0.6.0
+
 ## v0.5.0 - 2026-10-15
 
 ### What's Changed
