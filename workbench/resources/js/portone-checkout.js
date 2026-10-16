@@ -15,6 +15,13 @@ if (checkout) {
     button.disabled = disabled;
   };
 
+  // A closed payment window returns nothing; back navigation must not leave Loading stuck.
+  window.addEventListener("pageshow", () => {
+    if (checkout.dataset.state === "loading") {
+      setState("error", "Error", false);
+    }
+  });
+
   const post = async (url, body) => {
     const response = await fetch(url, {
       method: "POST",
@@ -38,36 +45,22 @@ if (checkout) {
       setState("loading", "Loading", true);
 
       try {
-        const payment = await post(checkout.dataset.prepareUrl, {
+        const parameters = await post(checkout.dataset.prepareUrl, {
           product: checkout.dataset.product,
         });
         const result = await PortOne.requestPayment({
-          storeId: checkout.dataset.storeId,
-          channelKey: checkout.dataset.channelKey,
-          paymentId: payment.paymentId,
-          orderName: payment.orderName,
-          totalAmount: payment.totalAmount,
-          customer: { customerId: payment.customerId },
+          ...parameters,
           payMethod: PAYMENT_METHOD,
           currency: CURRENCY,
         });
 
-        if (!result || result.code) {
+        if (result && result.code) {
           setState("error", "Error", false);
           return;
         }
 
-        const completion = await post(checkout.dataset.completeUrl, {
-          paymentId: payment.paymentId,
-        });
-
-        if (completion.status !== "PAID") {
-          setState("error", "Error", false);
-          return;
-        }
-
-        setState("success", "Success", true);
-        window.location.assign(completion.redirectUrl);
+        // The redirect flow leaves this page; reaching here means it did not start.
+        setState("error", "Error", false);
       } catch {
         setState("error", "Error", false);
       }

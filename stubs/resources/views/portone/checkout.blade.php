@@ -3,7 +3,6 @@
     data-store-id="{{ $storeId }}"
     data-channel-key="{{ $channelKey }}"
     data-prepare-url="{{ $prepareUrl }}"
-    data-complete-url="{{ $completeUrl }}"
     data-product="{{ $product->id }}"
     data-csrf-token="{{ csrf_token() }}"
     data-state="{{ $state }}"

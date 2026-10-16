@@ -32,7 +32,7 @@ class PortOneCheckoutFlowTest extends TestCase
 
             $payment = Payment::query()->sole();
 
-            // Success navigates to the completion page of the paid payment (FR-055, FR-066).
+            // The redirect flow lands on the completion page of the paid payment (FR-055, FR-066).
             $browser->assertPathIs(route('portone.checkout.completed', ['paymentId' => $payment->payment_id], false));
             self::assertSame('PAID', $browser->attribute(self::COMPLETED, 'data-status'));
             $browser->assertSeeIn(self::COMPLETED, 'Order A')
@@ -44,25 +44,14 @@ class PortOneCheckoutFlowTest extends TestCase
             self::assertSame('PAID', $payment->status);
             self::assertNotNull($payment->paid_at);
 
-            self::assertCount(2, $requests);
+            self::assertCount(1, $requests);
             self::assertSame($this->servedUrl('portone.checkout.prepare'), $requests[0]['url']);
-            self::assertSame($this->servedUrl('portone.checkout.complete'), $requests[1]['url']);
-            self::assertSame(
-                ['paymentId' => $payment->payment_id],
-                json_decode((string) $requests[1]['body'], true, 512, JSON_THROW_ON_ERROR),
-            );
-            self::assertSame(200, $requests[1]['status']);
-            self::assertSame(
-                ['status' => 'PAID', 'redirectUrl' => static::applicationBaseUrl().route('portone.checkout.completed', ['paymentId' => $payment->payment_id], false)],
-                json_decode((string) $requests[1]['response'], true, 512, JSON_THROW_ON_ERROR),
-            );
 
             $this->recordScenario('completedPayment', [
                 'paymentId' => $payment->payment_id,
                 'totalAmount' => $payment->amount,
-                'browserState' => 'success, then navigated to the completion page',
-                'sdkOutcome' => 'returned without an error code',
-                'completeRouteStatus' => $requests[1]['status'],
+                'browserState' => 'redirected to the completion page',
+                'sdkOutcome' => 'redirected to redirectUrl',
                 'paymentStatus' => $payment->status,
             ]);
         });
@@ -76,7 +65,7 @@ class PortOneCheckoutFlowTest extends TestCase
             $requests = $this->runCheckout(
                 $browser,
                 $user,
-                'Close the PortOne payment window in the browser WITHOUT completing the payment.',
+                'Close the PortOne payment window in the browser WITHOUT completing the payment, then return to the shop tab with the browser Back button.',
             );
 
             self::assertSame('error', $browser->attribute(self::CHECKOUT, 'data-state'));
@@ -93,10 +82,9 @@ class PortOneCheckoutFlowTest extends TestCase
             $this->recordScenario('cancelledPayment', [
                 'paymentId' => $payment->payment_id,
                 'totalAmount' => $payment->amount,
-                'browserState' => 'error',
+                'browserState' => 'error after back navigation',
                 'browserButtonDisabled' => false,
-                'sdkOutcome' => 'returned an error code',
-                'completeRouteRequested' => false,
+                'sdkOutcome' => 'no redirect return',
                 'paymentStatus' => $payment->status,
             ]);
         });

@@ -86,7 +86,7 @@ class CheckoutStubPublishingTest extends TestCase
         $response->assertSee('data-store-id="store-123"', false);
         $response->assertSee('data-channel-key="channel-456"', false);
         $response->assertSee('data-prepare-url="'.route('portone.checkout.prepare').'"', false);
-        $response->assertSee('data-complete-url="'.route('portone.checkout.complete').'"', false);
+        $response->assertDontSee('data-complete-url', false);
         $response->assertSee('data-csrf-token="'.csrf_token().'"', false);
         $response->assertSee('data-product="1"', false);
         $response->assertSee('<h1>Order A</h1>', false);

@@ -10,7 +10,6 @@
         data-store-id="{{ $storeId }}"
         data-channel-key="{{ $channelKey }}"
         data-prepare-url="{{ $prepareUrl }}"
-        data-complete-url="{{ $completeUrl }}"
         data-product="{{ $product->id }}"
         data-csrf-token="{{ csrf_token() }}"
         data-state="{{ $state }}"
@@ -46,7 +45,7 @@
     ])
     @include('workbench::partials.code', [
         'file' => 'workbench/resources/js/portone-checkout.js',
-        'note' => '발행된 스텁 스크립트 그대로입니다. 결제하기 → prepare(상품 ID만 전송) → 포트원 결제창 → complete.',
-        'code' => "post(prepareUrl, { product })            // PENDING 레코드 생성\nPortOne.requestPayment({ ...payment })    // 결제창은 사람이 조작\npost(completeUrl, { paymentId })          // 서버에서 금액 검증 후 PAID",
+        'note' => '발행된 스텁 스크립트 그대로입니다. 결제하기 → prepare(상품 ID만 전송) → 포트원 결제창 → 리다이렉트 복귀.',
+        'code' => "post(prepareUrl, { product })            // PENDING 레코드 생성 + 복귀값 수신\nPortOne.requestPayment({ ...params })   // 결제창은 사람이 조작, 끝나면 복귀 URL로",
     ])
 @endsection

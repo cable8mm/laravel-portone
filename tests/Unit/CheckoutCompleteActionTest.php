@@ -85,6 +85,7 @@ class CheckoutCompleteActionTest extends TestCase
         $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]))
             ->assertOk()
             ->assertSee('data-status="PAID"', false)
+            ->assertDontSee('data-failed', false)
             ->assertSee('Order A')
             ->assertSee('100 KRW')
             ->assertSee($payment->payment_id)
@@ -97,21 +98,98 @@ class CheckoutCompleteActionTest extends TestCase
             ->assertSee('PARTIALLY_CANCELLED');
     }
 
-    public function test_completion_page_is_not_found_for_unpaid_unknown_or_other_payments(): void
+    public function test_completion_page_completes_a_pending_payment_on_the_redirect_return(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        $gateway = $this->gatewayMock();
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(100, 'Order A');
+        $gateway->expects($this->once())
+            ->method('lookup')
+            ->with($payment->payment_id)
+            ->willReturn(new GatewayPayment('PAID', 100));
+        $this->actingAs($billable);
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]))
+            ->assertOk()
+            ->assertSee('data-status="PAID"', false)
+            ->assertDontSee('data-failed', false);
+
+        $this->assertSame('PAID', $payment->fresh()->status);
+    }
+
+    public function test_completion_page_completes_an_expired_payment_paid_later(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        $gateway = $this->gatewayMock();
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(100, 'Order A');
+        $payment->forceFill(['status' => 'EXPIRED'])->save();
+        $gateway->expects($this->once())
+            ->method('lookup')
+            ->willReturn(new GatewayPayment('PAID', 100));
+        $this->actingAs($billable);
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]))
+            ->assertOk()
+            ->assertSee('data-status="PAID"', false);
+
+        $this->assertSame('PAID', $payment->fresh()->status);
+    }
+
+    public function test_completion_page_shows_failed_when_portone_reports_not_paid(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        $gateway = $this->gatewayMock();
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(100, 'Order A');
+        $gateway->expects($this->once())
+            ->method('lookup')
+            ->willReturn(new GatewayPayment('FAILED', 100));
+        $this->actingAs($billable);
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]))
+            ->assertOk()
+            ->assertSee('data-failed', false)
+            ->assertSee('Payment failed');
+
+        $this->assertSame('PENDING', $payment->fresh()->status);
+    }
+
+    public function test_completion_page_shows_failed_for_a_redirect_error_without_touching_the_record(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        $gateway = $this->gatewayMock();
+        $gateway->expects($this->never())->method('lookup');
+        $billable = $this->billable(101);
+        $payment = $billable->preparePayment(100, 'Order A');
+        $this->actingAs($billable);
+
+        $this->get(route('portone.checkout.completed', ['paymentId' => $payment->payment_id]).'?code=FAILURE_TYPE_PG&message=failed')
+            ->assertOk()
+            ->assertSee('data-failed', false)
+            ->assertSee('Payment failed');
+
+        $this->assertSame('PENDING', $payment->fresh()->status);
+    }
+
+    public function test_completion_page_is_not_found_for_unknown_or_other_payments(): void
     {
         $this->migratePackageTables();
         $this->publishAndIncludeRoutes();
         $billable = $this->billable(101);
-        $pending = $billable->preparePayment(100, 'Order A');
-        $expired = $billable->preparePayment(100, 'Order A');
-        $expired->forceFill(['status' => 'EXPIRED'])->save();
         $others = $this->billable(202)->preparePayment(100, 'Order A');
         $others->forceFill(['status' => 'PAID', 'paid_at' => now()])->save();
         $this->actingAs($billable);
 
-        foreach ([$pending->payment_id, $expired->payment_id, $others->payment_id, 'unknown-payment'] as $paymentId) {
+        foreach ([$others->payment_id, 'unknown-payment'] as $paymentId) {
             $this->get(route('portone.checkout.completed', ['paymentId' => $paymentId]))->assertNotFound();
         }
+        $this->get(route('portone.checkout.completed', ['paymentId' => 'unknown-payment']).'?code=FAILURE_TYPE_PG')->assertNotFound();
     }
 
     public function test_unauthenticated_completion_page_redirects_to_login(): void
