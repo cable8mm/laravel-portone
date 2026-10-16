@@ -1,4 +1,5 @@
 providers:
+  - Cable8mm\LaravelPortone\PortOneServiceProvider
   - Workbench\App\Providers\WorkbenchServiceProvider
 
 env:
