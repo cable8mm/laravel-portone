@@ -118,6 +118,9 @@
 - The Package relies on the SDK function requestPayment opening the PG payment window for the values passed to it.
 - The Package relies on requestPayment returning a result that carries an error code when the payment did not complete.
 - The Package relies on requestPayment returning a result without an error code when the payment completed.
+- The Package relies on the documented redirect flow: with redirectUrl set and forceRedirect true, the browser navigates to PortOne and returns to redirectUrl (a single flow for PC and mobile) instead of resolving a promise result. Without redirectUrl the mobile payment UI may not display and the call is PC-only.
+- The Package relies on the redirect return carrying the query fields paymentId (always), code and message (on failure), pgCode and pgMessage (on failure with a PG error), as parsed by cable8mm/portone-php Browser\RedirectResult.
+- The Package relies on windowType defaulting per PG when omitted; windowType values are passed through and validated only by the browser SDK and the PG.
 
 ### PG channel
 
@@ -257,19 +260,23 @@
   - EL-028: script file resources/js/portone-checkout.js. Purpose: run the payment sequence in the browser. User action: edit.
   - EL-029: controller file app/Http/Controllers/PortOneCheckoutController.php with the actions show, prepare, complete, completed and one product lookup (FR-045a). Purpose: connect EL-025, EL-028, and EL-036 to EL-004, EL-005, and EL-008. User action: edit.
   - EL-030: route file routes/portone.php with the routes portone.checkout (GET), portone.checkout.prepare (POST), portone.checkout.complete (POST), portone.checkout.completed (GET, with the Payment ID in the path /portone/checkout/completed/{paymentId}). Purpose: expose the actions of EL-029. User action: include in the routes of the Application.
-  - EL-036: view file resources/views/portone/completed.blade.php. Purpose: render the order completion page the Payer reaches after paying. User action: edit.
+  - EL-036: view file resources/views/portone/completed.blade.php. Purpose: render the order completion page the Payer reaches after paying, or the failure page after a failed redirect return. User action: edit.
+- EL-052: browser payment-request values in the prepare response. Purpose: carry the exact values EL-028 passes to requestPayment. User action: none; EL-028 reads them.
 - EL-025 MUST load EL-028 when rendered; the Payer must not need to edit another view or layout to activate the checkout flow.
 - States of EL-025:
   - Initial: EL-026 enabled; EL-027 shows the idle state.
   - Loading: EL-026 disabled; EL-027 shows the in-progress state.
-  - Success: EL-026 disabled; EL-027 shows the paid state; the browser then navigates to EL-036 for the paid payment.
+  - Success: not applicable; the browser leaves the page for the redirect flow and never returns to EL-025.
   - Error: EL-026 enabled; EL-027 shows the error state.
   - Empty: not applicable.
   - Text in EL-027 and in EL-036 is placeholder text that the Developer replaces; its wording is not specified.
+- States of EL-036:
+  - Paid: shows the paid payment.
+  - Failed: shows the failed redirect return with the order information and a way back to the shop.
 - Navigation:
   - Visit portone.checkout -> EL-025 in the Initial state.
-  - Success of EL-025 -> EL-036 for the paid payment.
-  - Visit portone.checkout.completed for a payment of the authenticated user that has been paid -> EL-036.
+  - Finish the redirect flow -> EL-036 in the Paid or Failed state.
+  - Visit portone.checkout.completed for a payment of the authenticated user that has been paid -> EL-036 in the Paid state.
 - Interactions:
   - Visit portone.checkout -> FR-043, FR-044.
   - Click EL-026 -> FR-045 through FR-056.
@@ -436,18 +443,18 @@
 - FR-045: The prepare action MUST call EL-004 on the authenticated user with the price as the amount and the name as the order name of the product returned by the product lookup of EL-029.
 - FR-045a: EL-029 MUST contain one product lookup used by the show and prepare actions; in the published stub it returns a sample product object with an identifier, a name, and a price, defined under a comment that tells the Developer to replace it with a product lookup from the database.
 - FR-046: The prepare action MUST NOT read the amount or the order name from the request; the product lookup MAY read a product identifier from the request.
-- FR-047: The prepare action MUST respond with JSON containing the array returned by EL-010.
+- FR-047: The prepare action MUST respond with JSON containing the browser payment-request values of EL-052: the values of BrowserPaymentRequest built from the store ID (EL-022), the channel key (EL-023), the EL-010 array of the created record, the payment method and currency constants, forceRedirect true, and the absolute URL of portone.checkout.completed for the created Payment ID as redirectUrl.
 - FR-048: When EL-026 is clicked, EL-028 MUST request the prepare route with the product identifier and set the Loading state.
-- FR-049: EL-028 MUST call requestPayment with the store ID from EL-022, the channel key from EL-023, paymentId, orderName, totalAmount, and customerId from the prepare response, a payment method constant, and a currency constant.
+- FR-049: EL-028 MUST call requestPayment with the EL-052 values of the prepare response plus the payment method constant and the currency constant.
 - FR-050: EL-028 MUST define the payment method constant and the currency constant at the top of the file, with initial values of the PortOne card payment method and the PortOne Korean won currency.
-- FR-051: When requestPayment returns a result with an error code, EL-028 MUST set the Error state and MUST NOT request the complete route.
-- FR-052: When requestPayment returns a result without an error code, EL-028 MUST request the complete route with the Payment ID.
+- FR-051: When requestPayment returns a result with an error code, EL-028 MUST set the Error state and MUST NOT navigate.
+- FR-052: EL-028 MUST await requestPayment and MUST NOT request the complete route and MUST NOT navigate on its own; the redirect flow continues at redirectUrl. When the requestPayment call itself fails (rejects or throws), EL-028 MUST set the Error state.
 - FR-053: The complete action MUST call EL-005 on the authenticated user with the Payment ID from the request and respond with JSON containing the status of the returned Payment record and, when the status is PAID, the URL of portone.checkout.completed for that Payment ID.
 - FR-054: The complete action MUST NOT read an amount from the request.
-- FR-055: When the complete route responds with status PAID, EL-028 MUST set the Success state and then navigate the browser to the URL in the response.
-- FR-056: When the complete route responds with an error, EL-028 MUST set the Error state.
-- FR-066: The completed action MUST call EL-008 on the authenticated user with the Payment ID from the path and render EL-036 only when the Payment record exists and its status is PAID, PARTIALLY_CANCELLED, or CANCELLED; otherwise it MUST respond HTTP 404.
-- FR-067: EL-036 MUST show the order name, the amount, the Payment ID, paid_at, and the current status of the Payment record.
+- FR-055: EL-025 has no Success state; after requestPayment the browser leaves the page for PortOne and returns to redirectUrl.
+- FR-056: When the prepare request fails or the requestPayment call itself fails, EL-028 MUST set the Error state. When the Payer returns to EL-025 without a redirect result (browser back navigation), EL-028 MUST set the Error state.
+- FR-066: The completed action MUST parse the redirect result from the request query with Browser\RedirectResult, falling back to the path Payment ID when the query carries none. When the query carries an error code, it MUST render EL-036 in the Failed state without touching any record. Otherwise it MUST call EL-008 on the authenticated user with the Payment ID from the path and, when the Payment record is PENDING or EXPIRED, complete it with EL-005 first; it MUST render EL-036 in the Paid state when the status is PAID, PARTIALLY_CANCELLED, or CANCELLED, and when EL-005 raises, it MUST render EL-036 in the Failed state; otherwise it MUST respond HTTP 404.
+- FR-067: EL-036 MUST show the order name, the amount, the Payment ID, paid_at, and the current status of the Payment record; in the Failed state it MUST show the order information with a way back to the shop instead.
 
 ### Expiry and pruning
 
@@ -505,10 +512,10 @@
 - Step 1: Developer runs vendor:publish with EL-024 and includes EL-030 -> the routes of EL-030 exist.
 - Step 2: Payer visits portone.checkout -> EL-025 in the Initial state.
 - Step 3: Payer clicks EL-026 -> Loading state; a Payment record with status PENDING exists.
-- Step 4: PortOne payment window opens; Payer pays outside the Package.
-- Step 5: Payment completes -> complete route -> Payment record with status PAID -> Success state.
-- Step 6: Payment does not complete -> Error state; Payment record keeps status PENDING.
-- Step 7: After the Success state -> the browser navigates to portone.checkout.completed -> EL-036 shows the paid payment.
+- Step 4: PortOne payment window opens with the EL-052 values; the browser leaves EL-025 for PortOne and returns to redirectUrl; the Payer pays outside the Package.
+- Step 5: Redirect return without an error code -> completed action completes the payment server-side -> EL-036 in the Paid state.
+- Step 6: Redirect return with an error code, or a failed server-side completion -> EL-036 in the Failed state; Payment record keeps status PENDING.
+- Step 7: EL-036 shows the paid payment or the failure with a way back to the shop.
 
 ### FLOW-006 Expiry of abandoned payments
 
