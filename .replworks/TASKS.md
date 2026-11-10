@@ -450,7 +450,7 @@
     - A redirect query captured from the live flow is replayed into portone-php RedirectResult::fromQuery and matches (closes the T-063 re-verification).
     - README documents the redirect flow and the local-check URL guidance (ngrok/LAN host instead of localhost).
 
-- [ ] T-038 Raise cable8mm/portone-php to ^0.7.0
+- [X] T-038 Raise cable8mm/portone-php to ^0.7.0
   - Satisfies: TECH_STACK.md section 1
   - Depends on: cable8mm/portone-php v0.7.0 (its T-067)
   - External boundary: no
