@@ -71,16 +71,19 @@ class WebhookReceiverTest extends TestCase
         $this->assertGreaterThan(0, (int) $timestamp);
     }
 
-    public function test_repeated_verified_delivery_dispatches_an_event_for_each_request(): void
+    public function test_repeated_delivery_of_one_webhook_id_dispatches_once(): void
     {
+        $this->migratePackageTables();
         Event::fake([WebhookReceived::class]);
         $body = '{"type":"Future.RepeatedEvent"}';
         [$headers] = $this->signedHeaders($body);
 
         $this->call('POST', '/portone/webhook', [], [], [], $headers, $body)->assertOk();
-        $this->call('POST', '/portone/webhook', [], [], [], $headers, $body)->assertOk();
+        $repeated = $this->call('POST', '/portone/webhook', [], [], [], $headers, $body);
 
-        Event::assertDispatchedTimes(WebhookReceived::class, 2);
+        $repeated->assertOk();
+        $this->assertSame('', $repeated->getContent());
+        Event::assertDispatchedTimes(WebhookReceived::class, 1);
     }
 
     public function test_invalid_signatures_missing_headers_stale_timestamps_and_invalid_bodies_are_rejected(): void
@@ -123,6 +126,7 @@ class WebhookReceiverTest extends TestCase
 
     public function test_listener_exceptions_propagate_without_a_success_response(): void
     {
+        $this->migratePackageTables();
         Event::listen(WebhookReceived::class, static function (): never {
             throw new RuntimeException('listener failed');
         });
