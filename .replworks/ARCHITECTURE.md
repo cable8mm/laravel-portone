@@ -134,9 +134,9 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 
 ### SF-10 Cancellation sync (FR-081, FR-083, EL-045)
 
-1. Webhook Receiver (SF-4 step 5) or the Developer (EL-045) passes a Payment ID to Payment Operations.
+1. Webhook Receiver (SF-4 step 7) or the Developer (EL-045) passes a Payment ID to Payment Operations.
 2. Payment Ledger finds the record by Payment ID alone under exclusive access (RD-37). Missing: EL-045 raises ERR-018; the Webhook Receiver skips the sync.
-3. A record that is not PAID, PARTIALLY_CANCELLED, or AMOUNT_MISMATCH is returned unchanged, with no PortOne request.
+3. A record that is not PAID, PARTIALLY_CANCELLED, AMOUNT_MISMATCH, or DUPLICATE is returned unchanged, with no PortOne request.
 4. PortOne Gateway looks up the payment (the ordinary lookup; failures pass through).
 5. Payment Lifecycle decides from the record and the Gateway result: the Precomputed outcome of FR-083 or no change.
 6. Payment Operations writes the outcome under the persistence retry rule (RD-11), or writes nothing.
@@ -326,7 +326,7 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
   - After a first successful processing dispatch exactly one WebhookReceived event with the Verified webhook and the webhook-id header value (FR-036, EL-021), after the events of CMP-22, then respond HTTP 200 with an empty body (FR-038).
   - Let an exception from a listener propagate; it is not caught (RD-14).
 - Inputs: HTTP POST request; EL-016 from Configuration.
-- Outputs: HTTP response (EL-014); one WebhookReceived event per verified request.
+- Outputs: HTTP response (EL-014); at most one WebhookReceived event per webhook-id, after its first successful processing, and none on a processed repeat; exactly one WebhookFailed event per failed processing (FR-100).
 - Owns: the webhook response codes; event dispatch; the webhook secret's hand-off to the Verifier.
 - Does not own: verification, Webhook records (CMP-21), Customer, Payment, Billing key, and Subscription records and their state rules (it reaches them only through CMP-07).
 
@@ -498,7 +498,7 @@ Each responsibility has exactly one owner.
 | Contact with PortOne; api secret use; ERR-001                               | CMP-08                       | FR-021, FR-025 to FR-027, ERR-001                                    |
 | Webhook authenticity                                                        | CMP-09                       | FR-035, FR-037, ERR-012                                              |
 | Webhook response and event dispatch                                         | CMP-10                       | FR-036, FR-038, ERR-002                                              |
-| Webhook non-interference with records except SF-10                          | CMP-10 (access only via SF-10) | FR-039                                                             |
+| Webhook non-interference with records except FR-081, FR-101, FR-125        | CMP-10 (access only via CMP-07 in SF-4 step 7) | FR-039                                             |
 | Product lookup for the stub flow                                            | CMP-11                       | FR-043, FR-045, FR-045a, FR-046                                      |
 | Error-to-response mapping in the stub flow                                  | CMP-11                       | ERR-014, ERR-015                                                     |
 | Missing store ID or channel key detection                                   | CMP-11                       | ERR-013                                                              |
@@ -539,7 +539,7 @@ Each responsibility has exactly one owner.
 - CMP-03 -> CMP-04, CMP-05, CMP-07
 - CMP-07 -> CMP-04, CMP-05, CMP-06, CMP-08
 - CMP-08 -> CMP-01
-- CMP-10 -> CMP-01, CMP-09, CMP-07 (SF-10 only)
+- CMP-10 -> CMP-01, CMP-09, CMP-07 (SF-4 step 7 only: FR-081, FR-101, FR-125)
 - CMP-18 -> nothing in the Core (implements the interface of CMP-08)
 - CMP-19 -> CMP-01, the webhook route of CMP-02, the signer of cable8mm/portone-php
 - CMP-20 -> CMP-01, CMP-08 (raw lookup), the signer of cable8mm/portone-php, the Application's webhook URL over HTTP
@@ -559,7 +559,7 @@ Each responsibility has exactly one owner.
 
 ### Forbidden dependencies
 
-- CMP-09 never depends on CMP-04, CMP-05, CMP-07. CMP-10 never depends on CMP-04, CMP-05, CMP-06, CMP-08; its only path to records is SF-10 through CMP-07.
+- CMP-09 never depends on CMP-04, CMP-05, CMP-07. CMP-10 never depends on CMP-04, CMP-05, CMP-06, CMP-08; its only path to Customer, Payment, Billing key, and Subscription records is SF-4 step 7 through CMP-07, and its only path to Webhook records is CMP-21.
 - CMP-05 and CMP-04 never depend on CMP-08 (storage never contacts PortOne).
 - CMP-06 never depends on anything (pure decisions).
 - CMP-03 never depends on CMP-06 or CMP-08.
@@ -634,10 +634,15 @@ Written data: status, cancelled_amount of one Payment record. Step 5 occurs only
 | 2    | CMP-01 -> CMP-10    | webhook secret                                             |
 | 3    | CMP-10 -> CMP-09    | raw body, headers, secret                                  |
 | 4    | CMP-09 -> CMP-10    | Verified webhook, or failure                               |
-| 5    | CMP-10 -> listeners | WebhookReceived(webhook, webhookId)                        |
-| 6    | CMP-10 -> PortOne   | HTTP 200 empty body, or HTTP 400, or HTTP 500              |
+| 5    | CMP-10 -> CMP-21    | webhook-id, type, raw body; exclusive access of the webhook-id |
+| 6    | CMP-21 -> CMP-10    | Webhook record, already processed or not                   |
+| 7    | CMP-10 -> CMP-07    | by type: Payment ID (Transaction.Paid: completion, FR-101; Transaction.Cancelled, Transaction.PartialCancelled: SF-10, DF-9); billing-key data (BillingKey.Issued, BillingKey.Deleted: FR-125) |
+| 8    | CMP-10 -> CMP-21    | mark processed, in the unit of work of step 7; or mark failed, in its own write |
+| 9    | CMP-22 -> listeners | events held during step 7, after commit                    |
+| 10   | CMP-10 -> listeners | WebhookReceived(webhook, webhookId), or WebhookFailed      |
+| 11   | CMP-10 -> PortOne   | HTTP 200 empty body, or HTTP 400, HTTP 500, or another non-2xx status |
 
-For Transaction.Cancelled and Transaction.PartialCancelled, step 4a runs between steps 4 and 5: CMP-10 -> CMP-07 (Payment ID) -> SF-10 (DF-9). Otherwise no record is read or written.
+An already processed record skips steps 7 to 10 and gets HTTP 200 (FR-097). A failed step 7 is rolled back, the record is marked failed, only WebhookFailed is dispatched, and the response is non-2xx (FR-100). Apart from step 7 and CMP-21, no record is read or written.
 
 ### DF-5 Checkout stubs
 
@@ -682,7 +687,7 @@ Steps 7 to 9 happen only when the record is still PENDING. Written data: status,
 | 4    | CMP-07 -> CMP-06            | Payment record, Gateway result                    |
 | 5    | CMP-07 -> CMP-05            | Precomputed outcome (status, cancelled_amount), or nothing |
 
-Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, or AMOUNT_MISMATCH.
+Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, AMOUNT_MISMATCH, or DUPLICATE.
 
 ### DF-8 Prune
 
@@ -699,7 +704,7 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, or AMOUNT
 - AR-07: Exceptions from CMP-08 and CMP-05 pass through CMP-07 and CMP-03 unmodified.
 - AR-08: The webhook route is the only Package route that is open to unauthenticated requests without a forgery token. No stub route is.
 - AR-09: Authenticity is decided on the raw body exactly as received, before any decoding.
-- AR-10: Each Core component stores no state outside Customer records and Payment records; there is no cache of PortOne data.
+- AR-10: Each Core component stores no state outside Customer, Payment, Webhook, Billing key, and Subscription records; there is no cache of PortOne data.
 - AR-11: Behavior that depends on an unverified PortOne assumption lives only in CMP-08 and CMP-13.
 - AR-12: Amounts in the Core are plain integers with no currency attached.
 - AR-13: A component refuses work it does not own by having no access to it (see Forbidden dependencies), not by checking at run time.
@@ -727,7 +732,7 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, or AMOUNT
 | local write fails after PortOne accepted a cancellation (refund)     | CMP-05            | CMP-07 retry, then propagates | stays PAID or PARTIALLY_CANCELLED while PortOne shows cancelled: **known divergence** | persistence failure                                                |
 | webhook verification fails or body undecodable (ERR-012)             | CMP-09            | CMP-10                        | none                                                                                  | PortOne: HTTP 400                                                  |
 | unknown webhook type                                                 | not a failure     | n/a                           | none                                                                                  | listeners receive it                                               |
-| PortOne lookup fails or api secret absent during SF-10 in a webhook  | CMP-08            | not contained; request fails  | unchanged                                                                             | PortOne sees an error and may redeliver; no event                  |
+| PortOne request fails or api secret absent during SF-4 step 7 (FR-100) | CMP-08          | CMP-10 rolls back the effect  | Webhook record failed; every other record unchanged                                   | PortOne: non-2xx and redelivery; WebhookFailed only               |
 | cancellation webhook but PortOne state does not match (FR-083)       | CMP-06            | CMP-07                        | unchanged                                                                             | listeners receive the events as usual                              |
 | listener throws                                                      | host              | not contained                 | none                                                                                  | the host's error handling; PortOne sees an error and may redeliver |
 | store ID or channel key absent in stub `show` (ERR-013)              | CMP-11            | CMP-12                        | none                                                                                  | Payer: Error state, button disabled                                |
@@ -752,11 +757,10 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 ## Non-Goals
 
 - No component other than CMP-07 changes Payment record state.
-- No path exists from the Webhook Receiver to Customer records, and its only path to Payment records is SF-10; a webhook changes payment state only by recording PortOne's own cancellation state.
-- No reconciliation, polling, or background synchronization with PortOne other than the Application-scheduled expiry check of stale PENDING records (SF-7) and the cancellation sync on demand or on a cancellation webhook (SF-10).
+- No path exists from the Webhook Receiver to records other than SF-4 step 7 through CMP-07 and Webhook records through CMP-21; a webhook changes record state only by FR-081, FR-101, and FR-125.
+- No reconciliation, polling, or background synchronization with PortOne other than the Application-scheduled expiry check of stale PENDING records (SF-7) the cancellation sync on demand or on a cancellation webhook (SF-10), and the completion on a Transaction.Paid webhook (FR-101).
 - No automatic retry of any PortOne request.
 - No notification channel for a failed local write other than the propagated exception (RD-11).
-- No de-duplication of webhooks; a repeated delivery produces a repeated event.
 - No entity for a payment attempt; each preparation creates a new Payment record. Abandoned PENDING records are expired only by SF-7 and deleted only by SF-8, both run by the Application.
 - No deletion of PAID, PARTIALLY_CANCELLED, or CANCELLED records.
 - No behavior is defined for what happens to Customer records and Payment records when a Billable model is deleted.
@@ -772,16 +776,16 @@ Known divergence (refund, post-acceptance write failure), full rule in RD-11:
 - INV-02: A Billable reference has at most one Customer record. Customer IDs are unique across all Customer records.
 - INV-03: Payment IDs are unique across all Payment records and are never reused.
 - INV-04: A Payment record's customer_id equals the Customer ID of its owner at the time of creation.
-- INV-05: Status transitions follow only the transitions listed in Core Concepts. CANCELLED and AMOUNT_MISMATCH_CANCELLED never change; AMOUNT_MISMATCH changes only to AMOUNT_MISMATCH_CANCELLED by SF-10. EXPIRED changes only to PAID, AMOUNT_MISMATCH_CANCELLED, or AMOUNT_MISMATCH.
+- INV-05: Status transitions follow only the transitions listed in Core Concepts. CANCELLED and AMOUNT_MISMATCH_CANCELLED never change; AMOUNT_MISMATCH changes only to AMOUNT_MISMATCH_CANCELLED by SF-10. DUPLICATE_CANCELLED never changes; DUPLICATE changes only to DUPLICATE_CANCELLED by SF-10. EXPIRED changes only to PAID, AMOUNT_MISMATCH_CANCELLED, AMOUNT_MISMATCH, DUPLICATE_CANCELLED, or DUPLICATE.
 - INV-06: `0 <= cancelled_amount <= amount` always, except AMOUNT_MISMATCH_CANCELLED, where cancelled_amount = paid_amount; cancelled_amount never decreases. amount never changes after preparation.
-- INV-07: PENDING and EXPIRED imply cancelled_amount = 0 and paid_at = null. PAID implies cancelled_amount = 0 and paid_at non-null. PARTIALLY_CANCELLED implies `0 < cancelled_amount < amount` and paid_at non-null. CANCELLED implies cancelled_amount = amount and paid_at non-null. AMOUNT_MISMATCH_CANCELLED implies paid_amount non-null and different from amount, cancelled_amount = paid_amount, and paid_at = null. AMOUNT_MISMATCH implies paid_amount non-null and different from amount, cancelled_amount = 0, and paid_at = null. PAID, PARTIALLY_CANCELLED, and CANCELLED imply paid_amount = amount (set by FR-023 or FR-060, and for records made PAID before v0.4.0 by the backfill of RD-35). PENDING and EXPIRED imply paid_amount = null.
+- INV-07: PENDING and EXPIRED imply cancelled_amount = 0 and paid_at = null. PAID implies cancelled_amount = 0 and paid_at non-null. PARTIALLY_CANCELLED implies `0 < cancelled_amount < amount` and paid_at non-null. CANCELLED implies cancelled_amount = amount and paid_at non-null. AMOUNT_MISMATCH_CANCELLED implies paid_amount non-null and different from amount, cancelled_amount = paid_amount, and paid_at = null. AMOUNT_MISMATCH implies paid_amount non-null and different from amount, cancelled_amount = 0, and paid_at = null. DUPLICATE_CANCELLED implies paid_amount = amount, cancelled_amount = paid_amount, and paid_at non-null. DUPLICATE implies paid_amount = amount, cancelled_amount = 0, and paid_at non-null (FR-110, FR-111). PAID, PARTIALLY_CANCELLED, and CANCELLED imply paid_amount = amount (set by FR-023 or FR-060, and for records made PAID before v0.4.0 by the backfill of RD-35). PENDING and EXPIRED imply paid_amount = null.
 - INV-08: A record becomes PAID only in a completion or an expiry check in which PortOne reported paid and the total paid amount equalled the record's amount.
-- INV-09: No PortOne request is sent when ERR-003, ERR-004, ERR-005, ERR-008, ERR-009, ERR-010 apply, when a record is neither PENDING nor EXPIRED at completion (FR-022, FR-071), when a record is not PENDING when an expiry job runs, when SF-10 finds a record that is not PAID, PARTIALLY_CANCELLED, or AMOUNT_MISMATCH, or during preparation, webhook handling other than SF-10, CMP-15, pruning, or any use of CMP-18 and CMP-19.
+- INV-09: No PortOne request is sent when ERR-003, ERR-004, ERR-005, ERR-008, ERR-009, ERR-010 apply, when a record is neither PENDING nor EXPIRED at completion (FR-022, FR-071), when a record is not PENDING when an expiry job runs, when SF-10 finds a record that is not PAID, PARTIALLY_CANCELLED, AMOUNT_MISMATCH, or DUPLICATE, for a processed repeat webhook (FR-097), or during preparation, webhook handling other than SF-4 step 7, CMP-15, pruning, or any use of CMP-18 and CMP-19.
 - INV-10: A completion or refund that fails before the local write leaves the record unchanged. The one exception is the post-acceptance write failure of a refund (RD-11).
 - INV-11: Between reading a record for a decision and writing the resulting outcome, no other operation of the Package reads that record for a decision or writes it.
 - INV-12: Every PortOne request originates in CMP-08. Every authenticity decision originates in CMP-09.
-- INV-13: No event is dispatched without a successful verification, and exactly one event is dispatched per verified request.
-- INV-14: A webhook request reads and writes no Customer record, and reads and writes a Payment record only through SF-10 for Transaction.Cancelled and Transaction.PartialCancelled.
+- INV-13: No event is dispatched without a successful verification. Per webhook-id at most one WebhookReceived is dispatched, after its first successful processing; a processed repeat dispatches nothing (FR-097); a failed processing dispatches only WebhookFailed (FR-100).
+- INV-14: A webhook request reads and writes Customer, Payment, Billing key, and Subscription records only through CMP-07 in SF-4 step 7 (FR-081, FR-101, FR-125), and Webhook records only through CMP-21.
 - INV-15: Raw body bytes reach CMP-09 unmodified.
 - INV-16: The api secret exists only inside CMP-08's use; the webhook secret only in CMP-10, as an input to CMP-09, and in CMP-19 and CMP-20 for signing.
 - INV-17: In the stub flow, amount and order name come only from the CMP-11 product lookup; the request supplies at most a product identifier; `complete` reads only the Payment ID from the request.
