@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use Cable8mm\LaravelPortone\Concerns\Billable;
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\GatewayPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
@@ -63,7 +63,7 @@ class WebhookConcurrencyTest extends TestCase
         $directory = sys_get_temp_dir().'/portone-webhook-race-'.bin2hex(random_bytes(8));
         mkdir($directory);
 
-        foreach ([WebhookReceived::class, PaymentCancelled::class] as $event) {
+        foreach ([WebhookReceived::class, PaymentRefunded::class] as $event) {
             Event::listen($event, static function () use ($directory, $event): void {
                 file_put_contents($directory.'/events', class_basename($event).PHP_EOL, FILE_APPEND | LOCK_EX);
             });
@@ -101,7 +101,7 @@ class WebhookConcurrencyTest extends TestCase
             $this->assertSame('200', file_get_contents($directory.'/status-1'));
             $this->assertSame('200', file_get_contents($directory.'/status-2'));
             $this->assertSame('1', file_get_contents($directory.'/lookup-count'));
-            $this->assertSame('WebhookReceived'.PHP_EOL.'PaymentCancelled'.PHP_EOL, file_get_contents($directory.'/events'));
+            $this->assertSame('PaymentRefunded'.PHP_EOL.'WebhookReceived'.PHP_EOL, file_get_contents($directory.'/events'));
             DB::reconnect();
             $this->assertSame(['CANCELLED', 100], [$payment->fresh()->status, $payment->fresh()->cancelled_amount]);
             $record = Webhook::query()->sole();

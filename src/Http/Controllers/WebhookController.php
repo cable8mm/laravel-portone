@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone\Http\Controllers;
 
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
-use Cable8mm\LaravelPortone\Events\PaymentFailed;
-use Cable8mm\LaravelPortone\Events\PaymentPaid;
-use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
-use Cable8mm\LaravelPortone\Events\PaymentWebhookEvent;
+use Cable8mm\LaravelPortone\Events\PaymentEventSource;
 use Cable8mm\LaravelPortone\Events\WebhookFailed;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
+use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
+use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\PaymentOperations;
 use Cable8mm\LaravelPortone\PortOneWebhookVerifier;
 use Cable8mm\LaravelPortone\WebhookLog;
@@ -29,10 +27,9 @@ use Illuminate\Http\Response;
  * 포트원 웹훅 수신 컨트롤러.
  *
  * 원문(raw body)으로 서명을 검증한 뒤, 어떤 효과보다 먼저 webhook-id의 웹훅 기록을 남기고(WebhookLog),
- * 처음 처리하는 webhook-id만 처리한다. 취소 웹훅(Transaction.Cancelled·Transaction.PartialCancelled)이면 PortOne을
- * 조회해 로컬 결제 레코드의 취소 상태를 맞추고, 같은 트랜잭션에서 기록을 처리 완료로 표시한다. 커밋 뒤
- * WebhookReceived를 발송하고, 거래 웹훅이면 종류별 결제 이벤트(PaymentPaid·PaymentCancelled·PaymentPartiallyCancelled·
- * PaymentFailed)를 이어서 발송한다.
+ * 처음 처리하는 webhook-id만 처리한다. Transaction.Paid면 결제 ID로 결제를 확정하고, 취소 웹훅(Transaction.Cancelled·
+ * Transaction.PartialCancelled)이면 PortOne을 조회해 취소 상태를 맞춘다(둘 다 source webhook). 그 밖의 종류는 레코드를
+ * 건드리지 않는다. 효과와 처리 완료 표시는 한 트랜잭션이며, 커밋 뒤 결제 이벤트, 이어서 WebhookReceived를 발송한다.
  * 이미 처리된 webhook-id는 아무것도 하지 않고 200을 반환한다. 설정 누락이나 PortOne 예외로 처리가 실패하면 효과를
  * 롤백하고 기록을 실패로 표시한 뒤 WebhookFailed만 발송하고 예외를 전파해 PortOne이 다시 보내게 한다.
  * 성공 200(빈 응답), 검증 실패 400, Secret 미설정 500을 반환한다.
@@ -44,7 +41,7 @@ final class WebhookController
      *
      * @param  Request  $request  포트원 웹훅 HTTP 요청
      * @param  PortOneWebhookVerifier  $verifier  서명 검증기
-     * @param  PaymentOperations  $operations  취소 웹훅의 결제 레코드 동기화
+     * @param  PaymentOperations  $operations  결제 확정과 취소 동기화
      * @param  WebhookLog  $log  webhook-id별 웹훅 기록
      * @return Response 빈 응답 (200 검증 성공, 400 검증 실패, 500 Secret 미설정)
      *
@@ -83,7 +80,7 @@ final class WebhookController
                 $webhookId,
                 $type,
                 $request->getContent(),
-                fn () => $this->syncCancellation($webhook, $operations),
+                fn () => $this->applyEffect($webhook, $operations),
             );
         } catch (ConfigurationException|PortOneException $exception) {
             $log->markFailed($webhookId, $exception);
@@ -97,12 +94,6 @@ final class WebhookController
         }
 
         event(new WebhookReceived($webhook, $webhookId));
-
-        $paymentEvent = $this->paymentEvent($webhook, $webhookId);
-
-        if ($paymentEvent !== null) {
-            event($paymentEvent);
-        }
 
         return response('', 200);
     }
@@ -124,45 +115,28 @@ final class WebhookController
     }
 
     /**
-     * 취소 웹훅이면 결제 레코드의 취소 상태를 PortOne과 맞춘다. 결제 레코드가 없으면 건너뛴다.
+     * 웹훅 종류의 효과를 적용한다. 결제 레코드가 없으면 건너뛴다.
+     *
+     * Transaction.Paid는 결제를 확정한다. PortOne이 아직 결제되지 않았다고 하면 레코드를 그대로 두고, 금액이 다르면
+     * 금액 불일치 결과를 저장한 뒤 처리를 마친다. 취소 웹훅은 취소 상태를 맞춘다.
      *
      * @param  Webhook  $webhook  검증된 포트원 웹훅 객체
-     * @param  PaymentOperations  $operations  결제 레코드 동기화
+     * @param  PaymentOperations  $operations  결제 확정과 취소 동기화
      */
-    private function syncCancellation(Webhook $webhook, PaymentOperations $operations): void
+    private function applyEffect(Webhook $webhook, PaymentOperations $operations): void
     {
-        if (! $webhook instanceof WebhookTransaction
-            || ! in_array($webhook->type, ['Transaction.Cancelled', 'Transaction.PartialCancelled'], true)) {
+        if (! $webhook instanceof WebhookTransaction) {
             return;
         }
 
         try {
-            $operations->syncByPaymentId($webhook->data->paymentId);
-        } catch (PaymentNotFoundException) {
-            // 이 패키지로 만들지 않은 결제다. 동기화 없이 이벤트만 보낸다.
+            match ($webhook->type) {
+                'Transaction.Paid' => $operations->completeByPaymentId($webhook->data->paymentId, PaymentEventSource::Webhook),
+                'Transaction.Cancelled', 'Transaction.PartialCancelled' => $operations->syncByPaymentId($webhook->data->paymentId, PaymentEventSource::Webhook),
+                default => null,
+            };
+        } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException) {
+            // 이 패키지로 만들지 않은 결제, 아직 결제되지 않은 결제, 저장을 마친 금액 불일치는 처리 성공이다.
         }
-    }
-
-    /**
-     * 거래 웹훅 종류에 맞는 결제 이벤트를 만든다. 해당하는 종류가 아니면 null이다.
-     *
-     * @param  Webhook  $webhook  검증된 포트원 웹훅 객체
-     * @param  string  $webhookId  webhook-id 헤더 값
-     */
-    private function paymentEvent(Webhook $webhook, string $webhookId): ?PaymentWebhookEvent
-    {
-        if (! $webhook instanceof WebhookTransaction) {
-            return null;
-        }
-
-        $event = match ($webhook->type) {
-            'Transaction.Paid' => PaymentPaid::class,
-            'Transaction.Cancelled' => PaymentCancelled::class,
-            'Transaction.PartialCancelled' => PaymentPartiallyCancelled::class,
-            'Transaction.Failed' => PaymentFailed::class,
-            default => null,
-        };
-
-        return $event === null ? null : new $event($webhook->data->paymentId, $webhook, $webhookId);
     }
 }

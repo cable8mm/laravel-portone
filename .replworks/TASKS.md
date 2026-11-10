@@ -469,7 +469,7 @@
     - A live webhook redelivered by PortOne (or replayed with the same webhook-id) is recorded once and has no second effect; the observation is recorded.
     - Unit tests and static checks pass.
 
-- [ ] T-040 Payment events once per status change
+- [X] T-040 Payment events once per status change
   - Satisfies: PRODUCT_SPEC.md SCR-005, SCR-007, SCR-011 (EL-063 to EL-068), FR-085 to FR-088 (removed), FR-101, FR-103 to FR-108, AC-085, AC-091 to AC-094; ARCHITECTURE.md SF-7, SF-11, CMP-07, CMP-22, AR-16, RD-42
   - Depends on: T-039
   - External boundary: yes (Transaction.Paid webhook completion against live PortOne)

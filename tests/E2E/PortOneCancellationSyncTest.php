@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\E2E;
 
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
-use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyRefunded;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\PaymentGateway;
 use Cable8mm\LaravelPortone\PaymentOperations;
 use Laravel\Dusk\Browser;
@@ -55,12 +55,12 @@ class PortOneCancellationSyncTest extends TestCase
         self::assertSame('PAID', $user->completePayment($payment->payment_id)->status);
 
         $this->instruct("In the PortOne console, PARTIALLY cancel 300 KRW of payment {$payment->payment_id}.");
-        $partial = $this->waitForPaymentEvent(self::$observationDirectory, PaymentPartiallyCancelled::class, $payment->payment_id);
+        $partial = $this->waitForPaymentEvent(self::$observationDirectory, PaymentPartiallyRefunded::class, $payment->payment_id);
         self::assertSame('PARTIALLY_CANCELLED', $partial['event']['recordStatus']);
         self::assertSame(300, $partial['event']['recordCancelledAmount']);
 
         $this->instruct("In the PortOne console, cancel the remaining 700 KRW of payment {$payment->payment_id}.");
-        $cancelled = $this->waitForPaymentEvent(self::$observationDirectory, PaymentCancelled::class, $payment->payment_id);
+        $cancelled = $this->waitForPaymentEvent(self::$observationDirectory, PaymentRefunded::class, $payment->payment_id);
         self::assertSame('CANCELLED', $cancelled['event']['recordStatus']);
         self::assertSame(1000, $cancelled['event']['recordCancelledAmount']);
 

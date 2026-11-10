@@ -95,13 +95,12 @@
                 실서비스처럼 별도 터미널에서 띄워 두세요. 샘플은 결제 대기 {{ $pendingExpireAfter }}분 뒤 만료 검사를 해요(실서비스 기본값 1440분).
             </p>
             <ul class="mt-4 space-y-2 text-sm">
-                <li><code class="font-mono">vendor/bin/testbench queue:work</code> 만료 확인 잡, 웹훅 → 결제 확정 잡 처리</li>
+                <li><code class="font-mono">vendor/bin/testbench queue:work</code> 만료 확인 잡 처리</li>
                 <li><code class="font-mono">vendor/bin/testbench schedule:work</code> 10분마다 <code class="font-mono">portone:expire-pending</code>, 매일 <code class="font-mono">model:prune</code></li>
                 <li><code class="font-mono">vendor/bin/testbench schedule:list</code> 등록된 스케줄 확인</li>
             </ul>
             <p class="mt-4 text-sm text-slate-500">
-                <code class="font-mono">Transaction.Paid</code> 웹훅이 오면 앱의 리스너가 큐 잡으로 <code class="font-mono">completePayment()</code>를 불러요.
-                패키지는 웹훅 처리 중 레코드를 바꾸지 않으므로, 이 연결은 앱 코드(<code class="font-mono">workbench/app/Listeners/QueuePaymentCompletion.php</code>)입니다.
+                <code class="font-mono">Transaction.Paid</code> 웹훅이 오면 패키지가 결제를 확정하고 <code class="font-mono">PaymentCompleted</code>를 한 번 보내요.
             </p>
         </section>
 

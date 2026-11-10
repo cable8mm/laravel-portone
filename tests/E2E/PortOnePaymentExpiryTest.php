@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\E2E;
 
+use Cable8mm\LaravelPortone\Events\PaymentCompleted;
+use Cable8mm\LaravelPortone\Events\PaymentEvent;
 use Cable8mm\LaravelPortone\Events\PaymentExpired;
-use Cable8mm\LaravelPortone\Events\PaymentExpiryEvent;
-use Cable8mm\LaravelPortone\Events\PaymentPaidOnExpiry;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
 use Illuminate\Support\Facades\Event;
@@ -50,8 +50,8 @@ class PortOnePaymentExpiryTest extends TestCase
         // Run the jobs the command queues right away so they reach live PortOne in this test.
         config(['queue.default' => 'sync']);
         $events = [];
-        Event::listen([PaymentExpired::class, PaymentPaidOnExpiry::class], static function (PaymentExpiryEvent $event) use (&$events): void {
-            $events[$event->paymentId] = ['event' => class_basename($event), 'status' => $event->payment->status];
+        Event::listen([PaymentExpired::class, PaymentCompleted::class], static function (PaymentEvent $event) use (&$events): void {
+            $events[$event->paymentId] = ['event' => class_basename($event), 'status' => $event->payment->status, 'source' => $event->source->value];
         });
         $this->artisan('portone:expire-pending')->assertExitCode(0);
 
@@ -61,10 +61,10 @@ class PortOnePaymentExpiryTest extends TestCase
         self::assertSame('EXPIRED', $final['closed']->status);
         self::assertSame('EXPIRED', $final['neverOpened']->status);
 
-        // T-035: one event per written outcome, carrying the updated record.
-        self::assertSame(['event' => 'PaymentPaidOnExpiry', 'status' => 'PAID'], $events[$final['paid']->payment_id] ?? null);
-        self::assertSame(['event' => 'PaymentExpired', 'status' => 'EXPIRED'], $events[$final['closed']->payment_id] ?? null);
-        self::assertSame(['event' => 'PaymentExpired', 'status' => 'EXPIRED'], $events[$final['neverOpened']->payment_id] ?? null);
+        // T-035, T-040: one event per written outcome, carrying the updated record.
+        self::assertSame(['event' => 'PaymentCompleted', 'status' => 'PAID', 'source' => 'expiry'], $events[$final['paid']->payment_id] ?? null);
+        self::assertSame(['event' => 'PaymentExpired', 'status' => 'EXPIRED', 'source' => 'expiry'], $events[$final['closed']->payment_id] ?? null);
+        self::assertSame(['event' => 'PaymentExpired', 'status' => 'EXPIRED', 'source' => 'expiry'], $events[$final['neverOpened']->payment_id] ?? null);
         self::assertCount(3, $events);
 
         $observed = [];

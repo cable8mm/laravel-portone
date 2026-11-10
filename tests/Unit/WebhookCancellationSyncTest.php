@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use Cable8mm\LaravelPortone\Concerns\Billable;
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
-use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyRefunded;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Models\Payment;
@@ -24,7 +24,8 @@ use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
- * T-034: cancellation webhooks and syncByPaymentId bring the record in line with PortOne.
+ * T-034, T-040: cancellation webhooks and syncByPaymentId bring the record in line with PortOne; a payment event
+ * is dispatched only for a change (FR-103, FR-106).
  *
  * Webhook bodies have the shape of the live Transaction.Cancelled recording in
  * tests/E2E/portone-webhook-observation.json and the Transaction.PartialCancelled recording of T-028.
@@ -77,13 +78,14 @@ class WebhookCancellationSyncTest extends TestCase
     {
         $payment = $this->payment('PAID');
         $this->gateway->payment($payment->payment_id, 'CANCELLED', totalAmount: 100, cancelledAmount: 100);
-        $seen = $this->recordStateSeenByListeners([WebhookReceived::class, PaymentCancelled::class]);
+        $seen = $this->recordStateSeenByListeners([WebhookReceived::class, PaymentRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.Cancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
         $this->postPortOneWebhook('Transaction.Cancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
 
         $this->assertSame(['CANCELLED', 100], [$payment->fresh()->status, $payment->fresh()->cancelled_amount]);
-        $this->assertSame(array_fill(0, 4, 'CANCELLED:100'), $seen->values);
+        // PaymentRefunded then WebhookReceived for the first delivery; the second changes nothing (FR-106).
+        $this->assertSame(array_fill(0, 3, 'CANCELLED:100'), $seen->values);
         // The second delivery finds a CANCELLED record and asks PortOne nothing.
         $this->gateway->assertLookedUp($payment->payment_id, times: 1);
         $this->gateway->assertNothingCancelled();
@@ -93,12 +95,12 @@ class WebhookCancellationSyncTest extends TestCase
     {
         $payment = $this->payment('PAID');
         $this->gateway->payment($payment->payment_id, 'PARTIAL_CANCELLED', totalAmount: 100, cancelledAmount: 30);
-        $seen = $this->recordStateSeenByListeners([PaymentPartiallyCancelled::class]);
+        $seen = $this->recordStateSeenByListeners([PaymentPartiallyRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.PartialCancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
         $this->postPortOneWebhook('Transaction.PartialCancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
 
-        $this->assertSame(['PARTIALLY_CANCELLED:30', 'PARTIALLY_CANCELLED:30'], $seen->values);
+        $this->assertSame(['PARTIALLY_CANCELLED:30'], $seen->values);
 
         $this->gateway->payment($payment->payment_id, 'CANCELLED', totalAmount: 100, cancelledAmount: 100);
         $this->postPortOneWebhook('Transaction.Cancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
@@ -107,18 +109,18 @@ class WebhookCancellationSyncTest extends TestCase
         $this->assertNotNull($payment->fresh()->paid_at);
     }
 
-    public function test_record_stays_when_portone_does_not_match_and_events_are_still_dispatched(): void
+    public function test_record_stays_when_portone_does_not_match_and_no_payment_event_is_dispatched(): void
     {
         $payment = $this->payment('PAID');
         $this->gateway->payment($payment->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0);
         $before = $payment->fresh()->getAttributes();
-        Event::fake([WebhookReceived::class, PaymentCancelled::class]);
+        Event::fake([WebhookReceived::class, PaymentRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.Cancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
 
         $this->assertSame($before, $payment->fresh()->getAttributes());
         Event::assertDispatchedTimes(WebhookReceived::class, 1);
-        Event::assertDispatchedTimes(PaymentCancelled::class, 1);
+        Event::assertNotDispatched(PaymentRefunded::class);
     }
 
     /**
@@ -136,37 +138,37 @@ class WebhookCancellationSyncTest extends TestCase
     {
         $payment = $this->payment($status);
         $before = $payment->fresh()->getAttributes();
-        Event::fake([WebhookReceived::class, PaymentCancelled::class]);
+        Event::fake([WebhookReceived::class, PaymentRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.Cancelled', $payment->payment_id, self::CANCELLATION)->assertOk();
 
         $this->assertSame($before, $payment->fresh()->getAttributes());
         $this->gateway->assertNothingLookedUp();
-        Event::assertDispatchedTimes(PaymentCancelled::class, 1);
+        Event::assertNotDispatched(PaymentRefunded::class);
     }
 
-    public function test_unknown_payment_skips_the_sync_and_dispatches_the_events(): void
+    public function test_unknown_payment_skips_the_sync_and_dispatches_only_webhook_received(): void
     {
-        Event::fake([WebhookReceived::class, PaymentCancelled::class]);
+        Event::fake([WebhookReceived::class, PaymentRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.Cancelled', 'not-made-by-the-package', self::CANCELLATION)->assertOk();
 
         $this->gateway->assertNothingLookedUp();
         Event::assertDispatchedTimes(WebhookReceived::class, 1);
-        Event::assertDispatchedTimes(PaymentCancelled::class, 1);
+        Event::assertNotDispatched(PaymentRefunded::class);
     }
 
     public function test_lookup_failure_fails_the_request_without_events(): void
     {
         $payment = $this->payment('PAID');
         $this->gateway->failLookup($payment->payment_id, new UnauthorizedException('Unauthorized', status: 401, errorType: 'UNAUTHORIZED'));
-        Event::fake([WebhookReceived::class, PaymentCancelled::class]);
+        Event::fake([WebhookReceived::class, PaymentRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.Cancelled', $payment->payment_id, self::CANCELLATION)->assertStatus(500);
 
         $this->assertSame('PAID', $payment->fresh()->status);
         Event::assertNotDispatched(WebhookReceived::class);
-        Event::assertNotDispatched(PaymentCancelled::class);
+        Event::assertNotDispatched(PaymentRefunded::class);
     }
 
     public function test_amount_mismatch_record_cancelled_at_portone_becomes_amount_mismatch_cancelled(): void
