@@ -24,7 +24,15 @@
   - EXPIRED -> AMOUNT_MISMATCH_CANCELLED, EXPIRED -> AMOUNT_MISMATCH
   - AMOUNT_MISMATCH -> AMOUNT_MISMATCH_CANCELLED (only by the cancellation sync, SF-10, after the Developer cancelled the payment at PortOne)
   - CANCELLED and AMOUNT_MISMATCH_CANCELLED are terminal for the Package. An AMOUNT_MISMATCH record is handled by the Developer outside the Package; the Package only records the cancellation PortOne reports for it (SF-10).
+  - PENDING -> DUPLICATE_CANCELLED, PENDING -> DUPLICATE, EXPIRED -> DUPLICATE_CANCELLED, EXPIRED -> DUPLICATE (a second paid payment of a single-payment Billable model; FR-109 to FR-111)
+  - DUPLICATE -> DUPLICATE_CANCELLED (only by the cancellation sync, SF-10)
+  - DUPLICATE_CANCELLED is terminal for the Package; a DUPLICATE record is handled by the Developer as an AMOUNT_MISMATCH record is.
   - Deletion: only EXPIRED records, only through EL-035 (FR-063).
+- **Payment event**: the one event of SCR-011 that a committed change of a Payment record produces. Computed together with the Precomputed outcome, held until the write commits, dispatched once by CMP-22 (RD-42).
+- **Webhook record**: one per webhook-id. The receiver writes it before any effect and marks it processed or failed afterwards; a processed record turns every later delivery of the same webhook-id into a no-op (RD-43).
+- **Billing key record**: owned by exactly one Billable reference. Lifecycle: PENDING -> ISSUED -> DELETED, PENDING -> FAILED, FAILED -> ISSUED, ISSUED -> DELETED. The billing key value is stored encrypted and leaves CMP-23 only toward CMP-08.
+- **Subscription record**: owned by exactly one Billable reference and charging one of its ISSUED Billing key records. Lifecycle: ACTIVE <-> PAST_DUE, ACTIVE -> ENDED, PAST_DUE -> ENDED, PAST_DUE -> EXPIRED. Each period is paid by one Payment record linked to it.
+- **Single-payment Billable model**: a Billable model whose EL-069 returns true. Its Payment records are completed under exclusive access of the Billable reference, so that at most one becomes PAID (RD-44).
 - **Exclusive access**: a period during which no other operation of the Package can read a given Payment record for a decision or write it. Provided by the Payment Ledger, requested by Payment Operations.
 - **Precomputed outcome**: the complete set of absolute field values (status, cancelled_amount, paid_at, paid_amount) computed before any PortOne request that changes remote state. Written to the record as absolute values, never as increments.
 - **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status, the total paid amount when paid, and the cancelled amount (amount.cancelled) when PortOne reports one. For an expiry check only, it can also say that PortOne does not know the payment.
@@ -36,9 +44,10 @@
   - Payer: acts only through the browser.
   - PortOne API: payment lookup and cancellation.
   - PortOne browser SDK: opens the PG payment window.
-  - Event listeners: Application code that reacts to WebhookReceived, the typed payment events, and the expiry events.
-  - Scheduler and queue worker: Application infrastructure that runs EL-031, model:prune, and EL-032.
-- **Core versus stubs**: Core = CMP-01 through CMP-10, CMP-15, CMP-16. Stubs = CMP-11 through CMP-14 and CMP-17. Testing support = CMP-18 through CMP-20. The Core never depends on the Stubs or on Testing support. The Stubs reach the Core only through the Billable Facade and Configuration.
+  - Event listeners: Application code that reacts to WebhookReceived, WebhookFailed, the payment events, the billing-key events, and the subscription events.
+  - Scheduler and queue worker: Application infrastructure that runs EL-031, EL-084, model:prune, EL-032, and EL-085.
+  - Inertia and React: the Application's frontend for the files of SCR-014.
+- **Core versus stubs**: Core = CMP-01 through CMP-10, CMP-15, CMP-16, CMP-21 through CMP-27. Stubs = CMP-11 through CMP-14, CMP-17, CMP-28, CMP-29. Testing support = CMP-18 through CMP-20. The Core never depends on the Stubs or on Testing support. The Stubs reach the Core only through the Billable Facade and Configuration.
 
 ## System Flow
 
@@ -79,10 +88,12 @@
 2. Webhook Receiver checks that the webhook secret is configured (ERR-002).
 3. Webhook Receiver passes the unmodified raw body, the three signature headers, and the secret to the Webhook Verifier.
 4. Verification failure or undecodable body -> HTTP 400, nothing else happens.
-5. Verification success, type Transaction.Cancelled or Transaction.PartialCancelled -> Webhook Receiver asks Payment Operations to run SF-10 for the Payment ID in the webhook data. A missing Payment record skips SF-10. A ConfigurationException or PortOne failure propagates: no event, the request fails, PortOne may redeliver (FR-082).
-6. Webhook Receiver dispatches exactly one WebhookReceived event, then the typed payment event of RD-36, then responds HTTP 200 with an empty body.
-7. Apart from step 5, no Customer record or Payment record is read or written.
-
+5. Verification success -> Webhook Receiver asks CMP-21 to open the Webhook record for the webhook-id under exclusive access of that webhook-id (FR-095, FR-096).
+6. Processed record -> HTTP 200, nothing else (FR-097).
+7. Otherwise, by type: Transaction.Paid -> CMP-07 completes by Payment ID with source webhook (FR-101); Transaction.Cancelled or Transaction.PartialCancelled -> CMP-07 runs SF-10 with source webhook (FR-081); BillingKey.Issued or BillingKey.Deleted -> CMP-23 through CMP-07 (FR-125); any other type -> nothing. A missing record skips the effect.
+8. Success -> CMP-21 marks the record processed in the same unit of work as the effect; after commit CMP-22 dispatches the held events, then the receiver dispatches WebhookReceived and responds HTTP 200 (FR-099).
+9. ConfigurationException or a PortOne exception -> the effect is rolled back, CMP-21 marks the record failed in its own write, WebhookFailed is dispatched, the request fails; PortOne redelivers and step 7 runs again (FR-100).
+10. Apart from step 7, no Customer, Payment, Billing key, or Subscription record is read or written.
 ### SF-5 Checkout with stubs (FLOW-005)
 
 1. Payer visits the checkout route; the Application authenticates; Checkout Controller `show` renders Checkout View.
@@ -109,7 +120,7 @@
 6. PortOne Gateway looks up the payment in its expiry form (RD-28).
 7. Payment Lifecycle decides: paid with the same total -> Precomputed outcome PAID; paid with a different total -> the amount-mismatch sequence (SF-9); a "not paid at the time of the check" result -> Precomputed outcome EXPIRED; anything else -> no change (FR-060 to FR-062).
 8. Payment Operations writes the outcome through the Payment Ledger under the persistence retry rule (RD-11), or writes nothing.
-9. Exclusive access ends. When step 8 wrote an outcome, Payment Operations dispatches one expiry event with the updated record and its Billable reference: PaymentExpired for EXPIRED, PaymentPaidOnExpiry for PAID, PaymentAmountMismatchedOnExpiry (wasCancelled) after SF-9 (FR-085 to FR-088).
+9. When step 8 wrote an outcome, CMP-22 dispatches its Payment event with source expiry after commit (SF-11): PaymentExpired for EXPIRED, PaymentCompleted for PAID, PaymentAmountMismatched or PaymentDuplicated for the mismatch and duplicate outcomes (FR-103).
 10. ConfigurationException and PortOne failures propagate out of the job unwrapped (ERR-016, RD-27). After SF-9, the job ends without an exception when PortOne accepted the cancellation, and fails with the PortOne exception of the cancellation otherwise, after the event of step 9 (FR-072, FR-087).
 
 ### SF-9 Amount mismatch (FLOW-001 step 5, FLOW-006 step 4a)
@@ -136,6 +147,41 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 1. The Application's scheduler runs model:prune for the Payment model.
 2. The prunable definition of the Payment Ledger selects EXPIRED records whose updated_at is older than EL-034 (FR-063).
 3. The prune run deletes the selected records. No other record is selectable (FR-064).
+
+### SF-11 Payment event dispatch (SCR-011)
+
+1. Inside exclusive access, CMP-06 produces the Precomputed outcome and names the Payment event of that change, or none.
+2. CMP-07 writes the outcome and hands the event, with the source of its entry point, to CMP-22.
+3. CMP-22 dispatches it after the outermost unit of work commits; a rollback discards it (FR-103 to FR-106).
+
+### SF-12 Duplicate check (FR-109 to FR-112)
+
+1. A completion of a record of a single-payment Billable model takes exclusive access of the Billable reference before the record's own.
+2. When CMP-06 would produce PAID and CMP-05 reports another PAID, PARTIALLY_CANCELLED, or CANCELLED record of the same reference, CMP-06 produces the two duplicate outcomes instead.
+3. CMP-08 cancels without an amount with EL-055; CMP-07 writes DUPLICATE_CANCELLED or DUPLICATE, as SF-9 does for an amount mismatch.
+
+### SF-13 Billing key (FLOW-007 steps 1-2)
+
+1. EL-071 -> CMP-07 creates a PENDING Billing key record through CMP-23 (no PortOne request).
+2. The browser issues the key and returns; EL-073 -> CMP-07 asks CMP-08 for the billing key information, CMP-06 decides ISSUED or FAILED, CMP-23 stores the encrypted key, CMP-22 dispatches BillingKeyIssued after commit.
+3. EL-075 -> CMP-07 checks that no ACTIVE or PAST_DUE subscription charges the key, CMP-08 deletes it at PortOne, CMP-23 sets DELETED.
+
+### SF-14 Billing-key charge (EL-076)
+
+1. CMP-07 creates the Payment record referencing the ISSUED Billing key record (as SF-1).
+2. CMP-08 sends payWithBillingKey with the Payment ID, order name, amount, and currency; a failure leaves the record PENDING and passes through.
+3. On success CMP-07 completes the record as SF-2 with source charge.
+
+### SF-15 Subscription renewal (FLOW-007 steps 3-6)
+
+1. EL-079 -> SF-14 for the first period; only a PAID record creates the ACTIVE Subscription record in the same unit of work (FR-131).
+2. EL-084 -> CMP-26 selects due ACTIVE and PAST_DUE records and queues one EL-085 each, contacting nobody.
+3. EL-085 -> CMP-25 takes exclusive access of the Subscription record, re-reads it, ends it when cancel_at_period_end is set, otherwise completes a PENDING Payment record of the period first and charges by SF-14 only when that is not paid (FR-137).
+4. CMP-24 decides renewal, retry with the next EL-058 wait, or expiry; CMP-25 writes it; CMP-22 dispatches the subscription event after commit.
+
+### SF-16 Inertia React checkout (FLOW-008)
+
+1. As SF-5, with CMP-28 rendering Inertia pages instead of Blade views; the browser pages post to the same JSON prepare actions and run the same SDK calls.
 
 ## Components
 
@@ -232,9 +278,10 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
   - Let PortOne exceptions and persistence failures pass without wrapping (ERR-011), except the failed cancellation of SF-9, which it records (FR-070) and attaches to ERR-007 as the previous exception.
   - Run SF-9 and read EL-037 for it.
   - Run SF-10 for the Webhook Receiver and for EL-045.
-  - Dispatch the expiry events of SF-7 step 9 after exclusive access ends.
+  - Hand every Payment event to CMP-22 with its source (SF-11).
+  - Run SF-12, SF-13, and SF-14, and the completion of FR-101 for the Webhook Receiver.
 - Inputs: Billable reference, Payment ID, amount, order name, reason, refund amount.
-- Outputs: the Payment record after the operation; named exceptions of ERR-001, ERR-003 to ERR-011, ERR-017, ERR-018; persistence failure; the expiry events EL-046 to EL-048.
+- Outputs: the Payment or Billing key record after the operation; named exceptions of ERR-001, ERR-003 to ERR-011, ERR-017, ERR-018, ERR-020, ERR-023 to ERR-025, ERR-028; persistence failure; Payment events and billing-key events handed to CMP-22.
 - Owns: operation sequencing, check order, exclusive access scope, persistence retry, the guarantee that a failed operation changes no record (except RD-11).
 - Does not own: state rules (Lifecycle), storage (Ledger, Registry), PortOne contact (Gateway).
 
@@ -244,6 +291,8 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
   - Be the only component that sends requests to PortOne.
   - Lookup: request the payment by Payment ID; return the Gateway result, including the cancelled amount (FR-021, FR-083).
   - Cancel: send the Payment ID and reason, with the amount only when an amount is given (FR-025 to FR-027).
+  - Billing keys: request billing key information, delete a billing key, and charge a billing key with payWithBillingKey (FR-121, FR-123, FR-126). The billing key value reaches CMP-08 only as a call argument.
+  - Return receiptUrl with every Gateway result (FR-113).
   - Choose the base address (FR-005, FR-006).
   - Check that the api secret is configured before every request; when absent, raise ConfigurationException and send nothing (ERR-001).
   - Let PortOne failures, including PortOne reporting that the payment is unknown, pass through unmodified (ERR-011, RD-12).
@@ -273,13 +322,13 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
   - Check that the webhook secret is configured; when absent respond HTTP 500, dispatch nothing (ERR-002).
   - Pass the raw body, headers, secret to the Webhook Verifier.
   - On failure respond HTTP 400, dispatch nothing (ERR-012).
-  - On success for Transaction.Cancelled and Transaction.PartialCancelled, ask CMP-07 to run SF-10 first, skipping it when no record exists, and let its failures propagate (FR-081, FR-082).
-  - On success dispatch exactly one WebhookReceived event with the Verified webhook and the webhook-id header value (FR-036, EL-021), then the typed payment event, then respond HTTP 200 with an empty body (FR-038).
+  - On success run SF-4 steps 5 to 9 through CMP-21 and CMP-07 (FR-095 to FR-101, FR-081, FR-082, FR-125).
+  - After a first successful processing dispatch exactly one WebhookReceived event with the Verified webhook and the webhook-id header value (FR-036, EL-021), after the events of CMP-22, then respond HTTP 200 with an empty body (FR-038).
   - Let an exception from a listener propagate; it is not caught (RD-14).
 - Inputs: HTTP POST request; EL-016 from Configuration.
 - Outputs: HTTP response (EL-014); one WebhookReceived event per verified request.
 - Owns: the webhook response codes; event dispatch; the webhook secret's hand-off to the Verifier.
-- Does not own: verification, Customer records, Payment records and their state rules (it reaches them only through CMP-07 SF-10), de-duplication of webhooks (RD-20).
+- Does not own: verification, Webhook records (CMP-21), Customer, Payment, Billing key, and Subscription records and their state rules (it reaches them only through CMP-07).
 
 ### CMP-11 Checkout Controller (stub, EL-029)
 
@@ -312,7 +361,7 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 
 - Responsibilities:
   - On click: request `prepare` with the product identifier and set Loading (FR-048).
-  - Call the PortOne browser SDK `requestPayment` with the EL-052 values of the prepare response plus the payment method and currency constants (FR-049). The payment method and currency constants are defined at the top of the file (FR-050).
+  - Call the PortOne browser SDK `requestPayment` with the EL-052 values of the prepare response unchanged (FR-049); the payment method comes from the clicked EL-053 entry and the currency from the prepare action (FR-047, FR-116).
   - On a rejected or thrown SDK call, or on a result with an error code: set Error and end the flow (FR-051, FR-052, FR-056). There is no promise result to act on in the redirect flow and no `complete` request from the script.
 - Inputs: Payer click; the `prepare` response; the SDK outcome (pre-start failure only).
 - Outputs: the request to the CMP-14 `prepare` route; state changes to Checkout View.
@@ -387,6 +436,51 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 - Owns: the production guard.
 - Does not own: verification, handling, any record.
 
+### CMP-21 Webhook Log (EL-060, EL-062)
+
+- Responsibilities: create or find the Webhook record of a webhook-id under exclusive access of that webhook-id; increase attempts; mark processed in the caller's unit of work; mark failed in its own write; offer the prunable selection of EL-062.
+- Inputs: webhook-id, type, raw body. Outputs: the Webhook record and whether it was already processed.
+- Owns: webhook de-duplication. Does not own: verification (CMP-09), effects (CMP-07), responses (CMP-10).
+
+### CMP-22 Event Dispatcher
+
+- Responsibilities: hold Payment, billing-key, and subscription events produced inside a unit of work and dispatch each once after the outermost commit; discard them on rollback (FR-103 to FR-106, FR-124, FR-133, FR-140).
+- Inputs: an event and its source. Outputs: dispatched Laravel events.
+- Owns: the after-commit, exactly-once guarantee. Does not own: deciding which event (CMP-06, CMP-24).
+
+### CMP-23 Billing Key Registry (EL-070, EL-074)
+
+- Responsibilities: store Billing key records, generate Issue IDs unique against Issue IDs and Payment IDs, encrypt and decrypt the billing key, scoped lookup by Issue ID, and report whether an ACTIVE or PAST_DUE subscription charges a record.
+- Owns: billing-key storage and the only plain-text access to the key, handed only to CMP-08 through CMP-07 (FR-130). Does not own: PortOne contact, state decisions.
+
+### CMP-24 Subscription Lifecycle
+
+- Responsibilities: pure decisions of SCR-013: interval parsing (ERR-026), period arithmetic, renewal, retry wait from EL-058, expiry, end, cancel, resume (FR-131, FR-136, FR-138, FR-139, FR-141, FR-142, ERR-027).
+- Does not own: the clock (supplied by CMP-25), records, PortOne.
+
+### CMP-25 Subscription Operations (EL-079 to EL-083)
+
+- Responsibilities: run SF-15 under exclusive access of the Subscription record; charge through CMP-07 SF-14; write the outcomes of CMP-24; hand subscription events to CMP-22.
+- Owns: subscription sequencing and storage. Does not own: payments (CMP-07), billing keys (CMP-23), PortOne (CMP-08).
+
+### CMP-26 Subscription Charge Command (EL-084)
+
+- Responsibilities: select due ACTIVE and PAST_DUE Subscription records and queue one EL-085 each (FR-134). Decides nothing about a record and contacts nobody.
+
+### CMP-27 Subscription Charge Job (EL-085)
+
+- Responsibilities: one queued unit that asks CMP-25 to run SF-15 step 3 for one Subscription record; its failures propagate to the queue (ERR-028).
+
+### CMP-28 Inertia React Stubs (stub, EL-087 to EL-091)
+
+- Responsibilities: the controller, routes, and pages of SCR-014 with the server behavior of CMP-11 and CMP-14 and the browser behavior of CMP-12, CMP-13, CMP-17, and CMP-29 (FR-150 to FR-154).
+- Reaches the Core only through CMP-03 and CMP-01.
+
+### CMP-29 Billing-key Stubs (stub, EL-092, EL-093)
+
+- Responsibilities: the Blade view and script of the billing-key page and the billing-key actions and routes inside CMP-11 and CMP-14 (FR-155 to FR-160).
+- Reaches the Core only through CMP-03 and CMP-01.
+
 ## Component Responsibilities
 
 Each responsibility has exactly one owner.
@@ -422,8 +516,20 @@ Each responsibility has exactly one owner.
 | Cancellation-sync decision                                                  | CMP-06                       | FR-083                                                               |
 | Cancellation-sync sequence; EL-045                                          | CMP-07                       | FR-083, FR-084, ERR-018                                              |
 | Running the sync before the events of a cancellation webhook                | CMP-10                       | FR-081, FR-082                                                       |
-| Expiry events                                                               | CMP-07                       | FR-085 to FR-088                                                     |
+| Expiry events                                                               | CMP-22 (via SF-11)           | FR-103                                                               |
 | Gateway test double                                                         | CMP-18                       | FR-089 to FR-091                                                     |
+| Webhook record, de-duplication, prune of processed records                 | CMP-21                       | FR-095 to FR-097, FR-102                                             |
+| Webhook processing order, failure marking, WebhookFailed                    | CMP-10                       | FR-098 to FR-101                                                     |
+| After-commit, exactly-once dispatch of payment, billing-key, subscription events | CMP-22                  | FR-103 to FR-108, FR-124, FR-133, FR-140                             |
+| Duplicate decision and sequence                                             | CMP-06, CMP-07               | FR-109 to FR-112, ERR-020                                            |
+| Receipt URL                                                                 | CMP-08, CMP-07               | FR-113, FR-114                                                       |
+| Payment-method entries and easy-payment values in the stub flows            | CMP-11, CMP-28, CMP-29       | FR-115 to FR-117, ERR-021                                            |
+| Billing key records and their secrecy                                       | CMP-23                       | FR-118 to FR-120, FR-130                                             |
+| Billing-key sequences and billing-key charge                                | CMP-07                       | FR-121 to FR-129, ERR-023 to ERR-025                                 |
+| Subscription decisions                                                      | CMP-24                       | FR-131, FR-136, FR-138, FR-139, FR-141, FR-142, ERR-026, ERR-027     |
+| Subscription sequencing                                                     | CMP-25                       | FR-132, FR-133, FR-137, FR-140, FR-143, FR-144                       |
+| Due-subscription selection; queued charge                                   | CMP-26, CMP-27               | FR-134, FR-135, ERR-028                                              |
+| Inertia React stubs; billing-key stubs                                      | CMP-28, CMP-29               | FR-150 to FR-160, ERR-022                                            |
 | Signed test webhooks; local webhook replay                                  | CMP-19, CMP-20               | FR-092 to FR-094, ERR-019                                            |
 
 ## Responsibility Boundaries
@@ -442,7 +548,14 @@ Each responsibility has exactly one owner.
 - CMP-02 -> CMP-10 (route target), CMP-01 (EL-018), published file groups
 - CMP-15 -> CMP-01, CMP-05, CMP-16 (dispatch only)
 - CMP-16 -> CMP-07
-- CMP-04, CMP-05, CMP-06, CMP-09 depend on no other component.
+- CMP-10 -> CMP-21, CMP-22
+- CMP-07 -> CMP-22, CMP-23
+- CMP-25 -> CMP-07, CMP-22, CMP-23, CMP-24
+- CMP-26 -> CMP-01, CMP-25 (selection only), CMP-27 (dispatch only)
+- CMP-27 -> CMP-25
+- CMP-03 -> CMP-25
+- CMP-28, CMP-29 -> CMP-01, CMP-03
+- CMP-04, CMP-05, CMP-06, CMP-09, CMP-21, CMP-22, CMP-23, CMP-24 depend on no other component.
 
 ### Forbidden dependencies
 
@@ -455,6 +568,8 @@ Each responsibility has exactly one owner.
 - CMP-11 to CMP-14 and CMP-17 never depend on CMP-04, CMP-05, CMP-06, CMP-07, CMP-08 directly; the only door into the Core is CMP-03.
 - The Core never depends on CMP-11 to CMP-14, CMP-17, or CMP-18 to CMP-20.
 - No component other than CMP-08 sends a request to PortOne; no component other than CMP-09 decides authenticity.
+- CMP-24 never depends on anything (pure decisions). CMP-25 never depends on CMP-08 directly. CMP-28 and CMP-29 never depend on any Core component other than CMP-01 and CMP-03.
+- No component other than CMP-22 dispatches a payment, billing-key, or subscription event.
 
 ### Secret ownership
 
@@ -555,7 +670,7 @@ For Transaction.Cancelled and Transaction.PartialCancelled, step 4a runs between
 | 8    | CMP-07 -> CMP-06            | Payment record, Gateway result, current time                |
 | 9    | CMP-07 -> CMP-05            | Precomputed outcome (PAID or EXPIRED), or nothing           |
 
-Steps 7 to 9 happen only when the record is still PENDING. Written data: status, and paid_at for PAID, of one Payment record. Step 10: after exclusive access ends, CMP-07 -> listeners: one expiry event when step 9 wrote an outcome.
+Steps 7 to 9 happen only when the record is still PENDING. Written data: status, and paid_at for PAID, of one Payment record. Step 10: after commit, CMP-22 -> listeners: the Payment event of the written outcome with source expiry (SF-11).
 
 ### DF-9 Cancellation sync
 
@@ -588,6 +703,9 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, or AMOUNT
 - AR-11: Behavior that depends on an unverified PortOne assumption lives only in CMP-08 and CMP-13.
 - AR-12: Amounts in the Core are plain integers with no currency attached.
 - AR-13: A component refuses work it does not own by having no access to it (see Forbidden dependencies), not by checking at run time.
+- AR-15: Every effect of a webhook is preceded by its Webhook record and followed, in the same unit of work, by marking it processed (RD-43).
+- AR-16: Payment, billing-key, and subscription events are dispatched only by CMP-22, only after commit, at most once per committed change (RD-42).
+- AR-17: The billing key value is never written to a log, an event, a response, or a published page; only CMP-23 decrypts it and only CMP-08 sends it.
 - AR-14: The Package registers no schedule; the Application decides whether and when EL-031 and model:prune run (FR-065).
 
 ## Failure Boundaries
@@ -705,10 +823,10 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-17 (owner-confirmed): Ambiguous: PRODUCT_SPEC names only two ways CMP-13 ends (no error code -> complete -> PAID; complete error). Silent: `prepare` fails, the SDK throws instead of returning, `complete` responds without an error but with a status other than PAID (for example, the record is already CANCELLED). Decided: Success only when `complete` responds with status PAID; every other outcome sets Error. Why: a terminal state is required and Success must imply PAID.
 - RD-18: Ambiguous: ERR-014 and ERR-015 list only some exceptions for `complete`. Decided: CMP-11 maps exactly those; every other exception (for example a persistence failure) propagates unmodified to the host's error handling, and CMP-13 shows Error by RD-17. **Gap-filling; to confirm.**
 - RD-19 (owner-confirmed, revised for T-022): Ambiguous: repeated preparation for the same order and abandoned PENDING records. Decided: each preparation creates a new Payment record and nothing de-duplicates them. Abandoned records are expired only after a PortOne check (SF-7) and deleted only after the EXPIRED retention period (SF-8), both scheduled by the Application. Why: a PENDING record may be paid at PortOne even though completion never ran; deleting it without a check loses a paid payment.
-- RD-20: Ambiguous: duplicate webhook deliveries. Decided: one event per verified request, no de-duplication.
+- RD-20 (superseded by RD-43): Ambiguous: duplicate webhook deliveries. Decided: one event per verified request, no de-duplication.
 - RD-21: Ambiguous: ownership of published stub files. Decided: transfer to the Application on publishing; the Package keeps no link.
 - RD-22: Ambiguous: who may hold secrets. Decided: the api secret only for CMP-08; the webhook secret for CMP-10 and, as an input, CMP-09.
-- RD-23: Ambiguous: where currency lives. Decided: only in CMP-13 as a constant; the Core handles plain integer amounts.
+- RD-23 (revised for v0.7.0): Ambiguous: where currency lives. Decided: as a Korean won constant in CMP-11 and CMP-28 for browser payments and in CMP-08 for billing-key charges; the Core handles plain integer amounts.
 - RD-24: PortOne lookup and browser SDK assumptions are isolated to CMP-08 and CMP-13. Lookup behavior was confirmed by T-003 and, for abandoned payments, by T-021; completion through the Package by T-011, and cancellation by T-010; the observations are recorded.
 - RD-25 (owner-confirmed): Ambiguous: how abandoned records are found. Decided: a periodic scan by the Expiry Command, not one delayed job per preparation. Why: a lost or never-dispatched delayed job would leave a record PENDING forever; the next scan always finds it again.
 - RD-26: Ambiguous: AR-06 forbids unscoped lookup, but the scan must see every Billable reference. Decided: CMP-05 offers one unscoped selection, used only by CMP-15, returning each record's own Billable reference; everything after it runs scoped through CMP-07. Why: keeps every decision and write inside Scope.
@@ -721,9 +839,15 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-33: Ambiguous: PortOne reports paid without a total paid amount. Decided: SF-9 does not run; completion raises ERR-007 with no paidAmount and leaves the record unchanged, and the expiry job makes no change (FR-062). Why: PRODUCT_SPEC relies on PortOne returning the total when paid, and the Package never cancels a payment whose paid amount it cannot record.
 - RD-34 (owner-confirmed, T-026): Ambiguous: how an Application that published earlier migrations receives a new one. Laravel renames published migrations with the publish date, so vendor:publish cannot see that they exist and copies them again. Decided: CMP-02 registers for publishing only the migrations whose name without the date prefix is not yet in the Application's migrations directory (FR-003a). Why: one tag keeps working across versions, and Applications that already published need no manual cleanup. Cost: --force cannot re-publish an existing migration.
 - RD-35 (owner-confirmed, T-031): Ambiguous: paid_amount of records made PAID before it was recorded. Decided: a migration sets paid_amount = amount for PAID, PARTIALLY_CANCELLED, and CANCELLED records whose paid_amount is null. Why: those records became PAID only when PortOne's total equalled amount (INV-08), so amount is the value PortOne reported.
-- RD-36 (owner-confirmed, T-028): Ambiguous: which transaction webhook types get their own event. Decided: Paid, Cancelled, PartialCancelled, and Failed only (FR-073); every other type is available only through WebhookReceived (FR-074). The typed event is dispatched after WebhookReceived inside the same request, by CMP-10. Why: these four are the payment outcomes an Application acts on; the others are intermediate or unrelated to a single payment's outcome.
+- RD-36 (superseded by RD-42): Ambiguous: which transaction webhook types get their own event. Decided: Paid, Cancelled, PartialCancelled, and Failed only (FR-073).
 - RD-37 (T-029): EL-042 runs SF-2 with the record found by Payment ID alone (CMP-05 offers a lookup by Payment ID under exclusive access, used only by EL-042). Why: a webhook carries only the Payment ID; every rule after the lookup is shared with EL-005.
 - RD-38 (owner-confirmed, T-030): Ambiguous: what EL-044 removes. Decided: replace the value of the keys of FR-079 at any depth with [REDACTED], keeping every key. Why: recorded responses stay structurally identical to live ones, while personal, card, and account identifiers never reach a recording.
 - RD-39 (owner-confirmed, v0.5.0): Ambiguous: a full refund in the PortOne console left the record PAID while PaymentCancelled was dispatched (observed in an Application). Decided: on Transaction.Cancelled and Transaction.PartialCancelled, CMP-10 runs SF-10 through CMP-07 before dispatching any event. SF-10 looks PortOne up instead of trusting the webhook, takes the same exclusive access as a refund, and writes absolute values, so a repeated webhook is harmless. When PortOne's state does not match the webhook the record stays and the events are still dispatched, as before v0.5.0. A missing record skips the sync; a lookup failure fails the request with no event so PortOne redelivers. AMOUNT_MISMATCH -> AMOUNT_MISMATCH_CANCELLED is allowed only here. Why: listeners must see the up-to-date record, and the webhook alone is not trusted for amounts.
-- RD-40 (owner-confirmed, v0.5.0): Ambiguous: how an Application learns the result of an expiry check. Decided: CMP-07 dispatches one event per written outcome after exclusive access ends (PaymentExpired, PaymentPaidOnExpiry, PaymentAmountMismatchedOnExpiry with wasCancelled); none when nothing is written. Why: events dispatched inside the transaction could reach listeners for a write that is rolled back.
+- RD-40 (superseded by RD-42): Ambiguous: how an Application learns the result of an expiry check. Decided: one event per written outcome after exclusive access ends.
 - RD-41 (owner-confirmed, v0.5.0): The webhook signer belongs next to the verifier in cable8mm/portone-php so the two cannot diverge; CMP-19 and CMP-20 wait for it (T-036). CMP-20 sends a real HTTP request to the Application's URL so the check covers the served Application.
+- RD-42 (owner-confirmed, v0.7.0): Ambiguous: Applications deduplicated payment reactions themselves (lock, status check, the same handler on webhook and expiry events). Decided: one Payment event per committed change, whatever its source, dispatched after commit by CMP-22; the webhook-type and expiry-specific events are removed. Why: the Package owns every PortOne concern; an Application reacts once per change with its own domain work.
+- RD-43 (owner-confirmed, v0.7.0): Ambiguous: repeated webhook deliveries. Decided: a Webhook record per webhook-id, written before any effect, marked processed with the effect in one unit of work; a processed webhook-id is a no-op; a failed one is processed again on redelivery. Supersedes RD-20 and the no-record rule of RD-05 and RD-39 for the webhook path.
+- RD-44 (owner-confirmed, v0.7.0): Ambiguous: an order-like Billable model paid twice through two payment attempts. Decided: opt-in per Billable model (EL-069); the second paid payment is cancelled automatically under exclusive access of the Billable reference, mirroring the amount-mismatch rule. Why: a user-like Billable model legitimately has many paid payments.
+- RD-45 (owner-confirmed, v0.7.0): Ambiguous: how renewals are scheduled. Decided: the Package charges due subscriptions itself through the Application's scheduler and queue with payWithBillingKey, not through PortOne payment schedules. Why: retries and expiry stay under the Package's rules and are testable without PortOne state.
+- RD-46 (owner-confirmed, v0.7.0): Ambiguous: Inertia React stubs. Decided: a second publish tag with TSX pages, an Inertia controller, and the same routes and JSON prepare actions; the Blade stubs stay. The two tags publish the controller and the route file to the same paths, so an Application uses one variant.
+
