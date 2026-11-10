@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use Cable8mm\LaravelPortone\Concerns\Billable;
-use Cable8mm\LaravelPortone\Events\PaymentAmountMismatchedOnExpiry;
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentAmountMismatched;
+use Cable8mm\LaravelPortone\Events\PaymentCompleted;
+use Cable8mm\LaravelPortone\Events\PaymentDuplicated;
 use Cable8mm\LaravelPortone\Events\PaymentExpired;
-use Cable8mm\LaravelPortone\Events\PaymentFailed;
-use Cable8mm\LaravelPortone\Events\PaymentPaid;
-use Cable8mm\LaravelPortone\Events\PaymentPaidOnExpiry;
-use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyRefunded;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Events\WebhookFailed;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
@@ -59,13 +58,12 @@ class WebhookLogTest extends TestCase
     private const PACKAGE_EVENTS = [
         WebhookReceived::class,
         WebhookFailed::class,
-        PaymentPaid::class,
-        PaymentCancelled::class,
-        PaymentPartiallyCancelled::class,
-        PaymentFailed::class,
+        PaymentCompleted::class,
+        PaymentPartiallyRefunded::class,
+        PaymentRefunded::class,
+        PaymentAmountMismatched::class,
+        PaymentDuplicated::class,
         PaymentExpired::class,
-        PaymentPaidOnExpiry::class,
-        PaymentAmountMismatchedOnExpiry::class,
     ];
 
     private FakePaymentGateway $gateway;
@@ -153,7 +151,7 @@ class WebhookLogTest extends TestCase
             && $event->type === 'Transaction.Cancelled'
             && $event->exception === $failure);
         Event::assertNotDispatched(WebhookReceived::class);
-        Event::assertNotDispatched(PaymentCancelled::class);
+        Event::assertNotDispatched(PaymentRefunded::class);
         $record = Webhook::query()->sole();
         $this->assertNull($record->processed_at);
         $this->assertNotNull($record->failed_at);
@@ -166,7 +164,7 @@ class WebhookLogTest extends TestCase
 
         $this->assertSame(['CANCELLED', 100], [$payment->fresh()->status, $payment->fresh()->cancelled_amount]);
         Event::assertDispatchedTimes(WebhookReceived::class, 1);
-        Event::assertDispatchedTimes(PaymentCancelled::class, 1);
+        Event::assertDispatchedTimes(PaymentRefunded::class, 1);
         Event::assertDispatchedTimes(WebhookFailed::class, 1);
         $record = $record->fresh();
         $this->assertNotNull($record->processed_at);

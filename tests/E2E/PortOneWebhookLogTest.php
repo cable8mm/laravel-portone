@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\E2E;
 
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\Models\Webhook;
 use Cable8mm\LaravelPortone\PortOneGateway;
@@ -89,7 +89,7 @@ class PortOneWebhookLogTest extends TestCase
         ));
         self::assertCount(1, $received);
         self::assertCount(1, $paymentEvents);
-        self::assertSame(PaymentCancelled::class, $paymentEvents[0]['event']);
+        self::assertSame(PaymentRefunded::class, $paymentEvents[0]['event']);
         self::assertSame(['CANCELLED', $recorded['cancelledAmount']], [$paymentEvents[0]['recordStatus'], $paymentEvents[0]['recordCancelledAmount']]);
         self::assertSame([200, 200], array_map(static fn (array $request): int => $request['response']['status'], $requests));
 

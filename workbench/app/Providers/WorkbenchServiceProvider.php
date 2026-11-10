@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Workbench\App\Providers;
 
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
-use Cable8mm\LaravelPortone\Events\PaymentFailed;
-use Cable8mm\LaravelPortone\Events\PaymentPaid;
-use Cable8mm\LaravelPortone\Events\PaymentPartiallyCancelled;
-use Cable8mm\LaravelPortone\Events\PaymentWebhookEvent;
+use Cable8mm\LaravelPortone\Events\PaymentAmountMismatched;
+use Cable8mm\LaravelPortone\Events\PaymentCompleted;
+use Cable8mm\LaravelPortone\Events\PaymentDuplicated;
+use Cable8mm\LaravelPortone\Events\PaymentEvent;
+use Cable8mm\LaravelPortone\Events\PaymentExpired;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyRefunded;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\PortonePhp\Webhook\WebhookTransaction;
@@ -19,7 +21,6 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Workbench\App\Http\Middleware\RecordWebhookExchange;
-use Workbench\App\Listeners\QueuePaymentCompletion;
 use Workbench\App\Models\WebhookLog;
 
 use function Orchestra\Testbench\package_path;
@@ -54,12 +55,6 @@ class WorkbenchServiceProvider extends ServiceProvider
             $schedule->command('model:prune', ['--model' => [Payment::class]])->daily();
         });
 
-        // A paid webhook completes the payment through a queued job. PHPUnit runs (live
-        // webhook tests included) skip it, so they still see the Package change no record.
-        if (! $this->app->runningUnitTests()) {
-            Event::listen(WebhookReceived::class, QueuePaymentCompletion::class);
-        }
-
         // The sample shop's webhook log: record every verified webhook the Package dispatches.
         Event::listen(WebhookReceived::class, static function (WebhookReceived $event): void {
             if (! Schema::hasTable('webhook_logs')) {
@@ -91,16 +86,26 @@ class WorkbenchServiceProvider extends ServiceProvider
             ]);
         });
 
-        foreach ([PaymentPaid::class, PaymentCancelled::class, PaymentPartiallyCancelled::class, PaymentFailed::class] as $paymentEvent) {
-            Event::listen($paymentEvent, static function (PaymentWebhookEvent $event) use ($observationDirectory): void {
-                // The record as the listener sees it: cancellation webhooks sync it first (T-034).
+        $paymentEvents = [
+            PaymentCompleted::class,
+            PaymentPartiallyRefunded::class,
+            PaymentRefunded::class,
+            PaymentAmountMismatched::class,
+            PaymentDuplicated::class,
+            PaymentExpired::class,
+        ];
+
+        foreach ($paymentEvents as $paymentEvent) {
+            Event::listen($paymentEvent, static function (PaymentEvent $event) use ($observationDirectory): void {
+                // The record as the listener sees it: the Package dispatches after the write commits.
                 $payment = Payment::query()->where('payment_id', $event->paymentId)->first();
+                $request = app()->bound('request') ? request() : null;
 
                 self::appendJsonLine($observationDirectory.'/payment-events.jsonl', [
                     'event' => $event::class,
                     'paymentId' => $event->paymentId,
-                    'webhookId' => $event->webhookId,
-                    'webhookType' => $event->webhook->type,
+                    'source' => $event->source->value,
+                    'webhookId' => $request?->headers->get('webhook-id'),
                     'recordStatus' => $payment?->status,
                     'recordCancelledAmount' => $payment?->cancelled_amount,
                 ]);

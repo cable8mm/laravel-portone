@@ -22,8 +22,6 @@ use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase;
 use Orchestra\Workbench\WorkbenchServiceProvider;
-use Workbench\App\Jobs\CompletePaymentFromWebhook;
-use Workbench\App\Listeners\QueuePaymentCompletion;
 use Workbench\App\Models\Product;
 use Workbench\App\Models\User;
 use Workbench\App\Models\WebhookLog;
@@ -353,35 +351,6 @@ class WorkbenchSampleShopTest extends TestCase
         $this->assertSame('0 0 * * *', $events->first(fn (string $expression, string $command): bool => str_contains($command, 'model:prune') && str_contains($command, 'Payment')));
     }
 
-    public function test_only_a_paid_webhook_queues_a_completion(): void
-    {
-        Queue::fake();
-        // Webhook types traced to tests/E2E/portone-webhook-observation.json.
-        $listener = new QueuePaymentCompletion;
-
-        $listener->handle($this->webhook('Transaction.Paid', 'payment-1'));
-        $listener->handle($this->webhook('Transaction.Cancelled', 'payment-2'));
-
-        Queue::assertPushed(CompletePaymentFromWebhook::class, 1);
-        Queue::assertPushed(CompletePaymentFromWebhook::class, fn (CompletePaymentFromWebhook $job): bool => $job->paymentId === 'payment-1');
-    }
-
-    public function test_webhook_completion_recovers_an_expired_payment(): void
-    {
-        $user = UserFactory::new()->create();
-        // Values traced to tools/probes/portone-abandoned-payment-observation.json (retryAfterFailed: PAID 100).
-        $payment = $user->preparePayment(100, '딸기 마카롱');
-        $payment->forceFill(['status' => 'EXPIRED'])->save();
-        $gateway = $this->createMock(PaymentGateway::class);
-        $gateway->expects($this->once())->method('lookup')->with($payment->payment_id)->willReturn(new GatewayPayment('PAID', 100));
-        $this->app->instance(PaymentGateway::class, $gateway);
-
-        (new CompletePaymentFromWebhook($payment->payment_id))->handle();
-        (new CompletePaymentFromWebhook('unknown-payment'))->handle();
-
-        $this->assertSame('PAID', $payment->refresh()->status);
-    }
-
     public function test_expire_now_button_queues_the_expiry_command(): void
     {
         $queue = Queue::fake();
@@ -466,14 +435,6 @@ class WorkbenchSampleShopTest extends TestCase
     private function product(): Product
     {
         return Product::create(['emoji' => '🍓', 'name' => '딸기 마카롱', 'description' => '새콤달콤', 'price' => 1000]);
-    }
-
-    private function webhook(string $type, string $paymentId): WebhookReceived
-    {
-        return new WebhookReceived(
-            new WebhookTransaction($type, new DateTimeImmutable, new WebhookTransactionData($paymentId, 'store-1', 'tx-1')),
-            'webhook-'.$paymentId,
-        );
     }
 
     private function paidPayment(User $user, int $amount): Payment

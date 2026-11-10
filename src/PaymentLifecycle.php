@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone;
 
+use Cable8mm\LaravelPortone\Events\PaymentAmountMismatched;
+use Cable8mm\LaravelPortone\Events\PaymentCompleted;
+use Cable8mm\LaravelPortone\Events\PaymentDuplicated;
+use Cable8mm\LaravelPortone\Events\PaymentEvent;
+use Cable8mm\LaravelPortone\Events\PaymentEventSource;
+use Cable8mm\LaravelPortone\Events\PaymentExpired;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyRefunded;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidPaymentStatusException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidRefundAmountException;
@@ -189,5 +197,39 @@ class PaymentLifecycle
             'status' => $cancelledAmount === $payment->amount ? 'CANCELLED' : 'PARTIALLY_CANCELLED',
             'cancelled_amount' => $cancelledAmount,
         ];
+    }
+
+    /**
+     * 저장된 변경 1건에 해당하는 결제 이벤트를 정한다. 바뀐 것이 없으면 null이다.
+     *
+     * PAID가 되면 PaymentCompleted, cancelled_amount가 늘어 PARTIALLY_CANCELLED면 PaymentPartiallyRefunded,
+     * CANCELLED가 되면 PaymentRefunded, 금액 불일치 상태가 되면 PaymentAmountMismatched, 중복 결제 상태가 되면
+     * PaymentDuplicated, EXPIRED가 되면 PaymentExpired이다.
+     *
+     * @param  string  $previousStatus  저장 전 status
+     * @param  int  $previousCancelledAmount  저장 전 cancelled_amount
+     * @param  Payment  $payment  저장 뒤의 결제 레코드
+     * @param  PaymentEventSource  $source  레코드를 바꾼 진입점
+     * @return PaymentEvent|null 발송할 이벤트, 바뀐 것이 없으면 null
+     */
+    public function paymentEvent(string $previousStatus, int $previousCancelledAmount, Payment $payment, PaymentEventSource $source): ?PaymentEvent
+    {
+        $refundedAmount = $payment->cancelled_amount - $previousCancelledAmount;
+
+        if ($payment->status === $previousStatus && $refundedAmount === 0) {
+            return null;
+        }
+
+        return match ($payment->status) {
+            'PAID' => new PaymentCompleted($payment, $source),
+            'PARTIALLY_CANCELLED' => $refundedAmount > 0 ? new PaymentPartiallyRefunded($payment, $source, $refundedAmount) : null,
+            'CANCELLED' => new PaymentRefunded($payment, $source, $refundedAmount),
+            'AMOUNT_MISMATCH_CANCELLED' => new PaymentAmountMismatched($payment, $source, true),
+            'AMOUNT_MISMATCH' => new PaymentAmountMismatched($payment, $source, false),
+            'DUPLICATE_CANCELLED' => new PaymentDuplicated($payment, $source, true),
+            'DUPLICATE' => new PaymentDuplicated($payment, $source, false),
+            'EXPIRED' => new PaymentExpired($payment, $source),
+            default => null,
+        };
     }
 }
