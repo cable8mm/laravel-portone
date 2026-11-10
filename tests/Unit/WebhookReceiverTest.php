@@ -152,7 +152,6 @@ class WebhookReceiverTest extends TestCase
     {
         $id = 'webhook-test-id';
         $secret = base64_decode(self::SECRET, true);
-        $this->assertIsString($secret);
         $signature = base64_encode(hash_hmac('sha256', $id.'.'.$timestamp.'.'.$body, $secret, true));
 
         return [
