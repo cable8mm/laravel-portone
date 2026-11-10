@@ -511,10 +511,10 @@
 
 - [ ] T-044 Payment methods in the checkout
   - Satisfies: PRODUCT_SPEC.md EL-053, EL-054, SCR-006, FR-047 to FR-050, FR-115, FR-116, ERR-021, AC-046, AC-047, AC-099; ARCHITECTURE.md CMP-11, CMP-13, RD-23
-  - Depends on: T-038, T-043
+  - Depends on: T-043, T-049
   - External boundary: yes (browser payment window)
   - Acceptance criteria:
-    - The Blade checkout shows one button per EL-053 entry; prepare sets payMethod and easyPay by FR-116 and rejects other values with 422.
+    - The Blade checkout and the Inertia React checkout page each show one button per EL-053 entry; prepare sets payMethod and easyPay by FR-116 and rejects other values with 422.
     - The stub script passes the prepare response to requestPayment unchanged.
     - A live card payment and a live easy payment of each provider confirmed by T-043 complete through the stubs.
     - Unit tests (PHPUnit, Vitest) and static checks pass.
@@ -561,19 +561,29 @@
 
 - [ ] T-049 Inertia React stubs
   - Satisfies: PRODUCT_SPEC.md SCR-014 (EL-087 to EL-091), EL-059, FR-150 to FR-154, FLOW-008, AC-111; TECH_STACK.md section 1 and section 4; ARCHITECTURE.md SF-16, CMP-28, RD-46
-  - Depends on: T-044, T-048
+  - Depends on: T-048
   - External boundary: yes (browser payment and billing-key windows)
   - Acceptance criteria:
     - vendor:publish with EL-059 publishes the three TSX pages, the Inertia controller, and the route file.
+    - The React checkout page offers the card payment only; payment-method selection (EL-053) is added by T-044 in v0.8.0.
     - Vitest with @testing-library/react covers the states and calls of each page; the TypeScript check passes.
     - A Workbench Inertia app completes a live payment and a live billing-key issuance through the published React pages.
     - Unit tests and static checks pass.
 
 - [ ] T-050 README and release v0.7.0
   - Satisfies: PRODUCT_SPEC.md Purpose, Product Goals; TECH_STACK.md section 6
-  - Depends on: T-039 to T-049
+  - Depends on: T-039 to T-042, T-045 to T-049
   - External boundary: no
   - Acceptance criteria:
-    - README documents webhook logging, payment events, duplicate cancellation, receipts, payment methods, billing keys, subscriptions, and both stub variants, and the "업그레이드" section lists every breaking change from v0.6 with its replacement.
+    - README documents webhook logging, payment events, duplicate cancellation, receipts, billing keys, subscriptions, and both stub variants, and the "업그레이드" section lists every breaking change from v0.6 with its replacement.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.0 is released after CI passes.
+
+- [ ] T-051 README and release v0.8.0
+  - Satisfies: PRODUCT_SPEC.md Purpose (easy-payment methods), External Systems "Easy payment methods"; TECH_STACK.md section 6
+  - Depends on: T-043, T-044, T-050
+  - External boundary: no
+  - Acceptance criteria:
+    - README documents the payment methods of EL-053 and EL-054, including easy payments limited to card funding, for both stub variants.
+    - CHANGELOG.md is not edited by hand.
+    - Tag v0.8.0 is released after CI passes.
