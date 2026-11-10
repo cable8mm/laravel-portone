@@ -17,8 +17,10 @@ use Cable8mm\LaravelPortone\PaymentOperations;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 
@@ -487,6 +489,12 @@ class PaymentCompletionTest extends TestCase
                 '--force' => true,
             ])->assertExitCode(0);
         }
+
+        // The Billable model's table, which a completion by Payment ID reads to ask EL-069.
+        Schema::dropIfExists('completion_test_billable_models');
+        Schema::create('completion_test_billable_models', function (Blueprint $table): void {
+            $table->id();
+        });
     }
 
     private function gatewayMock(): PaymentGateway&MockObject

@@ -6,6 +6,7 @@ namespace Workbench\App\Http\Controllers;
 
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
+use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidPaymentStatusException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidRefundAmountException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
@@ -56,7 +57,7 @@ class PaymentController
             $payment = $request->user()->completePayment($paymentId);
         } catch (PaymentNotFoundException) {
             abort(404);
-        } catch (PaymentNotPaidException|AmountMismatchException|ConfigurationException|PortOneException $exception) {
+        } catch (PaymentNotPaidException|AmountMismatchException|DuplicatePaymentException|ConfigurationException|PortOneException $exception) {
             return back()->withErrors(['complete' => $exception->getMessage()]);
         }
 

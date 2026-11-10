@@ -96,6 +96,35 @@ class PaymentLifecycle
     }
 
     /**
+     * 중복 결제 자동 취소의 두 결과를 PortOne 취소 요청 전에 계산한다.
+     *
+     * 한 번만 결제되는 Billable 모델에 이미 결제된 레코드가 있을 때, PAID 대신 쓰는 값이다.
+     * 취소 성공이면 DUPLICATE_CANCELLED(실결제액 전액 취소), 실패면 DUPLICATE이며, 둘 다 paid_at을 기록한다.
+     *
+     * @param  GatewayPayment  $gatewayPayment  금액이 일치하는 PAID 조회 결과
+     * @param  Carbon  $paidAt  paid_at에 기록할 시각
+     * @return array{cancelled: array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount: int}, failed: array{status: string, paid_at: Carbon, paid_amount: int}} 취소 성공·실패 때 저장할 값
+     */
+    public function duplicate(GatewayPayment $gatewayPayment, Carbon $paidAt): array
+    {
+        $paidAmount = (int) $gatewayPayment->totalAmount;
+
+        return [
+            'cancelled' => [
+                'status' => 'DUPLICATE_CANCELLED',
+                'paid_at' => $paidAt,
+                'paid_amount' => $paidAmount,
+                'cancelled_amount' => $paidAmount,
+            ],
+            'failed' => [
+                'status' => 'DUPLICATE',
+                'paid_at' => $paidAt,
+                'paid_amount' => $paidAmount,
+            ],
+        ];
+    }
+
+    /**
      * 만료 확인 결과를 계산한다.
      *
      * 결제 완료 + 금액 일치면 PAID, 확인 시점에 결제되지 않은 결과(PAYMENT_NOT_FOUND,
@@ -129,6 +158,7 @@ class PaymentLifecycle
      * PAID·PARTIALLY_CANCELLED 레코드는 PortOne CANCELLED(취소 총액 = amount)면 CANCELLED,
      * PARTIAL_CANCELLED(0 < 취소 총액 < amount, 기존 cancelled_amount 이상)면 PARTIALLY_CANCELLED가 된다.
      * AMOUNT_MISMATCH 레코드는 PortOne CANCELLED(취소 총액 = paid_amount)면 AMOUNT_MISMATCH_CANCELLED가 된다.
+     * DUPLICATE 레코드는 PortOne CANCELLED(취소 총액 = paid_amount)면 DUPLICATE_CANCELLED가 된다.
      * 그 밖의 조합(PortOne이 아직 PAID, 취소 총액 없음 등)은 변경 없음(null)이다.
      *
      * @param  Payment  $payment  확인할 결제 레코드
@@ -162,6 +192,12 @@ class PaymentLifecycle
             && $gatewayPayment->status === 'CANCELLED'
             && $cancelledAmount === $payment->paid_amount) {
             return ['status' => 'AMOUNT_MISMATCH_CANCELLED', 'cancelled_amount' => $cancelledAmount];
+        }
+
+        if ($payment->status === 'DUPLICATE'
+            && $gatewayPayment->status === 'CANCELLED'
+            && $cancelledAmount === $payment->paid_amount) {
+            return ['status' => 'DUPLICATE_CANCELLED', 'cancelled_amount' => $cancelledAmount];
         }
 
         return null;

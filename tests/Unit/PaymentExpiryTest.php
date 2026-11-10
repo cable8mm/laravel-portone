@@ -18,7 +18,9 @@ use Cable8mm\PortonePhp\Exception\UnauthorizedException;
 use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -46,6 +48,12 @@ class PaymentExpiryTest extends TestCase
         foreach (glob(dirname(__DIR__, 2).'/database/migrations/*.php') ?: [] as $migration) {
             $this->artisan('migrate', ['--path' => $migration, '--realpath' => true, '--force' => true])->assertExitCode(0);
         }
+
+        // The Billable model's table, which a completion by Payment ID reads to ask EL-069.
+        Schema::dropIfExists('expiry_test_billable_models');
+        Schema::create('expiry_test_billable_models', function (Blueprint $table): void {
+            $table->id();
+        });
     }
 
     public function test_command_queues_one_check_per_stale_pending_payment_without_contacting_portone(): void

@@ -6,6 +6,7 @@ namespace Workbench\App\Http\Controllers;
 
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
+use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\PortonePhp\Browser\BrowserPaymentRequest;
@@ -60,7 +61,7 @@ class PortOneCheckoutController
     {
         try {
             $payment = auth()->user()->completePayment((string) $request->input('paymentId'));
-        } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException $exception) {
+        } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException|DuplicatePaymentException $exception) {
             return response()->json(['error' => $exception->getMessage()], 422);
         } catch (ConfigurationException|PortOneException $exception) {
             return response()->json(['error' => $exception->getMessage()], 500);
@@ -94,7 +95,7 @@ class PortOneCheckoutController
         if (in_array($payment->status, ['PENDING', 'EXPIRED'], true)) {
             try {
                 $payment = auth()->user()->completePayment($paymentId);
-            } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException|ConfigurationException|PortOneException $exception) {
+            } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException|DuplicatePaymentException|ConfigurationException|PortOneException $exception) {
                 return view('portone.completed', ['payment' => $payment->fresh() ?? $payment, 'failed' => true]);
             }
         }

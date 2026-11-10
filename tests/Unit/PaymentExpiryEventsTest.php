@@ -21,8 +21,10 @@ use Cable8mm\LaravelPortone\Testing\FakePaymentGateway;
 use Cable8mm\PortonePhp\Exception\UnauthorizedException;
 use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase;
 
 /**
@@ -58,6 +60,12 @@ class PaymentExpiryEventsTest extends TestCase
         foreach (glob(dirname(__DIR__, 2).'/database/migrations/*.php') ?: [] as $migration) {
             $this->artisan('migrate', ['--path' => $migration, '--realpath' => true, '--force' => true])->assertExitCode(0);
         }
+
+        // The Billable model's table, which a completion by Payment ID reads to ask EL-069.
+        Schema::dropIfExists('expiry_events_billable_models');
+        Schema::create('expiry_events_billable_models', function (Blueprint $table): void {
+            $table->id();
+        });
 
         $this->gateway = FakePaymentGateway::bind();
         Event::fake(self::EVENTS);

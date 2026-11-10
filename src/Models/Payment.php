@@ -18,6 +18,9 @@ use Illuminate\Support\Carbon;
  * 버려진 결제는 PENDING → EXPIRED가 되고, 나중에 결제되면 EXPIRED → PAID로 복구된다.
  * PortOne 실결제액이 준비 금액과 다르면 PENDING·EXPIRED → AMOUNT_MISMATCH_CANCELLED
  * (자동 전액 취소 성공) 또는 AMOUNT_MISMATCH(취소 실패, 운영자가 처리)가 되고 더 바뀌지 않는다.
+ * 한 번만 결제되는 Billable 모델(allowsOnlyOnePaidPayment())에 이미 결제된 레코드가 있으면 두 번째로 결제된 건은
+ * PENDING·EXPIRED → DUPLICATE_CANCELLED(자동 전액 취소 성공) 또는 DUPLICATE(취소 실패, 운영자가 처리)가 된다.
+ * AMOUNT_MISMATCH·DUPLICATE는 PortOne에서 취소된 것이 동기화되면 각각 AMOUNT_MISMATCH_CANCELLED·DUPLICATE_CANCELLED가 된다.
  * model:prune은 보관 기간이 지난 EXPIRED 레코드만 지운다.
  *
  * @property string $payment_id
@@ -28,7 +31,7 @@ use Illuminate\Support\Carbon;
  * @property int $amount
  * @property string $status
  * @property int $cancelled_amount
- * @property int|null $paid_amount PortOne이 확인해 준 실결제액(원). PAID 확정과 금액 불일치 때 저장하며, PortOne이 아직
+ * @property int|null $paid_amount PortOne이 확인해 준 실결제액(원). PAID 확정과 금액 불일치·중복 결제 때 저장하며, PortOne이 아직
  *                                 실결제액을 알려 주지 않은 PENDING·EXPIRED는 null이다
  * @property Carbon|null $paid_at
  * @property Carbon $created_at

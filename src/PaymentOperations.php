@@ -6,6 +6,7 @@ namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Events\PaymentEventSource;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
+use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\Payment;
@@ -77,16 +78,20 @@ class PaymentOperations
      * AmountMismatchException을 던진다. 이미 금액 불일치로 저장된 레코드는 PortOne을
      * 다시 부르지 않고 같은 예외를 던진다.
      * 로컬 저장 실패 시 같은 값으로 최대 3회까지 다시 시도한다.
+     * 한 번만 결제되는 Billable 모델(allowsOnlyOnePaidPayment())은 모델 단위 배타 접근 안에서 확정하며,
+     * 이미 결제된 레코드가 있으면 이 결제를 PortOne에서 자동 전액 취소하고 DuplicatePaymentException을 던진다.
      *
      * @param  Model  $billable  결제를 소유한 Billable 모델
      * @param  string  $paymentId  PortOne 결제 식별자
      * @return Payment 확정된(또는 기존 상태 그대로인) 결제 레코드
      *
      * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
     public function complete(Model $billable, string $paymentId): Payment
     {
         return $this->completeLocked(
+            $this->allowsOnlyOnePaidPayment($billable) ? $this->payments->reference($billable) : null,
             fn (Closure $operation): Payment => $this->payments->withExclusiveAccess($billable, $paymentId, $operation),
             PaymentEventSource::Complete,
         );
@@ -105,10 +110,14 @@ class PaymentOperations
      * @throws PaymentNotFoundException 해당 결제 레코드가 없을 때
      * @throws PaymentNotPaidException PortOne이 결제 완료로 표시하지 않았을 때
      * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
     public function completeByPaymentId(string $paymentId, PaymentEventSource $source = PaymentEventSource::Complete): Payment
     {
+        $reference = $this->payments->billableReference($paymentId);
+
         return $this->completeLocked(
+            $reference !== null && $this->allowsOnlyOnePaidPayment($this->payments->billableModel(...$reference)) ? $reference : null,
             fn (Closure $operation): Payment => $this->payments->withExclusiveAccessByPaymentId($paymentId, $operation),
             $source,
         );
@@ -118,7 +127,7 @@ class PaymentOperations
      * 결제 ID로 레코드를 찾아 PortOne의 취소 상태를 반영한다(취소 동기화).
      *
      * 소유 Billable은 따지지 않는다. refund()와 같은 배타 접근을 잡고, PAID·PARTIALLY_CANCELLED·
-     * AMOUNT_MISMATCH 레코드만 PortOne에 조회한다. PortOne이 CANCELLED·PARTIAL_CANCELLED이고 취소 총액이
+     * AMOUNT_MISMATCH·DUPLICATE 레코드만 PortOne에 조회한다. PortOne이 CANCELLED·PARTIAL_CANCELLED이고 취소 총액이
      * 맞을 때만 status와 cancelled_amount를 바꾸며, 그 밖에는 그대로 둔다. 같은 PortOne 상태로 다시
      * 호출해도 결과가 같다. 취소 웹훅(Transaction.Cancelled·Transaction.PartialCancelled)도 이 메서드를 쓴다.
      *
@@ -133,7 +142,7 @@ class PaymentOperations
         return $this->payments->withExclusiveAccessByPaymentId(
             $paymentId,
             function (Payment $payment) use ($source): Payment {
-                if (! in_array($payment->status, ['PAID', 'PARTIALLY_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
+                if (! in_array($payment->status, ['PAID', 'PARTIALLY_CANCELLED', 'AMOUNT_MISMATCH', 'DUPLICATE'], true)) {
                     return $payment;
                 }
 
@@ -147,45 +156,58 @@ class PaymentOperations
     /**
      * 잠금을 잡은 레코드에 확정 규칙을 적용한다. complete()와 completeByPaymentId()가 공유한다.
      *
+     * 한 번만 결제되는 Billable 모델이면 그 참조의 배타 접근을 레코드 잠금보다 먼저 잡는다.
+     *
+     * @param  array{0: string, 1: string}|null  $singlePayment  한 번만 결제되는 Billable 모델의 참조, 아니면 null
      * @param  Closure(Closure(Payment): Payment): Payment  $lock  레코드를 잠그고 연산을 실행하는 함수
      * @param  PaymentEventSource  $source  결제 이벤트의 source
      * @return Payment 확정된(또는 기존 상태 그대로인) 결제 레코드
      *
      * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
-    private function completeLocked(Closure $lock, PaymentEventSource $source): Payment
+    private function completeLocked(?array $singlePayment, Closure $lock, PaymentEventSource $source): Payment
     {
-        $mismatch = null;
+        $failure = null;
 
-        $payment = $lock(
-            function (Payment $payment) use (&$mismatch, $source): Payment {
-                if (in_array($payment->status, ['AMOUNT_MISMATCH_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
-                    $mismatch = AmountMismatchException::fromPayment($payment);
+        $complete = function (Payment $payment) use (&$failure, $source, $singlePayment): Payment {
+            if (in_array($payment->status, ['AMOUNT_MISMATCH_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
+                $failure = AmountMismatchException::fromPayment($payment);
 
-                    return $payment;
-                }
+                return $payment;
+            }
 
-                if (! in_array($payment->status, ['PENDING', 'EXPIRED'], true)) {
-                    return $payment;
-                }
+            if (! in_array($payment->status, ['PENDING', 'EXPIRED'], true)) {
+                return $payment;
+            }
 
-                $gatewayPayment = $this->gateway->lookup($payment->payment_id);
+            $gatewayPayment = $this->gateway->lookup($payment->payment_id);
 
-                if ($this->lifecycle->isAmountMismatch($payment, $gatewayPayment)) {
-                    $mismatch = $this->cancelAmountMismatch($payment, $gatewayPayment, $source);
+            if ($this->lifecycle->isAmountMismatch($payment, $gatewayPayment)) {
+                $failure = $this->cancelAmountMismatch($payment, $gatewayPayment, $source);
 
-                    return $payment;
-                }
+                return $payment;
+            }
 
-                $outcome = $this->lifecycle->complete($payment, $gatewayPayment, now());
+            $outcome = $this->lifecycle->complete($payment, $gatewayPayment, now());
 
-                return $this->write($payment, $outcome, $source);
-            },
-        );
+            if ($singlePayment !== null && $this->payments->hasOtherPaid($payment)) {
+                $failure = $this->cancelDuplicate($payment, $gatewayPayment, $source);
 
-        // 잠금 트랜잭션 안에서 던지면 저장한 금액 불일치 결과가 롤백되므로, 커밋 뒤에 던진다.
-        if ($mismatch !== null) {
-            throw $mismatch;
+                return $payment;
+            }
+
+            return $this->write($payment, $outcome, $source);
+        };
+        $operation = fn (): Payment => $lock($complete);
+
+        $payment = $singlePayment === null
+            ? $operation()
+            : $this->payments->withBillableExclusiveAccess($singlePayment[0], $singlePayment[1], $operation);
+
+        // 잠금 트랜잭션 안에서 던지면 저장한 금액 불일치·중복 결제 결과가 롤백되므로, 커밋 뒤에 던진다.
+        if ($failure !== null) {
+            throw $failure;
         }
 
         return $payment;
@@ -201,6 +223,8 @@ class PaymentOperations
      * 설정 누락·PortOne 실패·저장 실패는 감싸지 않고 전파한다.
      * 저장한 결과는 커밋 뒤에 source expiry의 결제 이벤트로 알린다: EXPIRED면 PaymentExpired, PAID면 PaymentCompleted,
      * 금액 불일치면 PaymentAmountMismatched(wasCancelled). 저장한 것이 없으면 보내지 않는다.
+     * 한 번만 결제되는 Billable 모델에 이미 결제된 레코드가 있으면 PAID 대신 중복 결제로 자동 취소하며,
+     * 금액 불일치와 같이 취소가 실패했을 때만 PortOne 예외를 전파한다.
      *
      * @param  string  $billableType  소유 Billable 모델의 morph 타입
      * @param  string  $billableId  소유 Billable 모델의 키
@@ -209,31 +233,40 @@ class PaymentOperations
     public function expire(string $billableType, string $billableId, string $paymentId): void
     {
         $cancellationFailure = null;
+        $singlePayment = $this->allowsOnlyOnePaidPayment($this->payments->billableModel($billableType, $billableId));
 
-        $this->payments->withExclusiveAccessByReference(
-            $billableType,
-            $billableId,
-            $paymentId,
-            function (Payment $payment) use (&$cancellationFailure): void {
-                if ($payment->status !== 'PENDING') {
-                    return;
-                }
+        $expire = function (Payment $payment) use (&$cancellationFailure, $singlePayment): void {
+            if ($payment->status !== 'PENDING') {
+                return;
+            }
 
-                $gatewayPayment = $this->gateway->lookupForExpiry($payment->payment_id);
+            $gatewayPayment = $this->gateway->lookupForExpiry($payment->payment_id);
 
-                if ($this->lifecycle->isAmountMismatch($payment, $gatewayPayment)) {
-                    $cancellationFailure = $this->cancelAmountMismatch($payment, $gatewayPayment, PaymentEventSource::Expiry)->getPrevious();
+            if ($this->lifecycle->isAmountMismatch($payment, $gatewayPayment)) {
+                $cancellationFailure = $this->cancelAmountMismatch($payment, $gatewayPayment, PaymentEventSource::Expiry)->getPrevious();
 
-                    return;
-                }
+                return;
+            }
 
-                $outcome = $this->lifecycle->expire($payment, $gatewayPayment, now());
+            $outcome = $this->lifecycle->expire($payment, $gatewayPayment, now());
 
-                if ($outcome !== null) {
-                    $this->write($payment, $outcome, PaymentEventSource::Expiry);
-                }
-            },
-        );
+            if ($outcome !== null && $outcome['status'] === 'PAID' && $singlePayment && $this->payments->hasOtherPaid($payment)) {
+                $cancellationFailure = $this->cancelDuplicate($payment, $gatewayPayment, PaymentEventSource::Expiry)->getPrevious();
+
+                return;
+            }
+
+            if ($outcome !== null) {
+                $this->write($payment, $outcome, PaymentEventSource::Expiry);
+            }
+        };
+        $operation = fn () => $this->payments->withExclusiveAccessByReference($billableType, $billableId, $paymentId, $expire);
+
+        if ($singlePayment) {
+            $this->payments->withBillableExclusiveAccess($billableType, $billableId, $operation);
+        } else {
+            $operation();
+        }
 
         // AMOUNT_MISMATCH 저장과 그 이벤트가 롤백되지 않도록 커밋 뒤에 취소 실패를 전파한다.
         if ($cancellationFailure !== null) {
@@ -296,6 +329,52 @@ class PaymentOperations
     }
 
     /**
+     * 한 번만 결제되는 Billable 모델의 두 번째 결제를 PortOne에서 전액 취소하고 결과를 저장한다.
+     *
+     * 두 결과는 취소 요청 전에 계산한다. 취소가 실패해도 예외를 던지지 않고
+     * DUPLICATE를 저장한 뒤, PortOne 예외를 previous로 담은 예외를 반환한다.
+     *
+     * @param  Payment  $payment  잠금을 잡은 PENDING 또는 EXPIRED 결제 레코드
+     * @param  GatewayPayment  $gatewayPayment  금액이 일치하는 PAID 조회 결과
+     * @param  PaymentEventSource  $source  결제 이벤트의 source
+     * @return DuplicatePaymentException 호출자가 잠금이 끝난 뒤 던지거나 해석할 예외
+     */
+    private function cancelDuplicate(Payment $payment, GatewayPayment $gatewayPayment, PaymentEventSource $source): DuplicatePaymentException
+    {
+        $outcomes = $this->lifecycle->duplicate($gatewayPayment, now());
+
+        try {
+            $this->gateway->cancel($payment->payment_id, $this->duplicateCancelReason(), null);
+        } catch (Throwable $exception) {
+            return DuplicatePaymentException::fromPayment($this->write($payment, $outcomes['failed'], $source), $exception);
+        }
+
+        return DuplicatePaymentException::fromPayment($this->write($payment, $outcomes['cancelled'], $source));
+    }
+
+    /**
+     * Billable 모델이 한 번만 결제되는지(allowsOnlyOnePaidPayment()) 확인한다. 모델이 없거나 메서드가 없으면 false이다.
+     *
+     * @param  Model|null  $billable  확인할 Billable 모델
+     */
+    private function allowsOnlyOnePaidPayment(?Model $billable): bool
+    {
+        return $billable !== null
+            && method_exists($billable, 'allowsOnlyOnePaidPayment')
+            && $billable->allowsOnlyOnePaidPayment() === true;
+    }
+
+    /**
+     * 중복 결제 자동 취소 사유(portone.duplicate_cancel_reason)를 반환한다.
+     */
+    private function duplicateCancelReason(): string
+    {
+        $reason = config('portone.duplicate_cancel_reason');
+
+        return is_string($reason) && $reason !== '' ? $reason : '중복 결제로 자동 취소';
+    }
+
+    /**
      * 금액 불일치 자동 취소 사유(portone.amount_mismatch_cancel_reason)를 반환한다.
      */
     private function amountMismatchCancelReason(): string
@@ -311,7 +390,7 @@ class PaymentOperations
      * 저장한 변경의 결제 이벤트는 커밋 뒤에 1번 발송되도록 넘긴다. 롤백되면 발송되지 않는다.
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon, paid_amount: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
+     * @param  array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
      * @param  PaymentEventSource  $source  결제 이벤트의 source
      * @return Payment 갱신된 결제 레코드
      */
