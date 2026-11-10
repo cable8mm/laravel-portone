@@ -54,6 +54,7 @@ PORTONE_STORE_ID=
 PORTONE_CHANNEL_KEY=
 PORTONE_PENDING_EXPIRE_AFTER=
 PORTONE_EXPIRED_RETENTION_DAYS=
+PORTONE_WEBHOOK_RETENTION_DAYS=
 PORTONE_AMOUNT_MISMATCH_CANCEL_REASON=
 ```
 
@@ -67,6 +68,7 @@ PORTONE_AMOUNT_MISMATCH_CANCEL_REASON=
 | `PORTONE_CHANNEL_KEY`                   | 포트원 채널 키 (브라우저 결제창용)                   | 없음 (필수)                    |
 | `PORTONE_PENDING_EXPIRE_AFTER`          | 이 시간(분)보다 오래된 `PENDING` 결제를 만료 검사    | `1440` (24시간)                |
 | `PORTONE_EXPIRED_RETENTION_DAYS`        | `EXPIRED` 결제를 지우기 전까지 보관할 일수           | `90`                           |
+| `PORTONE_WEBHOOK_RETENTION_DAYS`        | 처리된 웹훅 기록을 지우기 전까지 보관할 일수         | `90`                           |
 | `PORTONE_AMOUNT_MISMATCH_CANCEL_REASON` | 금액 불일치 자동 취소 때 PortOne에 보낼 취소 사유    | `결제 금액 불일치로 자동 취소` |
 
 ### 2. 설정 / 마이그레이션 발행
@@ -83,6 +85,7 @@ php artisan migrate
 
 - `portone_customers`: Billable 모델별 `customer_id` 1건 저장
 - `portone_payments`: 결제 기록 (`payment_id` 전역 유니크)
+- `portone_webhooks`: 받은 웹훅 기록 (`webhook_id` 유니크, [웹훅 기록](#웹훅-기록))
 
 이미 설치한 앱을 새 버전으로 올릴 때는 [업그레이드](#업그레이드)를 보세요.
 
@@ -109,6 +112,7 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
 | ------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | v0.3.0 | `add_paid_amount_to_portone_payments_table`      | `paid_amount` 컬럼 추가                                                                        |
 | v0.4.0 | `backfill_paid_amount_on_portone_payments_table` | 이미 결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 레코드의 `paid_amount`를 `amount`로 채움 |
+| v0.7.0 | `create_portone_webhooks_table`                  | 웹훅 기록 테이블 `portone_webhooks` 추가                                                       |
 
 ### 버전별로 추가된 설정 키
 
@@ -118,16 +122,26 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
 | 버전   | 설정 키                         | 환경 변수                               | 기본값                         |
 | ------ | ------------------------------- | --------------------------------------- | ------------------------------ |
 | v0.3.0 | `amount_mismatch_cancel_reason` | `PORTONE_AMOUNT_MISMATCH_CANCEL_REASON` | `결제 금액 불일치로 자동 취소` |
+| v0.7.0 | `webhook_retention_days`        | `PORTONE_WEBHOOK_RETENTION_DAYS`        | `90`                           |
 
 ```php
 // config/portone.php (v0.3.0에서 추가)
 'amount_mismatch_cancel_reason' => env('PORTONE_AMOUNT_MISMATCH_CANCEL_REASON') ?: '결제 금액 불일치로 자동 취소',
+// config/portone.php (v0.7.0에서 추가)
+'webhook_retention_days' => (int) (env('PORTONE_WEBHOOK_RETENTION_DAYS') ?: 90),
 ```
 
 ### 버전별 동작 변경
 
 앱 코드에 영향이 있을 수 있는 변경입니다.
 
+- **v0.7.0**
+  - **웹훅 기록과 중복 무시(동작 변경):** 검증된 웹훅은 처리 전에 `portone_webhooks`에 `webhook-id`별로 기록됩니다. 이미 처리된
+    `webhook-id`가 다시 오면 `200`만 응답하고 레코드 변경·PortOne 조회·이벤트 발송을 하지 않습니다. 이전에는 같은 웹훅이 다시 올 때마다
+    `WebhookReceived`가 다시 발송됐습니다. 리스너에서 `webhookId`로 직접 중복을 거르던 코드는 지워도 됩니다. 마이그레이션을 다시 발행하세요.
+  - **새 이벤트 `WebhookFailed`:** 설정 누락이나 PortOne 오류로 웹훅 처리가 실패하면 웹훅 기록을 실패로 표시하고 `WebhookFailed`만 발송한 뒤
+    요청을 오류로 끝냅니다. PortOne이 다시 보내면 다시 처리합니다.
+  - 처리된 웹훅 기록을 정리하려면 `model:prune`에 `Cable8mm\LaravelPortone\Models\Webhook`을 추가하세요([웹훅 기록](#웹훅-기록)).
 - **v0.6.0**
   - **체크아웃 단일 리다이렉트 흐름(동작 변경):** `requestPayment`에 `redirectUrl`과 `forceRedirect: true`를 넣어 PC·모바일이 같은 흐름으로 동작합니다.
     `prepare` 응답이 기존 `checkoutParameters` 배열에서 브라우저 결제 요청값(`storeId`, `channelKey`, `paymentId`, `orderName`,
@@ -341,10 +355,42 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 
 동작 요약:
 
-- 서명 유효 → `WebhookReceived` 1건 발송 (+ 거래 웹훅이면 아래 결제 이벤트 1건) + `200` 빈 응답
+- 서명 유효, 처음 받은 `webhook-id` → 웹훅 기록 → 처리 → `WebhookReceived` 1건 발송 (+ 거래 웹훅이면 아래 결제 이벤트 1건) + `200` 빈 응답
+- 서명 유효, 이미 처리된 `webhook-id` → `200` 빈 응답만. 레코드 변경·PortOne 조회·이벤트 없음
+- 처리 실패(설정 누락·PortOne 오류) → 웹훅 기록을 실패로 표시, `WebhookFailed`만 발송, 요청은 오류로 끝나 PortOne이 다시 보냄
 - 서명 무효·헤더 누락·타임스탬프 범위 초과 → `400`, 이벤트 없음
 - `PORTONE_WEBHOOK_SECRET` 미설정 → `500`, 이벤트 없음
 - 취소 웹훅(`Transaction.Cancelled`·`Transaction.PartialCancelled`)만 이벤트 전에 결제 레코드를 PortOne과 맞춥니다([아래](#취소-웹훅과-결제-레코드-동기화)). 그 밖의 웹훅은 고객·결제 레코드를 읽거나 쓰지 않습니다
+
+### 웹훅 기록
+
+검증된 웹훅은 어떤 처리보다 먼저 `portone_webhooks`(`Cable8mm\LaravelPortone\Models\Webhook`)에 `webhook-id`마다 1건 기록됩니다.
+
+| 컬럼           | 내용                                                    |
+| -------------- | ------------------------------------------------------- |
+| `webhook_id`   | `webhook-id` 헤더 값 (유니크)                           |
+| `type`         | 웹훅 종류 (예: `Transaction.Cancelled`)                 |
+| `body`         | 받은 그대로의 요청 본문                                 |
+| `attempts`     | 이 `webhook-id`를 받은 횟수                             |
+| `received_at`  | 처음 받은 시각                                          |
+| `processed_at` | 처리를 마친 시각. 있으면 같은 `webhook-id`는 무시합니다 |
+| `failed_at`    | 마지막 처리 실패 시각                                   |
+| `failure`      | 마지막 처리 실패의 예외 클래스와 메시지                 |
+
+- 처리(취소 웹훅의 레코드 동기화 등)와 `processed_at` 표시는 한 트랜잭션입니다. 같은 `webhook-id`가 동시에 오면 나중 요청은 앞 요청이
+  끝날 때까지 기다린 뒤 아무것도 하지 않습니다.
+- 처리가 실패하면 처리 내용은 롤백되고 `failed_at`·`failure`가 남으며, `WebhookFailed`(`webhookId`, `type`, `exception`)가 발송됩니다.
+  다음 전달 때 다시 처리하고, 성공하면 `failed_at`·`failure`를 지웁니다.
+- 리스너 예외는 처리 완료 뒤에 일어나므로 기록은 처리된 상태로 남습니다(같은 `webhook-id`는 다시 처리되지 않음).
+
+처리된 기록은 `PORTONE_WEBHOOK_RETENTION_DAYS`(기본 90일)이 지나면 `model:prune`으로 지울 수 있습니다. 처리되지 않았거나 실패한 기록은 지우지 않습니다.
+패키지는 스케줄을 등록하지 않으므로 앱에서 등록하세요.
+
+```php
+use Cable8mm\LaravelPortone\Models\Webhook;
+
+Schedule::command('model:prune', ['--model' => [Webhook::class]])->daily();
+```
 
 ### 결제 이벤트
 
@@ -376,7 +422,7 @@ PortOne 콘솔이나 다른 시스템에서 환불하면 `Transaction.Cancelled`
 
 - `refund()`와 같은 잠금을 쓰고 절대값으로 저장하므로 같은 웹훅이 여러 번 와도 결과가 같습니다.
 - `PENDING`·`EXPIRED`·`CANCELLED` 레코드나 이 패키지가 만들지 않은 결제는 PortOne을 조회하지 않고 이벤트만 보냅니다.
-- PortOne 조회가 실패하면(설정 누락 포함) 이벤트 없이 웹훅 요청이 오류로 끝나 PortOne이 다시 보냅니다. 레코드는 그대로입니다.
+- PortOne 조회가 실패하면(설정 누락 포함) `WebhookFailed`만 발송하고 웹훅 요청이 오류로 끝나 PortOne이 다시 보냅니다. 레코드는 그대로입니다.
 - `amount`·`paid_at`·`paid_amount`는 바꾸지 않습니다.
 
 웹훅 없이 같은 동기화를 하려면 `syncByPaymentId()`를 부르세요. 결제 ID만으로 레코드를 찾으며, 없으면 `PaymentNotFoundException`입니다.

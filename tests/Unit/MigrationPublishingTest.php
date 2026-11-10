@@ -41,6 +41,7 @@ class MigrationPublishingTest extends TestCase
             'backfill_paid_amount_on_portone_payments_table.php',
             'create_portone_customers_table.php',
             'create_portone_payments_table.php',
+            'create_portone_webhooks_table.php',
         ], $names);
         $this->assertFileExists($this->app->databasePath('migrations/2026_01_02_030405_create_portone_customers_table.php'));
 
@@ -54,7 +55,7 @@ class MigrationPublishingTest extends TestCase
         $this->publishMigrations();
         $this->publishMigrations();
 
-        $this->assertCount(4, $this->publishedPortOneMigrations());
+        $this->assertCount(5, $this->publishedPortOneMigrations());
     }
 
     /**

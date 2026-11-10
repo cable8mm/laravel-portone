@@ -457,7 +457,7 @@
   - Acceptance criteria:
     - composer.json requires cable8mm/portone-php ^0.7.0; every existing test passes unchanged.
 
-- [ ] T-039 Webhook log and exactly-once webhook processing
+- [X] T-039 Webhook log and exactly-once webhook processing
   - Satisfies: PRODUCT_SPEC.md SCR-003, SCR-010 (EL-060 to EL-062), FR-036, FR-039, FR-081, FR-082, FR-095 to FR-100, FR-102, FLOW-003, AC-079, AC-081, AC-082, AC-089, AC-090, AC-113; ARCHITECTURE.md SF-4, CMP-10, CMP-21, AR-15, RD-43
   - Depends on: T-038
   - External boundary: yes (live PortOne webhook redelivery)
