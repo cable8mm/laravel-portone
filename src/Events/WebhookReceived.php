@@ -9,7 +9,7 @@ use Cable8mm\PortonePhp\Webhook\Webhook;
 /**
  * 서명 검증에 성공한 PortOne 웹훅을 알리는 이벤트.
  *
- * 검증된 요청당 정확히 1건 발송된다. 고객·결제 레코드를 읽거나 쓰지 않는다.
+ * webhook-id당 정확히 1건, 그 웹훅을 처음 처리해 커밋한 뒤 발송된다. 이미 처리된 webhook-id가 다시 오면 발송되지 않는다.
  */
 final class WebhookReceived
 {

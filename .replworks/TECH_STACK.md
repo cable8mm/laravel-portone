@@ -7,7 +7,7 @@
 - The Package MUST NOT require laravel/framework.
 - Eloquent ORM and Laravel migrations: as provided by the illuminate/\* version in use.
 - illuminate/console and illuminate/queue: ^12.0 || ^13.0; required for the expiry command (EL-031) and the expiry job (EL-032).
-- cable8mm/portone-php: ^0.5.0 (Webhook\WebhookSigner is required by EL-050 and EL-051; Browser\RedirectResult and Browser\BrowserPaymentRequest and the Payment amount accessors are required by the checkout stubs)
+- cable8mm/portone-php: ^0.7.0 (Webhook\WebhookSigner is required by EL-050 and EL-051; Browser\RedirectResult, Browser\BrowserPaymentRequest, Browser\BrowserBillingKeyRequest, Browser\BillingKeyRedirectResult, the Payment amount accessors, and Payment receiptUrl are required by the Core and the stubs; BillingKeyClient and PaymentClient payWithBillingKey are required by the billing-key components)
 - illuminate/http: ^12.0 || ^13.0; required for the HTTP request of the webhook replay command (EL-051)
 - Composer: PSR-4 autoload, Laravel package discovery through composer.json extra.laravel.providers
 - orchestra/testbench: ^10.0 || ^11.0, including Workbench
@@ -18,6 +18,11 @@
 - Node.js: ^22.12 || >=24
 - npm: used for JavaScript development tooling only
 - @portone/browser-sdk: ^0.1.13; the Developer installs it in the Application; the Package MUST NOT install it in the Application
+- react: ^19.0 and @inertiajs/react: ^2.0; the Developer installs them in the Application for the files of EL-087 through EL-089; development-only in the Package, used by tests and workbench/
+- inertiajs/inertia-laravel: ^2.0; the Developer installs it in the Application for EL-090; require-dev only in the Package
+- TypeScript: the files of EL-087 through EL-089 are .tsx, matching the Laravel React starter kit; typescript ^5.0 is development-only, used only to type-check the stubs
+- @testing-library/react: ^16.0; development-only, used only by Vitest
+- @vitejs/plugin-react: ^5.0; development-only, used only by workbench/
 - Vitest: ^4.0
 - Vite: ^8.0; development-only, used only by workbench/
 - laravel-vite-plugin: ^3.0; development-only, used only by workbench/
@@ -77,7 +82,9 @@
 - PHP tests MUST replace PortOne client calls with test doubles.
 - JavaScript tests MUST use Vitest with jsdom.
 - JavaScript tests MUST replace @portone/browser-sdk with a mock.
-- JavaScript test file names MUST end with .test.js.
+- JavaScript test file names MUST end with .test.js, or .test.tsx for the files of SCR-014.
+- The React stubs MUST be tested with Vitest, jsdom, and @testing-library/react, with @inertiajs/react and @portone/browser-sdk replaced by mocks.
+- Live verification of the React stubs MUST run through a Workbench Inertia app built with Vite and @vitejs/plugin-react.
 - Live verification MUST run through Testbench Workbench using the published stubs.
 - Live webhook verification MUST use an ngrok public URL.
 - Live verification MUST NOT run in CI.
@@ -95,7 +102,7 @@
 - Live verification probes are a documented exception to the no-PHP-built-in-server-router rule: probes MUST reside outside tests/ under tools/probes/ because their purpose is to observe external behavior independently of the Package's own code; the no-router rule applies to live tests only.
 - Coverage threshold: None.
 - Coverage tooling MUST NOT be configured.
-- CI MUST run: composer validate, Pint in check mode, PHPStan, PHPUnit, Prettier in check mode, ESLint, Vitest.
+- CI MUST run: composer validate, Pint in check mode, PHPStan, PHPUnit, Prettier in check mode, ESLint, the TypeScript check of the React stubs, Vitest.
 
 ## 5. Configuration rules
 

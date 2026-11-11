@@ -1,0 +1,46 @@
+{
+	"recordedAt": "2026-11-10T21:41:56+00:00",
+	"paymentId": "f3740cb7-cdcb-4c4f-9c60-14a7c0f543cc",
+	"portOneStatus": "PAID",
+	"amount": 100,
+	"steps": [
+		"browser return (completed route, test process)",
+		"Transaction.Paid webhook over HTTP (served app)",
+		"expiry job (test process)"
+	],
+	"webhookResponse": 200,
+	"paymentEvents": [
+		{
+			"event": "Cable8mm\\LaravelPortone\\Events\\PaymentCompleted",
+			"source": "complete",
+			"duringWebhookRequest": false
+		}
+	],
+	"finalRecord": {
+		"status": "PAID",
+		"paidAmount": 100
+	},
+	"secretsRecorded": false,
+	"webhookFirst": {
+		"recordedAt": "2026-11-10T21:41:56+00:00",
+		"paymentId": "907fe33d-9bf5-46a9-a869-41c68f18d479",
+		"portOneStatus": "PAID",
+		"amount": 100,
+		"deliveries": "two Transaction.Paid webhooks with different webhook-ids",
+		"responses": [
+			200,
+			200
+		],
+		"paymentEvents": [
+			{
+				"event": "Cable8mm\\LaravelPortone\\Events\\PaymentCompleted",
+				"source": "webhook",
+				"recordStatus": "PAID"
+			}
+		],
+		"finalRecord": {
+			"status": "PAID",
+			"paidAmount": 100
+		}
+	}
+}

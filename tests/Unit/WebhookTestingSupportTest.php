@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use Cable8mm\LaravelPortone\Events\PaymentCancelled;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\LaravelPortone\PortOneGateway;
@@ -54,7 +54,7 @@ class WebhookTestingSupportTest extends TestCase
 
     public function test_helper_sends_a_webhook_the_package_verifies(): void
     {
-        Event::fake([WebhookReceived::class, PaymentCancelled::class]);
+        Event::fake([WebhookReceived::class, PaymentRefunded::class]);
 
         $this->postPortOneWebhook('Transaction.Cancelled', 'payment-1', ['cancellationId' => 'cancellation-1'])->assertOk();
 
@@ -64,7 +64,8 @@ class WebhookTestingSupportTest extends TestCase
             && $event->webhook->data->storeId === 'store-720c15ca-0a45-4811-9e40-c8321ca05e8e'
             && $event->webhook->data->cancellationId === 'cancellation-1'
             && str_starts_with($event->webhookId, 'msg-'));
-        Event::assertDispatched(PaymentCancelled::class, fn (PaymentCancelled $event): bool => $event->paymentId === 'payment-1');
+        // No Payment record has this ID, so the cancellation sync is skipped.
+        Event::assertNotDispatched(PaymentRefunded::class);
     }
 
     public function test_helper_requires_the_webhook_secret(): void

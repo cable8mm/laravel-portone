@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use Cable8mm\LaravelPortone\Concerns\Billable;
-use Cable8mm\LaravelPortone\Events\PaymentAmountMismatchedOnExpiry;
+use Cable8mm\LaravelPortone\Events\PaymentAmountMismatched;
+use Cable8mm\LaravelPortone\Events\PaymentCompleted;
+use Cable8mm\LaravelPortone\Events\PaymentDuplicated;
+use Cable8mm\LaravelPortone\Events\PaymentEvent;
+use Cable8mm\LaravelPortone\Events\PaymentEventSource;
 use Cable8mm\LaravelPortone\Events\PaymentExpired;
-use Cable8mm\LaravelPortone\Events\PaymentExpiryEvent;
-use Cable8mm\LaravelPortone\Events\PaymentPaidOnExpiry;
+use Cable8mm\LaravelPortone\Events\PaymentPartiallyRefunded;
+use Cable8mm\LaravelPortone\Events\PaymentRefunded;
 use Cable8mm\LaravelPortone\Jobs\ExpirePendingPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentOperations;
@@ -22,7 +26,7 @@ use Illuminate\Support\Facades\Event;
 use Orchestra\Testbench\TestCase;
 
 /**
- * T-035: the expiry job reports each written outcome as an event (AC-085).
+ * T-035, T-040: the expiry job reports each written outcome as one payment event with source expiry (AC-085).
  *
  * Lookup results are traced to tools/probes/portone-abandoned-payment-observation.json (T-021):
  * PAID 100, FAILED 100, READY 100, PAYMENT_NOT_FOUND; the cancellation failure to
@@ -31,7 +35,14 @@ use Orchestra\Testbench\TestCase;
  */
 class PaymentExpiryEventsTest extends TestCase
 {
-    private const EVENTS = [PaymentExpired::class, PaymentPaidOnExpiry::class, PaymentAmountMismatchedOnExpiry::class];
+    private const EVENTS = [
+        PaymentCompleted::class,
+        PaymentPartiallyRefunded::class,
+        PaymentRefunded::class,
+        PaymentAmountMismatched::class,
+        PaymentDuplicated::class,
+        PaymentExpired::class,
+    ];
 
     private FakePaymentGateway $gateway;
 
@@ -71,15 +82,15 @@ class PaymentExpiryEventsTest extends TestCase
         $this->assertOnly(PaymentExpired::class, $payment, 'EXPIRED');
     }
 
-    public function test_late_payment_dispatches_payment_paid_on_expiry(): void
+    public function test_late_payment_dispatches_payment_completed(): void
     {
         $payment = $this->pending(100);
         $this->gateway->payment($payment->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0);
 
         $this->runJob($payment->payment_id);
 
-        $this->assertOnly(PaymentPaidOnExpiry::class, $payment, 'PAID');
-        Event::assertDispatched(PaymentPaidOnExpiry::class, fn (PaymentPaidOnExpiry $event): bool => $event->payment->paid_amount === 100 && $event->payment->paid_at !== null);
+        $this->assertOnly(PaymentCompleted::class, $payment, 'PAID');
+        Event::assertDispatched(PaymentCompleted::class, fn (PaymentCompleted $event): bool => $event->payment->paid_amount === 100 && $event->payment->paid_at !== null);
     }
 
     public function test_cancelled_amount_mismatch_dispatches_was_cancelled_true(): void
@@ -89,8 +100,8 @@ class PaymentExpiryEventsTest extends TestCase
 
         $this->runJob($payment->payment_id);
 
-        $this->assertOnly(PaymentAmountMismatchedOnExpiry::class, $payment, 'AMOUNT_MISMATCH_CANCELLED');
-        Event::assertDispatched(PaymentAmountMismatchedOnExpiry::class, fn (PaymentAmountMismatchedOnExpiry $event): bool => $event->wasCancelled);
+        $this->assertOnly(PaymentAmountMismatched::class, $payment, 'AMOUNT_MISMATCH_CANCELLED');
+        Event::assertDispatched(PaymentAmountMismatched::class, fn (PaymentAmountMismatched $event): bool => $event->wasCancelled);
         $this->gateway->assertCancelled($payment->payment_id, fn (string $reason, ?int $amount): bool => $amount === null);
     }
 
@@ -107,8 +118,8 @@ class PaymentExpiryEventsTest extends TestCase
             $this->assertSame($failure, $exception);
         }
 
-        $this->assertOnly(PaymentAmountMismatchedOnExpiry::class, $payment, 'AMOUNT_MISMATCH');
-        Event::assertDispatched(PaymentAmountMismatchedOnExpiry::class, fn (PaymentAmountMismatchedOnExpiry $event): bool => ! $event->wasCancelled);
+        $this->assertOnly(PaymentAmountMismatched::class, $payment, 'AMOUNT_MISMATCH');
+        Event::assertDispatched(PaymentAmountMismatched::class, fn (PaymentAmountMismatched $event): bool => ! $event->wasCancelled);
     }
 
     public function test_no_event_when_nothing_is_written(): void
@@ -149,13 +160,14 @@ class PaymentExpiryEventsTest extends TestCase
     }
 
     /**
-     * @param  class-string<PaymentExpiryEvent>  $expected
+     * @param  class-string<PaymentEvent>  $expected
      */
     private function assertOnly(string $expected, Payment $payment, string $status): void
     {
         $this->assertSame($status, $payment->fresh()->status);
         Event::assertDispatchedTimes($expected, 1);
-        Event::assertDispatched($expected, fn (PaymentExpiryEvent $event): bool => $event->paymentId === $payment->payment_id
+        Event::assertDispatched($expected, fn (PaymentEvent $event): bool => $event->paymentId === $payment->payment_id
+            && $event->source === PaymentEventSource::Expiry
             && $event->payment->is($payment)
             && $event->payment->status === $status
             && $event->billableType === $payment->billable_type
