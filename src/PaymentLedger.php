@@ -243,6 +243,39 @@ class PaymentLedger
     }
 
     /**
+     * 결제 레코드를 그 결제가 낸 구독 기록에 연결한다(subscription_id).
+     *
+     * @param  Payment  $payment  연결할 결제 레코드
+     * @param  int  $subscriptionId  구독 기록의 키
+     * @return Payment 갱신된 결제 레코드
+     */
+    public function linkSubscription(Payment $payment, int $subscriptionId): Payment
+    {
+        $payment->forceFill(['subscription_id' => $subscriptionId])->save();
+
+        return $payment;
+    }
+
+    /**
+     * 구독 기록에 연결된 PENDING 결제 중 주어진 시각 이후에 만든 것의 결제 ID를 만든 순서대로 반환한다.
+     *
+     * @param  int  $subscriptionId  구독 기록의 키
+     * @param  Carbon  $createdFrom  이 시각 이후(같은 시각 포함)에 만든 레코드만
+     * @return list<string> 결제 ID
+     */
+    public function pendingSubscriptionPaymentIds(int $subscriptionId, Carbon $createdFrom): array
+    {
+        return array_values(Payment::query()
+            ->where('subscription_id', $subscriptionId)
+            ->where('status', 'PENDING')
+            ->where('created_at', '>=', $createdFrom)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->pluck('payment_id')
+            ->all());
+    }
+
+    /**
      * PENDING 결제 레코드를 새로 만든다. payment_id 충돌 시 다시 시도한다.
      *
      * @param  Model  $billable  결제를 소유할 Billable 모델
@@ -250,9 +283,10 @@ class PaymentLedger
      * @param  int  $amount  결제 금액(원)
      * @param  string  $orderName  주문명
      * @param  int|null  $billingKeyId  빌링키 결제면 결제할 빌링키 기록의 키, 브라우저 결제면 null
+     * @param  int|null  $subscriptionId  구독 갱신 결제면 그 구독 기록의 키, 아니면 null
      * @return Payment 생성된 PENDING 결제 레코드
      */
-    public function createPending(Model $billable, string $customerId, int $amount, string $orderName, ?int $billingKeyId = null): Payment
+    public function createPending(Model $billable, string $customerId, int $amount, string $orderName, ?int $billingKeyId = null, ?int $subscriptionId = null): Payment
     {
         while (true) {
             $paymentId = (string) Str::uuid();
@@ -269,6 +303,7 @@ class PaymentLedger
                     'cancelled_amount' => 0,
                     'paid_at' => null,
                     'billing_key_id' => $billingKeyId,
+                    'subscription_id' => $subscriptionId,
                 ]);
             } catch (QueryException $exception) {
                 $paymentIdExists = DB::table('portone_payments')

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Models\BillingKey;
+use Cable8mm\LaravelPortone\Models\Subscription;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -107,6 +108,19 @@ class BillingKeyRegistry
         return DB::transaction(fn (): mixed => $operation(
             BillingKey::query()->where('issue_id', $issueId)->lockForUpdate()->first(),
         ));
+    }
+
+    /**
+     * ACTIVE 또는 PAST_DUE 구독 기록이 이 빌링키 기록으로 결제하는지 확인한다.
+     *
+     * @param  BillingKey  $record  빌링키 기록
+     */
+    public function isChargedBySubscription(BillingKey $record): bool
+    {
+        return Subscription::query()
+            ->where('billing_key_id', $record->id)
+            ->whereIn('status', ['ACTIVE', 'PAST_DUE'])
+            ->exists();
     }
 
     /**

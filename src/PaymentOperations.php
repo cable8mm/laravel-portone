@@ -173,16 +173,18 @@ class PaymentOperations
      * @param  array{0: string, 1: string}|null  $singlePayment  한 번만 결제되는 Billable 모델의 참조, 아니면 null
      * @param  Closure(Closure(Payment): Payment): Payment  $lock  레코드를 잠그고 연산을 실행하는 함수
      * @param  PaymentEventSource  $source  결제 이벤트의 source
+     * @param  bool  $unknownIsNotPaid  PortOne이 결제를 모르면(PAYMENT_NOT_FOUND) 예외 대신 미결제로 볼지
      * @return Payment 확정된(또는 기존 상태 그대로인) 결제 레코드
      *
+     * @throws PaymentNotPaidException PortOne이 결제 완료로 표시하지 않았을 때
      * @throws AmountMismatchException 실결제액이 준비 금액과 다를 때
      * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
-    private function completeLocked(?array $singlePayment, Closure $lock, PaymentEventSource $source): Payment
+    private function completeLocked(?array $singlePayment, Closure $lock, PaymentEventSource $source, bool $unknownIsNotPaid = false): Payment
     {
         $failure = null;
 
-        $complete = function (Payment $payment) use (&$failure, $source, $singlePayment): Payment {
+        $complete = function (Payment $payment) use (&$failure, $source, $singlePayment, $unknownIsNotPaid): Payment {
             if (in_array($payment->status, ['AMOUNT_MISMATCH_CANCELLED', 'AMOUNT_MISMATCH'], true)) {
                 $failure = AmountMismatchException::fromPayment($payment);
 
@@ -193,7 +195,9 @@ class PaymentOperations
                 return $payment;
             }
 
-            $gatewayPayment = $this->gateway->lookup($payment->payment_id);
+            $gatewayPayment = $unknownIsNotPaid
+                ? $this->gateway->lookupForExpiry($payment->payment_id)
+                : $this->gateway->lookup($payment->payment_id);
 
             if ($this->lifecycle->isAmountMismatch($payment, $gatewayPayment)) {
                 $failure = $this->cancelAmountMismatch($payment, $gatewayPayment, $source);
@@ -388,12 +392,19 @@ class PaymentOperations
      * @param  string  $reason  PortOne에 전달할 삭제 사유
      * @return BillingKey DELETED 빌링키 기록
      *
-     * @throws InvalidBillingKeyException 범위 안에 ISSUED 기록이 없을 때
+     * ACTIVE·PAST_DUE 구독이 결제하는 기록은 PortOne에 요청하지 않고 거절한다(FR-123).
+     *
+     * @throws InvalidBillingKeyException 범위 안에 ISSUED 기록이 없거나, ACTIVE·PAST_DUE 구독이 그 기록으로 결제할 때
      */
     public function deleteBillingKey(Model $billable, string $issueId, string $reason): BillingKey
     {
         return $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($reason): BillingKey {
             $billingKey = $this->issuedKey($record);
+
+            if ($this->billingKeys->isChargedBySubscription($record)) {
+                throw new InvalidBillingKeyException('The billing key is charged by an active or past-due subscription.');
+            }
+
             $this->billingKeyGateway->deleteBillingKey($billingKey, $reason);
             $this->billingKeys->markDeleted($record, now());
             $this->events->dispatchAfterCommit(new BillingKeyDeleted($record, BillingKeyEventSource::Call));
@@ -413,6 +424,7 @@ class PaymentOperations
      * @param  string  $issueId  Issue ID
      * @param  int  $amount  결제 금액(원, 0보다 커야 함)
      * @param  string  $orderName  주문명(빈 문자열 불가)
+     * @param  int|null  $subscriptionId  구독 갱신 결제면 레코드를 만들 때 연결할 구독 기록의 키
      * @return Payment 확정된 결제 레코드
      *
      * @throws \InvalidArgumentException 금액이 0 이하이거나 주문명이 비었을 때
@@ -421,7 +433,7 @@ class PaymentOperations
      * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
      * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
-    public function chargeBillingKey(Model $billable, string $issueId, int $amount, string $orderName): Payment
+    public function chargeBillingKey(Model $billable, string $issueId, int $amount, string $orderName, ?int $subscriptionId = null): Payment
     {
         if ($amount <= 0) {
             throw new \InvalidArgumentException('Payment amount must be greater than zero.');
@@ -431,18 +443,66 @@ class PaymentOperations
             throw new \InvalidArgumentException('Payment order name must not be empty.');
         }
 
-        [$payment, $billingKey] = $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($billable, $amount, $orderName): array {
+        [$payment, $billingKey] = $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($billable, $amount, $orderName, $subscriptionId): array {
             $billingKey = $this->issuedKey($record);
             // ERR-028: 요청을 보낼 수 없으면 결제 레코드도 만들지 않는다.
             $this->billingKeyGateway->assertConfigured();
             $customerId = $this->customers->ensureId($billable);
 
-            return [$this->payments->createPending($billable, $customerId, $amount, $orderName, $record->id), $billingKey];
+            return [$this->payments->createPending($billable, $customerId, $amount, $orderName, $record->id, $subscriptionId), $billingKey];
         });
 
         $this->billingKeyGateway->payWithBillingKey($payment->payment_id, $billingKey, $orderName, $amount);
 
         return $this->completeByPaymentId($payment->payment_id, PaymentEventSource::Charge);
+    }
+
+    /**
+     * 구독 기간의 PENDING 결제 레코드를 먼저 확정한다(FR-137). 갱신 결제 직후 중단된 작업을 다시 실행할 때 두 번 결제하지 않기 위해서다.
+     *
+     * 구독 기록에 연결되고 기간 시작 시각 이후에 만든 PENDING 레코드를 만든 순서대로 completeByPaymentId()의 규칙(source charge)으로
+     * 확정한다. PortOne이 결제를 모르는 레코드(PAYMENT_NOT_FOUND, 결제 요청이 결제를 만들지 못한 경우)는 미결제로 본다.
+     * PAID가 된 레코드가 있으면 그것을, 모두 미결제면 null을 반환한다.
+     *
+     * @param  int  $subscriptionId  구독 기록의 키
+     * @param  Carbon  $periodStart  갱신할 기간의 시작 시각(구독의 current_period_end)
+     * @return Payment|null PAID가 된 결제 레코드, 없으면 null
+     *
+     * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
+     */
+    public function completeSubscriptionPeriod(int $subscriptionId, Carbon $periodStart): ?Payment
+    {
+        foreach ($this->payments->pendingSubscriptionPaymentIds($subscriptionId, $periodStart) as $paymentId) {
+            try {
+                $payment = $this->completeLocked(
+                    null,
+                    fn (Closure $operation): Payment => $this->payments->withExclusiveAccessByPaymentId($paymentId, $operation),
+                    PaymentEventSource::Charge,
+                    unknownIsNotPaid: true,
+                );
+            } catch (PaymentNotPaidException) {
+                continue;
+            }
+
+            if ($payment->status === 'PAID') {
+                return $payment;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 결제 레코드를 그 결제가 낸 구독 기록에 연결한다. 첫 기간 결제가 PAID가 된 뒤 구독을 만들 때 쓴다(FR-131).
+     *
+     * @param  Payment  $payment  첫 기간의 PAID 결제 레코드
+     * @param  int  $subscriptionId  구독 기록의 키
+     * @return Payment 연결된 결제 레코드
+     */
+    public function linkSubscription(Payment $payment, int $subscriptionId): Payment
+    {
+        return $this->payments->linkSubscription($payment, $subscriptionId);
     }
 
     /**

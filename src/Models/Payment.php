@@ -38,6 +38,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $receipt_url PortOne 영수증 URL(receiptUrl). 그 레코드에 마지막으로 쓴 PortOne 조회가 알려 준 값이며,
  *                                    영수증 URL이 없는 조회는 이전 값을 그대로 둔다
  * @property int|null $billing_key_id 빌링키 결제(chargeBillingKey())로 만든 레코드면 결제한 빌링키 기록, 브라우저 결제면 null
+ * @property int|null $subscription_id 구독 기간을 낸 결제면 그 구독 기록, 아니면 null
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */

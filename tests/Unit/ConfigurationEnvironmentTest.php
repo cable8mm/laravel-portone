@@ -29,6 +29,7 @@ class ConfigurationEnvironmentTest extends TestCase
             'PORTONE_WEBHOOK_RETENTION_DAYS' => '14',
             'PORTONE_AMOUNT_MISMATCH_CANCEL_REASON' => 'Amount tampered',
             'PORTONE_DUPLICATE_CANCEL_REASON' => 'Paid twice',
+            'PORTONE_SUBSCRIPTION_RETRY_AFTER' => '2,4',
         ];
 
         foreach ($this->testEnvironment as $name => $value) {
@@ -84,5 +85,6 @@ class ConfigurationEnvironmentTest extends TestCase
         $this->assertSame(14, config('portone.webhook_retention_days'));
         $this->assertSame('Amount tampered', config('portone.amount_mismatch_cancel_reason'));
         $this->assertSame('Paid twice', config('portone.duplicate_cancel_reason'));
+        $this->assertSame('2,4', config('portone.subscription_retry_after'));
     }
 }

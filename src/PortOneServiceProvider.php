@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone;
 
+use Cable8mm\LaravelPortone\Console\ChargeSubscriptionsCommand;
 use Cable8mm\LaravelPortone\Console\ExpirePendingPaymentsCommand;
 use Cable8mm\LaravelPortone\Console\ReplayWebhookCommand;
 use Cable8mm\LaravelPortone\Console\ShowPaymentCommand;
@@ -14,7 +15,7 @@ use Illuminate\Support\ServiceProvider;
 /**
  * 패키지 서비스 프로바이더.
  *
- * 설정 병합, 게이트웨이 바인딩, 웹훅 라우트 등록, 만료 명령 등록,
+ * 설정 병합, 게이트웨이 바인딩, 웹훅 라우트 등록, 만료·구독 결제 명령 등록,
  * 설정·마이그레이션·체크아웃 스텁 발행을 담당한다. 스케줄은 등록하지 않는다.
  */
 class PortOneServiceProvider extends ServiceProvider
@@ -42,7 +43,7 @@ class PortOneServiceProvider extends ServiceProvider
         )->name('portone.webhook');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExpirePendingPaymentsCommand::class, ShowPaymentCommand::class, ReplayWebhookCommand::class]);
+            $this->commands([ExpirePendingPaymentsCommand::class, ShowPaymentCommand::class, ReplayWebhookCommand::class, ChargeSubscriptionsCommand::class]);
 
             $this->publishes([
                 __DIR__.'/../config/portone.php' => $this->app->configPath('portone.php'),
@@ -57,6 +58,8 @@ class PortOneServiceProvider extends ServiceProvider
                 '2026_11_11_000001_add_receipt_url_to_portone_payments_table.php',
                 '2026_11_12_000000_create_portone_billing_keys_table.php',
                 '2026_11_12_000001_add_billing_key_to_portone_payments_table.php',
+                '2026_11_13_000000_create_portone_subscriptions_table.php',
+                '2026_11_13_000001_add_subscription_to_portone_payments_table.php',
             ]), 'portone-migrations');
 
             $this->publishes([
