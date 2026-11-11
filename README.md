@@ -7,10 +7,11 @@
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/cable8mm/laravel-portone.svg)](https://packagist.org/packages/cable8mm/laravel-portone)
 [![License](https://img.shields.io/github/license/cable8mm/laravel-portone.svg)](https://github.com/cable8mm/laravel-portone/blob/main/LICENSE)
 
-한국의 PG사 **포트원(PortOne) V2 단건 결제**를 위한 Laravel 패키지입니다.
+한국의 PG사 **포트원(PortOne) V2 단건 결제와 빌링키 결제**를 위한 Laravel 패키지입니다.
 Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결제 기능을 붙일 수 있습니다.
 
 > 포트원 관리자 콘솔에서 발급받은 **API Secret / Store ID / Channel Key / Webhook Secret**이 필요합니다.
+> 빌링키 결제에는 빌링키 발급이 가능한 채널의 Channel Key가 필요합니다.
 
 ## 주요 기능
 
@@ -19,9 +20,10 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 - 실결제액이 준비 금액과 다르면 PortOne 결제를 자동 전액 취소 (`AMOUNT_MISMATCH_CANCELLED`)
 - 주문처럼 한 번만 결제되는 모델은 두 번째로 결제된 건을 자동 전액 취소 (`DUPLICATE_CANCELLED`)
 - 전액 / 부분 환불 (`PARTIALLY_CANCELLED` / `CANCELLED`), 콘솔 환불은 취소 웹훅·`syncByPaymentId()`로 레코드에 반영
-- 모델별 결제 내역 조회
-- 포트원 웹훅을 Laravel 이벤트로 수신 (`WebhookReceived`), 같은 웹훅은 한 번만 처리
-- 결제 상태가 바뀔 때마다 무엇이 바꿨든 한 번만 발송되는 결제 이벤트 (`PaymentCompleted`·`PaymentPartiallyRefunded`·`PaymentRefunded`·`PaymentAmountMismatched`·`PaymentDuplicated`·`PaymentExpired`)
+- 모델별 결제 내역 조회, PortOne 영수증 URL 저장 (`receipt_url`)
+- 빌링키 발급·확인·삭제와 빌링키로 바로 결제 (`prepareBillingKey()`·`completeBillingKey()`·`chargeBillingKey()`·`deleteBillingKey()`), 빌링키는 암호화해 저장
+- 포트원 웹훅을 Laravel 이벤트로 수신 (`WebhookReceived`), 받은 웹훅을 `portone_webhooks`에 기록하고 같은 `webhook-id`는 한 번만 처리
+- 결제 상태가 바뀔 때마다 무엇이 바꿨든 한 번만 발송되는 결제 이벤트 (`PaymentCompleted`·`PaymentPartiallyRefunded`·`PaymentRefunded`·`PaymentAmountMismatched`·`PaymentDuplicated`·`PaymentExpired`), 빌링키 이벤트 (`BillingKeyIssued`·`BillingKeyDeleted`)
 - 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고 결과를 이벤트로 알림, 보관 기간 뒤 정리
 - 테스트용 가짜 게이트웨이(`FakePaymentGateway`)와 서명된 웹훅 도우미, 로컬 웹훅 재전송 명령(`portone:webhook-replay`)
 - 수정 가능한 체크아웃 출발 파일(뷰·스크립트·컨트롤러·라우트) 발행
@@ -30,7 +32,7 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 
 - PHP `^8.2`
 - Laravel 컴포넌트(`illuminate/*`) `^12.0 || ^13.0`
-- `cable8mm/portone-php: ^0.4` (모든 PortOne API 호출은 이 클라이언트를 통합니다)
+- `cable8mm/portone-php: ^0.7.0` (모든 PortOne API 호출은 이 클라이언트를 통합니다)
 - 프론트엔드 결제창: 애플리케이션에서 `@portone/browser-sdk` 설치 필요 (패키지가 대신 설치하지 않습니다)
 
 ## 설치
@@ -88,12 +90,71 @@ php artisan migrate
 생성되는 테이블:
 
 - `portone_customers`: Billable 모델별 `customer_id` 1건 저장
-- `portone_payments`: 결제 기록 (`payment_id` 전역 유니크)
+- `portone_payments`: 결제 기록 (`payment_id` 전역 유니크, 영수증 URL `receipt_url`, 빌링키 결제면 `billing_key_id`)
 - `portone_webhooks`: 받은 웹훅 기록 (`webhook_id` 유니크, [웹훅 기록](#웹훅-기록))
+- `portone_billing_keys`: 빌링키 발급 기록 (`issue_id` 유니크, [빌링키 결제](#빌링키-결제))
 
 이미 설치한 앱을 새 버전으로 올릴 때는 [업그레이드](#업그레이드)를 보세요.
 
 ## 업그레이드
+
+### v0.6.x에서 v0.7.0으로
+
+v0.7.0에는 **호환성이 깨지는 변경**이 있습니다. 아래를 순서대로 확인하세요. 자세한 내용은 [버전별 동작 변경](#버전별-동작-변경)의 v0.7.0 항목에 있습니다.
+
+1. **의존성:** `cable8mm/portone-php`가 `^0.5.0`에서 `^0.7.0`으로 올라갔습니다. `composer update cable8mm/laravel-portone cable8mm/portone-php`로 함께 올리세요.
+   앱이 `cable8mm/portone-php`를 직접 `^0.5`로 고정했다면 `^0.7.0`으로 바꿔야 설치됩니다.
+2. **마이그레이션 4개를 반드시 실행:** 새 버전의 코드는 새 테이블·컬럼을 바로 씁니다. 실행하지 않으면 웹훅 수신(`portone_webhooks`),
+   결제 준비(`billing_key_id`), 결제 확정·취소 동기화(`receipt_url`)가 SQL 오류로 실패합니다.
+
+   ```bash
+   php artisan vendor:publish --tag=portone-migrations
+   php artisan migrate
+   ```
+
+   | 마이그레이션                                | 내용                                                                        |
+   | ------------------------------------------- | --------------------------------------------------------------------------- |
+   | `create_portone_webhooks_table`             | 웹훅 기록 테이블 `portone_webhooks`                                         |
+   | `add_receipt_url_to_portone_payments_table` | `portone_payments.receipt_url` (nullable)                                   |
+   | `create_portone_billing_keys_table`         | 빌링키 기록 테이블 `portone_billing_keys`                                   |
+   | `add_billing_key_to_portone_payments_table` | `portone_payments.billing_key_id` (nullable, `portone_billing_keys` 외래키) |
+
+3. **결제 이벤트 교체:** 아래 이벤트 클래스가 **삭제**되었습니다. 리스너를 새 이벤트로 옮기세요.
+
+   | 삭제된 이벤트                              | 대신 쓸 이벤트                                                |
+   | ------------------------------------------ | ------------------------------------------------------------- |
+   | `PaymentPaid`                              | `PaymentCompleted` (웹훅으로 확정되면 `source` = `webhook`)   |
+   | `PaymentCancelled`                         | `PaymentRefunded`                                             |
+   | `PaymentPartiallyCancelled`                | `PaymentPartiallyRefunded`                                    |
+   | `PaymentFailed`                            | 없음. `WebhookReceived`에서 `Transaction.Failed`를 확인하세요 |
+   | `PaymentPaidOnExpiry`                      | `PaymentCompleted` (`source` = `expiry`)                      |
+   | `PaymentAmountMismatchedOnExpiry`          | `PaymentAmountMismatched` (`source` = `expiry`)               |
+   | `PaymentWebhookEvent`·`PaymentExpiryEvent` | `PaymentEvent` (공통 부모)                                    |
+   - 삭제된 웹훅 이벤트의 `webhook`·`webhookId` 속성은 새 이벤트에 없습니다. 웹훅 내용이 필요하면 `WebhookReceived`를 들으세요.
+   - 새 이벤트는 웹훅이 올 때가 아니라 **결제 레코드가 실제로 바뀌어 커밋됐을 때** 한 번만 발송됩니다. 이미 반영된 취소의 웹훅,
+     이미 `PAID`인 결제의 `Transaction.Paid` 웹훅에는 결제 이벤트가 나가지 않습니다.
+
+4. **`PaymentExpired` 생성자·부모 변경:** 이름은 같지만 부모가 `PaymentExpiryEvent`에서 `PaymentEvent`로 바뀌었고, 생성자가
+   `(paymentId, payment, billableType, billableId)`에서 `(payment, source)`로 바뀌었습니다. `paymentId`·`billableType`·`billableId`는
+   `payment`에서 채워지므로 속성 이름으로 읽는 리스너는 그대로 동작하고, 새 속성 `source`가 생겼습니다. 테스트 등에서 `new PaymentExpired(...)`를 위치 인자로 만들던 코드는 고치세요.
+5. **`Transaction.Paid` 웹훅이 결제를 확정:** 리스너에서 `completeByPaymentId()`·`completePayment()`를 부르던 코드는 지우세요.
+   그대로 둬도 이미 `PAID`인 레코드는 바뀌지 않고 이벤트도 다시 나가지 않습니다.
+6. **`WebhookReceived`는 `webhook-id`마다 한 번:** 이미 처리된 `webhook-id`가 다시 오면 `200`만 응답하고 `WebhookReceived`를 보내지 않습니다.
+   웹훅 처리(취소 동기화 등)가 실패하면 `WebhookReceived` 대신 새 이벤트 `WebhookFailed`가 발송됩니다.
+   리스너에서 `webhookId`로 직접 중복을 거르던 코드는 지워도 됩니다.
+7. **`Billable`에 새 메서드:** `allowsOnlyOnePaidPayment()`, `prepareBillingKey()`, `completeBillingKey()`, `billingKeys()`,
+   `deleteBillingKey()`, `chargeBillingKey()`가 추가되었습니다. 모델에 같은 이름의 메서드가 이미 있으면 모델 쪽이 트레이트 메서드를 가려
+   패키지 동작이 바뀌므로 이름을 바꾸세요. `allowsOnlyOnePaidPayment()`는 일부러 재정의하는 메서드입니다([중복 결제 자동 취소](#중복-결제-자동-취소)).
+
+다음은 깨지지 않지만 확인할 만한 변경입니다.
+
+- **발행한 체크아웃 컨트롤러:** 새 스텁은 `DuplicatePaymentException`도 `422`로 처리합니다. 구 스텁을 쓰면서 `allowsOnlyOnePaidPayment()`를
+  `true`로 바꾸면 중복 결제가 처리되지 않은 예외(`500`)가 되므로, `PortOneCheckoutController`의 `complete`·`completed` `catch`에 추가하세요.
+- **새 상태값** `DUPLICATE_CANCELLED`·`DUPLICATE`는 `allowsOnlyOnePaidPayment()`가 `true`인 모델에서만 생깁니다.
+- **`portone:payment --raw`**는 빌링키 결제의 `billingKey` 값을 가립니다(그 밖의 값은 그대로).
+- **`PaymentGateway`를 직접 구현한 클래스**는 바꿀 필요가 없습니다. `GatewayPayment`의 새 인자 `receiptUrl`을 채우지 않으면 `receipt_url`이 저장되지 않습니다.
+- `completeByPaymentId()`·`syncByPaymentId()`에 기본값이 있는 `source` 인자가 추가되었습니다. 기존 호출은 그대로 동작합니다.
+- 새 설정 키 `webhook_retention_days`·`duplicate_cancel_reason`은 기본값이 있어 발행한 설정 파일을 고치지 않아도 됩니다([버전별로 추가된 설정 키](#버전별로-추가된-설정-키)).
 
 ### 마이그레이션
 
@@ -117,6 +178,9 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
 | v0.3.0 | `add_paid_amount_to_portone_payments_table`      | `paid_amount` 컬럼 추가                                                                        |
 | v0.4.0 | `backfill_paid_amount_on_portone_payments_table` | 이미 결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 레코드의 `paid_amount`를 `amount`로 채움 |
 | v0.7.0 | `create_portone_webhooks_table`                  | 웹훅 기록 테이블 `portone_webhooks` 추가                                                       |
+| v0.7.0 | `add_receipt_url_to_portone_payments_table`      | `receipt_url` 컬럼 추가                                                                        |
+| v0.7.0 | `create_portone_billing_keys_table`              | 빌링키 기록 테이블 `portone_billing_keys` 추가                                                 |
+| v0.7.0 | `add_billing_key_to_portone_payments_table`      | `billing_key_id` 컬럼(`portone_billing_keys` 외래키) 추가                                      |
 
 ### 버전별로 추가된 설정 키
 
@@ -147,23 +211,9 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
     `WebhookReceived`가 다시 발송됐습니다. 리스너에서 `webhookId`로 직접 중복을 거르던 코드는 지워도 됩니다. 마이그레이션을 다시 발행하세요.
   - **새 이벤트 `WebhookFailed`:** 설정 누락이나 PortOne 오류로 웹훅 처리가 실패하면 웹훅 기록을 실패로 표시하고 `WebhookFailed`만 발송한 뒤
     요청을 오류로 끝냅니다. PortOne이 다시 보내면 다시 처리합니다.
-  - **결제 이벤트 교체(호환성 깨짐):** 결제 상태가 바뀔 때마다 무엇이 바꿨든(브라우저 복귀, 웹훅, 만료 확인, 동기화, 환불) 커밋 뒤
-    한 번만 발송되는 이벤트로 바뀌었습니다([결제 이벤트](#결제-이벤트)). 아래 이벤트는 **삭제**되었습니다.
-
-    | 삭제된 이벤트                              | 대신 쓸 이벤트                                                  |
-    | ------------------------------------------ | --------------------------------------------------------------- |
-    | `PaymentPaid`                              | `PaymentCompleted` (웹훅으로 확정되면 `source` = `webhook`)     |
-    | `PaymentCancelled`                         | `PaymentRefunded`                                               |
-    | `PaymentPartiallyCancelled`                | `PaymentPartiallyRefunded`                                      |
-    | `PaymentFailed`                            | 없음. `WebhookReceived`에서 `Transaction.Failed`를 확인하세요   |
-    | `PaymentPaidOnExpiry`                      | `PaymentCompleted` (`source` = `expiry`)                        |
-    | `PaymentAmountMismatchedOnExpiry`          | `PaymentAmountMismatched` (`source` = `expiry`)                 |
-    | `PaymentExpired` (v0.5.0)                  | `PaymentExpired` (생성자와 속성 변경: `payment`, `source` 추가) |
-    | `PaymentWebhookEvent`·`PaymentExpiryEvent` | `PaymentEvent` (공통 부모)                                      |
-
-    새 이벤트에는 `webhook`·`webhookId`가 없습니다. 웹훅 내용이 필요하면 `WebhookReceived`를 들으세요.
+  - **결제 이벤트 교체(호환성 깨짐):** 결제 상태가 바뀔 때마다 무엇이 바꿨든(브라우저 복귀, 웹훅, 만료 확인, 동기화, 환불, 빌링키 결제) 커밋 뒤
+    한 번만 발송되는 이벤트로 바뀌었습니다([결제 이벤트](#결제-이벤트)). 삭제된 이벤트와 대신 쓸 이벤트는 [v0.6.x에서 v0.7.0으로](#v06x에서-v070으로)의 표를 보세요.
     같은 결제를 브라우저 복귀와 웹훅에서 두 번 처리하지 않도록 직접 막던 코드(잠금, 상태 확인)는 지워도 됩니다.
-
   - **`Transaction.Paid` 웹훅으로 결제 확정(동작 변경):** 패키지가 `Transaction.Paid` 웹훅을 받으면 `completeByPaymentId()`와 같은 규칙으로
     결제를 확정합니다. `PaymentPaid`·`WebhookReceived` 리스너에서 `completeByPaymentId()`·`completePayment()`를 부르던 코드는 지우세요.
     그대로 둬도 이미 `PAID`인 레코드는 바뀌지 않고 이벤트도 다시 나가지 않습니다.
@@ -171,6 +221,12 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
     결제된 건은 `PAID`가 되지 않고 자동 전액 취소됩니다([중복 결제 자동 취소](#중복-결제-자동-취소)). 기본값은 `false`라 기존 모델은 그대로입니다.
     `status`로 분기하던 코드는 두 상태를 처리하세요. 새 예외 `DuplicatePaymentException`, 새 설정 키 `duplicate_cancel_reason`.
   - 처리된 웹훅 기록을 정리하려면 `model:prune`에 `Cable8mm\LaravelPortone\Models\Webhook`을 추가하세요([웹훅 기록](#웹훅-기록)).
+  - **영수증 URL:** PortOne 조회를 반영하는 저장(결제 확정, 금액 불일치·중복 결제, 취소 동기화, 빌링키 결제)이 조회의 `receiptUrl`을
+    `receipt_url`에 저장합니다([영수증 URL](#영수증-url)). 테스트에서는 `FakePaymentGateway::payment(..., receiptUrl: ...)`로 지정합니다.
+  - **빌링키 결제:** 새 공개 API `prepareBillingKey()`·`completeBillingKey()`·`billingKeys()`·`deleteBillingKey()`·`chargeBillingKey()`,
+    새 이벤트 `BillingKeyIssued`·`BillingKeyDeleted`, 새 예외 `BillingKeyNotFoundException`·`BillingKeyNotIssuedException`·`InvalidBillingKeyException`,
+    새 결제 이벤트 `source` 값 `charge`, `BillingKey.Issued`·`BillingKey.Deleted` 웹훅 처리([빌링키 결제](#빌링키-결제)).
+  - 의존성: `cable8mm/portone-php` `^0.7.0`.
 - **v0.6.0**
   - **체크아웃 단일 리다이렉트 흐름(동작 변경):** `requestPayment`에 `redirectUrl`과 `forceRedirect: true`를 넣어 PC·모바일이 같은 흐름으로 동작합니다.
     `prepare` 응답이 기존 `checkoutParameters` 배열에서 브라우저 결제 요청값(`storeId`, `channelKey`, `paymentId`, `orderName`,
@@ -389,22 +445,24 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 - 처리 실패(설정 누락·PortOne 오류) → 웹훅 기록을 실패로 표시, `WebhookFailed`만 발송, 요청은 오류로 끝나 PortOne이 다시 보냄
 - 서명 무효·헤더 누락·타임스탬프 범위 초과 → `400`, 이벤트 없음
 - `PORTONE_WEBHOOK_SECRET` 미설정 → `500`, 이벤트 없음
-- `Transaction.Paid`는 결제를 확정하고([아래](#웹훅으로-결제-확정)), 취소 웹훅(`Transaction.Cancelled`·`Transaction.PartialCancelled`)은 결제 레코드를 PortOne과 맞춥니다([아래](#취소-웹훅과-결제-레코드-동기화)). 그 밖의 웹훅은 고객·결제 레코드를 읽거나 쓰지 않습니다
+- `Transaction.Paid`는 결제를 확정하고([아래](#웹훅으로-결제-확정)), 취소 웹훅(`Transaction.Cancelled`·`Transaction.PartialCancelled`)은 결제 레코드를 PortOne과 맞춥니다([아래](#취소-웹훅과-결제-레코드-동기화)).
+  `BillingKey.Issued`·`BillingKey.Deleted`는 빌링키 기록을 `ISSUED`·`DELETED`로 바꿉니다([빌링키 웹훅](#빌링키-웹훅)). 그 밖의 웹훅은 고객·결제·빌링키 레코드를 읽거나 쓰지 않습니다
+- 빌링키 웹훅의 `WebhookReceived` `webhook` 객체에는 빌링키 값이 그대로 들어 있습니다. 로그에 남기지 마세요
 
 ### 웹훅 기록
 
 검증된 웹훅은 어떤 처리보다 먼저 `portone_webhooks`(`Cable8mm\LaravelPortone\Models\Webhook`)에 `webhook-id`마다 1건 기록됩니다.
 
-| 컬럼           | 내용                                                    |
-| -------------- | ------------------------------------------------------- |
-| `webhook_id`   | `webhook-id` 헤더 값 (유니크)                           |
-| `type`         | 웹훅 종류 (예: `Transaction.Cancelled`)                 |
-| `body`         | 받은 그대로의 요청 본문                                 |
-| `attempts`     | 이 `webhook-id`를 받은 횟수                             |
-| `received_at`  | 처음 받은 시각                                          |
-| `processed_at` | 처리를 마친 시각. 있으면 같은 `webhook-id`는 무시합니다 |
-| `failed_at`    | 마지막 처리 실패 시각                                   |
-| `failure`      | 마지막 처리 실패의 예외 클래스와 메시지                 |
+| 컬럼           | 내용                                                          |
+| -------------- | ------------------------------------------------------------- |
+| `webhook_id`   | `webhook-id` 헤더 값 (유니크)                                 |
+| `type`         | 웹훅 종류 (예: `Transaction.Cancelled`)                       |
+| `body`         | 받은 그대로의 요청 본문 (`data.billingKey` 값만 `[REDACTED]`) |
+| `attempts`     | 이 `webhook-id`를 받은 횟수                                   |
+| `received_at`  | 처음 받은 시각                                                |
+| `processed_at` | 처리를 마친 시각. 있으면 같은 `webhook-id`는 무시합니다       |
+| `failed_at`    | 마지막 처리 실패 시각                                         |
+| `failure`      | 마지막 처리 실패의 예외 클래스와 메시지                       |
 
 - 처리(취소 웹훅의 레코드 동기화 등)와 `processed_at` 표시는 한 트랜잭션입니다. 같은 `webhook-id`가 동시에 오면 나중 요청은 앞 요청이
   끝날 때까지 기다린 뒤 아무것도 하지 않습니다.
@@ -445,6 +503,7 @@ Schedule::command('model:prune', ['--model' => [Webhook::class]])->daily();
 | `expiry`   | 만료 확인 잡                                                                 |
 | `sync`     | `syncByPaymentId()`                                                          |
 | `refund`   | `refund()`                                                                   |
+| `charge`   | `chargeBillingKey()`                                                         |
 
 ```php
 use Cable8mm\LaravelPortone\Events\PaymentCompleted;
@@ -519,6 +578,18 @@ $payment = app(PaymentOperations::class)->syncByPaymentId($paymentId);
 `paid_amount` 하나로 실결제액을 볼 수 있습니다. `PENDING`·`EXPIRED`처럼 PortOne이 아직 실결제액을 알려 주지 않은 결제만 `null`입니다.
 환불해도 `paid_amount`는 바뀌지 않고, 환불액은 `cancelled_amount`에 쌓입니다.
 
+### 영수증 URL
+
+`receipt_url`은 그 레코드에 마지막으로 쓴 PortOne 조회가 알려 준 **영수증 URL**(`receiptUrl`)입니다. 결제 확정, 금액 불일치·중복 결제 저장,
+취소 동기화(취소 웹훅·`syncByPaymentId()`), 빌링키 결제가 조회 결과와 함께 저장합니다. 조회에 영수증 URL이 없으면 이전 값을 그대로 두고,
+조회 없이 쓰는 `refund()`는 바꾸지 않습니다. 저장되기 전(`PENDING`·`EXPIRED`)에는 `null`입니다.
+
+```php
+$payment = $user->findPayment($paymentId);
+
+$payment->receipt_url; // ?string, 구매자에게 보여 줄 PortOne 영수증 링크
+```
+
 ## PortOne 원본 결제 응답 보기
 
 자동 테스트에 쓸 실제 PortOne 응답을 기록하거나 결제를 들여다볼 때 씁니다.
@@ -535,8 +606,10 @@ php artisan portone:payment {paymentId} --raw  # 가리지 않은 원본 JSON
 - 계좌 식별 정보: `accountNumber`, `remitteeName`, `remitterName`, `depositorName`
 - PG 원본 응답: `pgResponse` (JSON 문자열이라 통째로 가림. 카드번호·승인번호 포함)
 - 접속·전달 기록: `ipAddress`, `userAgent`, `receiptUrl`, `webhooks`(웹훅 전달 기록, 서명 헤더 포함)
+- 빌링키 결제의 빌링키: `billingKey` (**`--raw`에서도 가립니다**)
 
 `name`은 키 이름으로 가리므로 카드사 상품명처럼 개인정보가 아닌 `name`도 가려집니다. `--raw` 출력은 기록·공유하지 마세요.
+`--raw`가 가리는 것은 `billingKey`뿐이며, 코드에서는 `PaymentResponseRedactor::redactBillingKey()`가 같은 일을 합니다.
 
 코드에서는 `PortOneGateway::paymentResponse($paymentId)`가 원본 배열을 돌려주고, `PaymentResponseRedactor::redact()`로 같은 방식으로 가릴 수 있습니다.
 
@@ -640,6 +713,135 @@ try {
 - `DUPLICATE`는 `AMOUNT_MISMATCH`처럼 **운영자가 처리해야 하는 건**입니다. 포트원 콘솔에서 취소하면 취소 웹훅이나 `syncByPaymentId()`가
   `DUPLICATE_CANCELLED`로 기록합니다.
 
+## 빌링키 결제
+
+구매자가 카드를 한 번 등록하면 받은 **빌링키**로 결제창 없이 서버에서 결제합니다. 빌링키 발급이 가능한 PortOne 채널이 필요합니다.
+패키지는 서버 쪽 기록·확인·결제를 맡고, 브라우저의 발급 화면(`requestIssueBillingKey`)은 앱이 만듭니다(이 버전에는 빌링키 스텁이 없습니다).
+
+### 1. 발급 준비
+
+```php
+$record = $user->prepareBillingKey('정기 결제 카드'); // PortOne 호출 없음, 상태 PENDING
+
+$record->issueParameters();
+// ['issueId' => '...', 'issueName' => '정기 결제 카드', 'customerId' => '...']
+```
+
+`issue_id`는 패키지가 만든 고유 값(결제 ID와도 겹치지 않음)이고, 고객 레코드가 없으면 함께 만듭니다.
+
+### 2. 브라우저에서 발급
+
+`issueParameters()`를 `@portone/browser-sdk/v2`의 `requestIssueBillingKey()`에 넘깁니다. `cable8mm/portone-php`의
+`BrowserBillingKeyRequest`로 값을 만들 수 있습니다.
+
+```php
+use Cable8mm\PortonePhp\Browser\BrowserBillingKeyRequest;
+
+$issuance = $record->issueParameters();
+
+$request = (new BrowserBillingKeyRequest(
+    storeId: config('portone.store_id'),
+    channelKey: $billingChannelKey, // 빌링키 발급이 가능한 채널
+    billingKeyMethod: 'CARD',
+    issueId: $issuance['issueId'],
+    issueName: $issuance['issueName'],
+    redirectUrl: route('billing-key.completed', ['issueId' => $issuance['issueId']]),
+    customerId: $issuance['customerId'],
+    forceRedirect: true,
+))->toArray(); // 브라우저에서 PortOne.requestIssueBillingKey(request)로 호출
+```
+
+### 3. 발급 확정
+
+리다이렉트 복귀에서 쿼리의 `billingKey`로 확정합니다. **실패 복귀에도 발급되지 않은 `billingKey`가 함께 오므로** `code`를 먼저 확인하세요.
+`cable8mm/portone-php`의 `BillingKeyRedirectResult`가 실패면 `billingKey`를 `null`로 돌려줍니다.
+
+```php
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotIssuedException;
+use Cable8mm\PortonePhp\Browser\BillingKeyRedirectResult;
+
+$redirect = BillingKeyRedirectResult::fromQuery($request->query());
+
+if ($redirect->isFailure() || $redirect->billingKey === null) {
+    // 발급 실패: $redirect->code, $redirect->message
+} else {
+    try {
+        $record = $user->completeBillingKey($issueId, $redirect->billingKey); // ISSUED
+    } catch (BillingKeyNotIssuedException $e) {
+        // PortOne이 이 고객에게 발급하지 않았다고 함. 기록은 FAILED
+    }
+}
+```
+
+- `PENDING`·`FAILED` 기록만 PortOne에 빌링키를 조회합니다. PortOne이 그 기록의 고객·Issue ID로 발급했다고 하면 빌링키를 **애플리케이션 키로 암호화해**
+  저장하고 `ISSUED`(`issued_at`)가 됩니다. 아니면 `FAILED`가 되고 `BillingKeyNotIssuedException`입니다. `FAILED` 기록은 다시 확정할 수 있습니다.
+- 같은 빌링키로 이미 `ISSUED`인 기록은 PortOne을 부르지 않고 그대로 돌려줍니다. 다른 빌링키를 넘기면 아무것도 바꾸지 않고 `BillingKeyNotIssuedException`입니다.
+- 내 범위에 그 Issue ID의 `PENDING`·`FAILED`·`ISSUED` 기록이 없으면 `BillingKeyNotFoundException`(PortOne 호출 없음)입니다.
+- 빌링키는 `APP_KEY`로 암호화되므로 **`APP_KEY`를 바꾸면 저장된 빌링키를 꺼낼 수 없습니다.** 키를 교체할 때는 `APP_PREVIOUS_KEYS`를 설정하세요.
+
+### 4. 빌링키로 결제
+
+```php
+$payment = $user->chargeBillingKey($issueId, 9900, '3월 이용료'); // PAID인 결제 레코드
+$payment->billingKey; // 결제한 빌링키 기록 (Payment::billingKey() 관계, billing_key_id)
+```
+
+- `preparePayment()`처럼 `PENDING` 결제 레코드를 만들어 커밋한 뒤 PortOne `payWithBillingKey`(원화)를 요청하고, 성공하면 `completeByPaymentId()`와 같은 규칙으로
+  확정합니다. 결제 이벤트의 `source`는 `charge`이고 영수증 URL도 저장됩니다.
+- PortOne이 결제를 거절하면(PG 거절 등) 레코드는 `PENDING`으로 남고 PortOne 예외가 그대로 전달됩니다. 남은 `PENDING`은 [만료 검사](#결제-대기-건-만료와-정리)가 정리합니다.
+- 금액이 0 이하이거나 주문명이 비면 `InvalidArgumentException`, `ISSUED`가 아니거나 내 것이 아닌 빌링키면 `InvalidBillingKeyException`입니다(둘 다 PortOne 호출·레코드 생성 없음). API Secret이 없으면 레코드를 만들기 전에 `ConfigurationException`입니다.
+- `AmountMismatchException`·`DuplicatePaymentException`·`PaymentNotPaidException`은 `completePayment()`와 같습니다. 환불은 `refund()`로 같습니다.
+
+### 5. 빌링키 삭제와 조회
+
+```php
+$record = $user->deleteBillingKey($issueId, '구매자 요청'); // PortOne에서 삭제 후 DELETED
+
+$user->billingKeys()->where('status', 'ISSUED')->get(); // 최신순 빌링키 기록
+```
+
+`ISSUED`가 아니거나 내 것이 아닌 기록이면 `InvalidBillingKeyException`(PortOne 호출 없음)입니다.
+
+### 빌링키 기록과 이벤트
+
+`portone_billing_keys`(`Cable8mm\LaravelPortone\Models\BillingKey`)는 발급 1건입니다.
+
+| 컬럼                          | 내용                                                              |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `issue_id`                    | Issue ID (유니크, PortOne `issueId`)                              |
+| `billable_type`·`billable_id` | 소유 모델                                                         |
+| `customer_id`                 | 발급한 고객 ID                                                    |
+| `issue_name`                  | 발급 이름                                                         |
+| `billing_key`                 | 암호화한 빌링키. 발급 전에는 `null`, 배열·JSON 변환에서 숨김      |
+| `status`                      | `PENDING` → `ISSUED` → `DELETED`, `PENDING` → `FAILED` → `ISSUED` |
+| `issued_at`·`deleted_at`      | 발급·삭제 시각                                                    |
+
+기록이 `ISSUED`·`DELETED`가 되어 커밋되면 `BillingKeyIssued`·`BillingKeyDeleted`가 한 번 발송됩니다. 속성은 저장 뒤의 `billingKey`(기록, 평문 빌링키 없음)와
+`source`(`BillingKeyEventSource`: 메서드 호출이면 `call`, 웹훅이면 `webhook`)입니다.
+
+```php
+use Cable8mm\LaravelPortone\Events\BillingKeyDeleted;
+
+Event::listen(BillingKeyDeleted::class, function (BillingKeyDeleted $event) {
+    // $event->billingKey->issue_id, $event->source
+});
+```
+
+패키지는 빌링키 값을 로그, 이벤트, `portone:payment` 출력, `issueParameters()`, 웹훅 기록 어디에도 남기지 않습니다.
+
+### 빌링키 웹훅
+
+- `BillingKey.Issued`: PortOne에 빌링키를 조회해 Issue ID로 기록을 찾고, `PENDING`이면 `completeBillingKey()`와 같은 규칙으로 `ISSUED`(또는 `FAILED`)가 됩니다.
+  브라우저 복귀가 앱에 닿지 않아도 기록이 맞춰집니다.
+- `BillingKey.Deleted`: PortOne 콘솔 등에서 삭제한 빌링키의 `ISSUED` 기록이 `DELETED`가 됩니다.
+- 그 밖의 빌링키 웹훅(`BillingKey.Ready` 등)이나 맞는 기록이 없는 웹훅은 아무것도 바꾸지 않습니다. 조회 실패는 다른 웹훅처럼 `WebhookFailed`로 끝나고 PortOne이 다시 보냅니다.
+
+### 테스트
+
+`FakePaymentGateway`는 빌링키 API를 다루지 않습니다. 빌링키 흐름을 테스트하려면 `Cable8mm\LaravelPortone\BillingKeyGateway` 인터페이스를
+구현한 가짜를 컨테이너에 바인딩하세요(`billingKeyInfo()`, `deleteBillingKey()`, `payWithBillingKey()`, `assertConfigured()`). 빌링키 결제의 확정 조회는
+`PaymentGateway`(예: `FakePaymentGateway`)로 합니다.
+
 ## 결제 대기 건 만료와 정리
 
 결제를 시작(`prepare`)하고 끝내지 않은 `PENDING` 결제는 그대로 쌓입니다. 패키지는 스케줄을
@@ -696,6 +898,9 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
 | `DuplicatePaymentException`                 | `422`            | 한 번만 결제되는 모델에 이미 결제된 건이 있음. 결제는 자동 전액 취소됨(`wasCancelled()`) |
 | `InvalidPaymentStatusException`             | —                | 결제되지 않았거나(`PENDING`·`EXPIRED`) 이미 전액 취소됐거나 금액 불일치·중복 결제를 환불 |
 | `InvalidRefundAmountException`              | —                | 환불 금액이 0 이하이거나 환불 가능액 초과                                                |
+| `BillingKeyNotFoundException`               | —                | `completeBillingKey()`에 내 범위의 발급 기록이 없는 Issue ID                             |
+| `BillingKeyNotIssuedException`              | —                | PortOne이 이 고객에게 빌링키를 발급하지 않았다고 함(기록은 `FAILED`), 또는 다른 빌링키   |
+| `InvalidBillingKeyException`                | —                | `ISSUED`가 아니거나 내 것이 아닌 빌링키를 삭제·결제                                      |
 | `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락                                                           |
 | `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)                                                      |
 
@@ -778,8 +983,12 @@ php artisan portone:webhook-replay Transaction.PartialCancelled <paymentId> --da
   같은 결제 ID로 나중에 결제됨 `PAID`
 - 만료 확인 결과 이벤트: 뒤늦은 결제 `PaymentCompleted`, 창 닫기·결제창 미오픈 `PaymentExpired` (`source` = `expiry`)
 - 브라우저 복귀로 확정한 결제에 `Transaction.Paid` 웹훅이 다시 와도 `PaymentCompleted`는 한 번만 발송됨, 웹훅만 온 결제는 `source` = `webhook`으로 확정됨
+- 한 번만 결제되는 모델의 두 번째 결제가 PortOne에서 자동 취소됨
+- 결제된 건과 그 취소 건의 `receipt_url`이 저장됨
+- 빌링키(카드) 발급 → 확정 → 빌링키 결제 1회 → 삭제, PortOne에서 삭제한 빌링키의 `BillingKey.Deleted` 웹훅으로 기록이 `DELETED`가 됨,
+  PG가 거절하는 빌링키 결제의 PortOne 응답
 
-**검증하지 않은 것**: 운영(live) 채널, KCP 외 PG, 카드 외 결제 수단(가상계좌·간편결제 등), 원화 외 통화.
+**검증하지 않은 것**: 운영(live) 채널, KCP 외 PG, 카드 외 결제 수단(가상계좌·간편결제 등)과 카드 외 빌링키 발급 수단, 원화 외 통화.
 
 ### 결제 수단·통화 바꾸기
 
@@ -806,11 +1015,12 @@ const CURRENCY = "KRW";
 
 ### 알려진 제약
 
-- **단건 결제만** 다룹니다. 구독·정기결제는 대상이 아닙니다.
+- **구독(정기결제 스케줄)은 없습니다.** 빌링키로 결제하는 시점은 앱이 정해 `chargeBillingKey()`를 부르세요.
+- **빌링키 발급 화면(스텁)은 없습니다.** 브라우저 발급 호출과 리다이렉트 복귀는 앱이 만듭니다([빌링키 결제](#빌링키-결제)).
 - **환불(취소) 화면은 없습니다.** 관리자 화면에서 `refund()`를 직접 호출하세요.
 - **같은 초에 만들어진 결제**는 `payments()` 결과에서 순서가 정해지지 않습니다.
-- **웹훅은 중복 전달될 수 있고**, 패키지는 걸러내지 않아 전달마다 `WebhookReceived`가 발생합니다. 리스너는
-  여러 번 실행돼도 안전하게 만드세요. `completePayment()`는 이미 `PAID`인 결제를 그대로 돌려주고, 금액 불일치 결제는 PortOne을 다시 부르지 않으므로 안전합니다.
+- **같은 `webhook-id`는 한 번만 처리**하지만, PortOne이 같은 사건을 다른 `webhook-id`로 보내면 `WebhookReceived`는 그때마다 발생합니다.
+  `WebhookReceived` 리스너는 여러 번 실행돼도 안전하게 만드세요. 결제·빌링키 이벤트는 레코드가 바뀔 때만 발송되므로 이 문제가 없습니다.
 - **취소 직후 로컬 저장 실패**: PortOne이 취소를 받아들인 뒤 DB 저장이 3번 연속 실패하면 예외가 발생하고,
   레코드는 취소 전 상태로 남아 PortOne과 어긋납니다. 이때 `refund()`를 다시 부르면 취소 요청이 다시 가므로(PortOne이 거절할 것으로 예상),
   레코드를 직접 바로잡아야 합니다.
