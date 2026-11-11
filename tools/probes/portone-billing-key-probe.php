@@ -20,6 +20,13 @@ use Dotenv\Dotenv;
 
 $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
+// A request through the webhook tunnel carries X-Forwarded-For; it may reach only POST /webhook.
+if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) && $path !== '/webhook') {
+    http_response_code(403);
+
+    return true;
+}
+
 // Leave the browser SDK under /node_modules to the built-in server as a static file.
 if (str_starts_with($path, '/node_modules/')) {
     return false;
@@ -163,7 +170,7 @@ function writeState(array $state): void
     @chmod(STATE_PATH, 0600);
 }
 
-const SECRET_KEYS = ['billingKey', 'merchantId', 'pgMerchantId', 'key', 'channelKey', 'number', 'bin'];
+const SECRET_KEYS = ['billingKey', 'merchantId', 'pgMerchantId', 'key', 'channelKey', 'number', 'bin', 'pgResponse', 'ipAddress', 'url', 'header'];
 const PERSONAL_KEYS = ['name', 'full', 'separated', 'email', 'phoneNumber', 'birthYear', 'birthMonth', 'birthDay', 'gender', 'address', 'zipcode', 'businessRegistrationNumber'];
 
 /** Replaces secret and personal values recursively, keeping every key so the response shape stays visible. */
@@ -316,7 +323,8 @@ $cancel = static function (string $paymentId, string $reason) use ($payments, $s
     return attempt(static function () use ($payments, $paymentId, $reason, $storeId): array {
         $response = $payments->cancelPayment(paymentId: $paymentId, reason: $reason, storeId: $storeId);
 
-        return ['data' => redact($response->data, markers())];
+        // CancelPaymentResponse leaves OperationResponse::$data uninitialized; read its typed cancellation.
+        return ['cancellation' => redact($response->cancellation->data, markers())];
     });
 };
 
@@ -534,10 +542,11 @@ if (preg_match('#^/step/([a-z-]+)$#', $path, $match) === 1) {
         case 'delete':
             // Step d (second half): deleteBillingKey, then look the deleted key up.
             $record = [
+                // DeleteBillingKeyResponse leaves OperationResponse::$data uninitialized; read its typed deletedAt.
                 'deletion' => attempt(static function () use ($billingKeys, $billingKey, $storeId): array {
                     $response = $billingKeys->deleteBillingKey($billingKey, 'T-045 probe deletion', null, null, $storeId);
 
-                    return ['model' => $response::class, 'data' => redact($response->data, markers())];
+                    return ['model' => $response::class, 'deletedAt' => $response->deletedAt];
                 }),
             ];
             $record['billingKeyInfoAfterDeletion'] = $billingKeyInfo($billingKey);
@@ -558,7 +567,7 @@ if (preg_match('#^/step/([a-z-]+)$#', $path, $match) === 1) {
             $record['deleteAgain'] = attempt(static function () use ($billingKeys, $billingKey, $storeId): array {
                 $response = $billingKeys->deleteBillingKey($billingKey, 'T-045 probe second deletion', null, null, $storeId);
 
-                return ['model' => $response::class, 'data' => redact($response->data, markers())];
+                return ['model' => $response::class, 'deletedAt' => $response->deletedAt];
             });
             recordStep('afterDeletion', $record);
             jsonResponse($record);
@@ -625,11 +634,16 @@ header('Content-Type: text/html; charset=UTF-8');
         const config = JSON.parse(document.querySelector("#portone-config").textContent);
         const status = document.querySelector("#status");
 
+        // Prepared on page load: an await between the click and the SDK call loses the
+        // user activation, and KCP then reports "[3017] 팝업 차단 상태".
+        const prepared = await fetch("/prepare", { method: "POST" });
+        const values = await prepared.json();
+        if (!prepared.ok) {
+            status.textContent = JSON.stringify(values, null, 2);
+        }
+
         document.querySelector("#issue").addEventListener("click", async () => {
-            const prepared = await fetch("/prepare", { method: "POST" });
-            const values = await prepared.json();
             if (!prepared.ok) {
-                status.textContent = JSON.stringify(values, null, 2);
                 return;
             }
             status.textContent = `Requesting issuance ${values.issueId}…`;
