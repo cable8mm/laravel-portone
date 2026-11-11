@@ -401,7 +401,7 @@
 - ID: SCR-010
 - Purpose: record every verified webhook before it has any effect, so that a repeated delivery has no further effect and a failed one is visible.
 - Elements:
-  - EL-060: Webhook record with the fields webhook_id (string, unique), type (string), body (the raw request body), attempts (integer), received_at (timestamp), processed_at (timestamp or null), failed_at (timestamp or null), failure (string or null). Purpose: hold one webhook-id. User action: read.
+  - EL-060: Webhook record with the fields webhook_id (string, unique), type (string), body (the raw request body, data.billingKey redacted by FR-095), attempts (integer), received_at (timestamp), processed_at (timestamp or null), failed_at (timestamp or null), failure (string or null). Purpose: hold one webhook-id. User action: read.
   - EL-061: WebhookFailed event with the properties webhookId, type, and exception. Purpose: tell the Application that handling a webhook failed and PortOne will deliver it again. User action: listen.
   - EL-062: prunable definition on the Webhook model. Purpose: let model:prune delete processed Webhook records older than EL-056. User action: schedule model:prune for the Webhook model.
 - States:
@@ -457,7 +457,7 @@
 - Interactions:
   - Call EL-071 -> FR-118, FR-119.
   - Call EL-072 -> FR-120.
-  - Call EL-073 -> FR-121, FR-122.
+  - Call EL-073 -> FR-121, FR-122, FR-163.
   - Call EL-075 -> FR-123.
   - Call EL-076 -> FR-126 through FR-129.
   - Verified BillingKey webhook -> FR-125.
@@ -587,7 +587,7 @@
 - FR-077: EL-042 MUST return the Payment record after applying FR-076.
 - FR-078: EL-043 MUST return the decoded PortOne payment lookup response for the given Payment ID without changing any field.
 - FR-079: EL-044 MUST print the response of EL-043 as JSON. Without --raw, it MUST replace the value of every key named name, birthYear, birthMonth, birthDay, gender, email, phoneNumber, address, zipcode, number, bin, approvalNumber, accountNumber, remitteeName, remitterName, depositorName, customerIdentityNumber, pgResponse, ipAddress, userAgent, receiptUrl, or webhooks, at any depth, with the string [REDACTED].
-- FR-080: With --raw, EL-044 MUST print the response of EL-043 unchanged. EL-044 MUST NOT create, modify, or delete any record.
+- FR-080: With --raw, EL-044 MUST print the response of EL-043 unchanged, except that every billingKey value is replaced by [REDACTED] (FR-130). EL-044 MUST NOT create, modify, or delete any record.
 - FR-083 (cancellation sync): Under the exclusive access of EL-006, when the Payment record status is PAID, PARTIALLY_CANCELLED, AMOUNT_MISMATCH, or DUPLICATE, the Package MUST request the payment from PortOne by Payment ID and then set exactly the following, and nothing else:
   - Record PAID or PARTIALLY_CANCELLED, PortOne status CANCELLED, PortOne cancelled amount equal to amount -> status CANCELLED, cancelled_amount = the PortOne cancelled amount.
   - Record PAID or PARTIALLY_CANCELLED, PortOne status PARTIAL_CANCELLED, PortOne cancelled amount greater than 0 and less than amount and not less than cancelled_amount -> status PARTIALLY_CANCELLED, cancelled_amount = the PortOne cancelled amount.
@@ -647,7 +647,7 @@
 
 ### Webhook log
 
-- FR-095: For each verified webhook request, before any other effect, the Package MUST create the Webhook record for its webhook-id with the type, the raw body, attempts 1, and received_at, or, when the record exists, increase attempts by 1.
+- FR-095: For each verified webhook request, before any other effect, the Package MUST create the Webhook record for its webhook-id with the type, the raw body with any data.billingKey value replaced by [REDACTED] (FR-130), attempts 1, and received_at, or, when the record exists, increase attempts by 1.
 - FR-096: Creating or finding the Webhook record of FR-095 MUST be safe under concurrent deliveries of the same webhook-id: at most one delivery processes it at a time, and the others wait or respond with a non-2xx status so that PortOne delivers them again.
 - FR-097: When the Webhook record of the request has processed_at set, the Package MUST respond with HTTP 200 and an empty body, and MUST NOT write any other record, send any request to PortOne, or dispatch any event.
 - FR-098: Otherwise the Package MUST process the webhook: apply FR-101, FR-081, or FR-125 for their webhook types, and nothing for any other type.
@@ -694,13 +694,14 @@
 - FR-121: EL-073 MUST find the PENDING or FAILED Billing key record by Issue ID among the records of the Billable model, request the billing key from PortOne, and, when PortOne reports it issued for the record's Customer ID, store it encrypted and set status ISSUED and issued_at; otherwise set status FAILED and throw ERR-023.
 - FR-122: EL-073 on an ISSUED record with the same billing key MUST return it unchanged without a PortOne request.
 - FR-123: EL-075 MUST send a deletion request for the billing key of an ISSUED record with the given reason, then set status DELETED and deleted_at. It MUST refuse a record that an ACTIVE or PAST_DUE Subscription record charges (ERR-024).
-- FR-124: After FR-121 sets ISSUED or FR-123 sets DELETED and the write is committed, the Package MUST dispatch exactly one EL-077 with source call.
+- FR-124: After FR-121 sets ISSUED or FR-123 sets DELETED and the write is committed, the Package MUST dispatch exactly one EL-077, with source call when EL-073 or EL-075 made the write and source webhook when a BillingKey webhook made it (FR-125).
 - FR-125: For a verified BillingKey.Deleted webhook processed by FR-098, the Package MUST set the matching ISSUED Billing key record to DELETED and dispatch EL-077 with source webhook. For BillingKey.Issued it MUST apply FR-121 when the record is PENDING. Any other BillingKey webhook changes nothing.
 - FR-126: EL-076 MUST create a Payment record as EL-004 does, referencing the ISSUED Billing key record, then request payWithBillingKey with its Payment ID, the order name, the amount, and the Korean won currency.
 - FR-127: When payWithBillingKey fails, EL-076 MUST leave the Payment record PENDING and throw the PortOne exception unwrapped (ERR-025).
 - FR-128: When payWithBillingKey succeeds, EL-076 MUST complete the Payment record under the rules of EL-042 with source charge and return it.
 - FR-129: EL-076 MUST refuse a Billing key record that is not ISSUED (ERR-024) and MUST NOT send any request.
 - FR-130: The billing key value MUST NOT be printed by EL-044, logged, or exposed by EL-072 or any published file.
+- FR-163: EL-073 on an ISSUED record whose stored billing key differs from the given one MUST send no request, change nothing, and throw ERR-023.
 
 ### Subscriptions
 
@@ -824,7 +825,7 @@
 - ERR-020: A completion finds FR-109 applies -> apply FR-109 through FR-111; EL-005 then throws DuplicatePaymentException carrying the total paid amount and wasCancelled, with the PortOne exception as its previous exception when the cancellation failed.
 - ERR-021: The prepare action receives a payment method that is not an entry of EL-053 -> respond HTTP 422 with JSON containing the key error; create no record.
 - ERR-022: The billing-key page is rendered while EL-022 or EL-057 is unset or empty -> the Error state with the register button disabled.
-- ERR-023: EL-073 receives an Issue ID with no PENDING, FAILED, or ISSUED record of the Billable model -> throw BillingKeyNotFoundException; send no request. PortOne reports the billing key not issued or issued for another customer -> status FAILED and throw BillingKeyNotIssuedException.
+- ERR-023: EL-073 receives an Issue ID with no PENDING, FAILED, or ISSUED record of the Billable model -> throw BillingKeyNotFoundException; send no request. PortOne reports the billing key not issued or issued for another customer -> status FAILED and throw BillingKeyNotIssuedException. The record is ISSUED with another billing key (FR-163) -> throw BillingKeyNotIssuedException; send no request; change no record.
 - ERR-024: EL-075, EL-076, EL-079, or EL-083 receives a Billing key record that is not ISSUED, belongs to another Billable model, or (EL-075 only) is charged by an ACTIVE or PAST_DUE subscription -> throw InvalidBillingKeyException; send no request; change no record.
 - ERR-025: payWithBillingKey fails in EL-076 -> throw the PortOne exception unwrapped; the Payment record stays PENDING.
 - ERR-026: EL-079 receives an interval not of the form <n>d, <n>m, or <n>y with n at least 1, an amount less than or equal to 0, or an empty name or order name -> throw InvalidArgumentException; send no request; create no record.
@@ -922,7 +923,7 @@
 - AC-074: Removed (FR-073).
 - AC-075: Removed (FR-074).
 - AC-076: EL-042 completes a PENDING record of any Billable model as EL-005 would, returns an already PAID record unchanged without a PortOne request, and throws PaymentNotFoundException for an unknown Payment ID (FR-076, FR-077, ERR-017).
-- AC-077: EL-043 returns the PortOne lookup response unchanged; EL-044 prints it with the keys of FR-079 replaced by [REDACTED], and unchanged with --raw (FR-078 to FR-080).
+- AC-077: EL-043 returns the PortOne lookup response unchanged; EL-044 prints it with the keys of FR-079 replaced by [REDACTED], and unchanged with --raw except billingKey values (FR-078 to FR-080).
 - AC-078: EL-005 and EL-032 set paid_amount equal to the total paid amount when they set PAID (FR-023, FR-060).
 - AC-079: A verified Transaction.Cancelled webhook for a PAID record of amount 100 that PortOne reports CANCELLED with cancelled amount 100 sets status CANCELLED and cancelled_amount 100, then dispatches PaymentRefunded with source webhook and WebhookReceived; a second delivery with the same webhook-id changes nothing and dispatches nothing (FR-081, FR-083, FR-097, FR-103).
 - AC-080: A verified Transaction.PartialCancelled webhook for a PAID record of amount 100 that PortOne reports PARTIAL_CANCELLED with cancelled amount 30 sets status PARTIALLY_CANCELLED and cancelled_amount 30 (FR-083).

@@ -525,7 +525,7 @@ Each responsibility has exactly one owner.
 | Receipt URL                                                                 | CMP-08, CMP-07               | FR-113, FR-114                                                       |
 | Payment-method entries and easy-payment values in the stub flows            | CMP-11, CMP-28, CMP-29       | FR-115 to FR-117, ERR-021                                            |
 | Billing key records and their secrecy                                       | CMP-23                       | FR-118 to FR-120, FR-130                                             |
-| Billing-key sequences and billing-key charge                                | CMP-07                       | FR-121 to FR-129, ERR-023 to ERR-025                                 |
+| Billing-key sequences and billing-key charge                                | CMP-07                       | FR-121 to FR-129, FR-163, ERR-023 to ERR-025                         |
 | Subscription decisions                                                      | CMP-24                       | FR-131, FR-136, FR-138, FR-139, FR-141, FR-142, ERR-026, ERR-027     |
 | Subscription sequencing                                                     | CMP-25                       | FR-132, FR-133, FR-137, FR-140, FR-143, FR-144                       |
 | Due-subscription selection; queued charge                                   | CMP-26, CMP-27               | FR-134, FR-135, ERR-028                                              |
@@ -700,7 +700,7 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, AMOUNT_MI
 - AR-03: Payment Operations runs checks in the order of RD-09 and stops at the first failure.
 - AR-04: A PortOne request that changes remote state (cancellation) is sent only while the caller holds exclusive access on the record, only after the Precomputed outcome exists, and is never repeated by any retry.
 - AR-05: Records are written as absolute values computed before the PortOne request, so a repeated write of the same outcome is harmless.
-- AR-06: All records reachable from a Billable model are reached through its Billable reference; lookup by Payment ID alone, without scope, does not exist anywhere in the Core. The unscoped selections are the stale PENDING selection for CMP-15, which hands each record's own Billable reference onward (RD-26), the prunable selection of EL-035, and the lookup by Payment ID used by EL-042 and SF-10 (RD-37, RD-39).
+- AR-06: All records reachable from a Billable model are reached through its Billable reference; lookup by Payment ID alone, without scope, does not exist anywhere in the Core. The unscoped selections are the stale PENDING selection for CMP-15, which hands each record's own Billable reference onward (RD-26), the prunable selection of EL-035, the lookup by Payment ID used by EL-042 and SF-10 (RD-37, RD-39), and the Billing key record lookup by Issue ID, taken from the PortOne billing key information, used only by the BillingKey webhook path (RD-47).
 - AR-07: Exceptions from CMP-08 and CMP-05 pass through CMP-07 and CMP-03 unmodified.
 - AR-08: The webhook route is the only Package route that is open to unauthenticated requests without a forgery token. No stub route is.
 - AR-09: Authenticity is decided on the raw body exactly as received, before any decoding.
@@ -710,7 +710,7 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, AMOUNT_MI
 - AR-13: A component refuses work it does not own by having no access to it (see Forbidden dependencies), not by checking at run time.
 - AR-15: Every effect of a webhook is preceded by its Webhook record and followed, in the same unit of work, by marking it processed (RD-43).
 - AR-16: Payment, billing-key, and subscription events are dispatched only by CMP-22, only after commit, at most once per committed change (RD-42).
-- AR-17: The billing key value is never written to a log, an event, a response, or a published page; only CMP-23 decrypts it and only CMP-08 sends it.
+- AR-17: The billing key value is never written to a log, an event, a response, or a published page; only CMP-23 decrypts it and only CMP-08 sends it. Exception: EL-021 WebhookReceived hands the verified webhook object, as PortOne sent it, to in-process listeners; it is not stored (RD-48).
 - AR-14: The Package registers no schedule; the Application decides whether and when EL-031 and model:prune run (FR-065).
 
 ## Failure Boundaries
@@ -854,4 +854,6 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-44 (owner-confirmed, v0.7.0): Ambiguous: an order-like Billable model paid twice through two payment attempts. Decided: opt-in per Billable model (EL-069); the second paid payment is cancelled automatically under exclusive access of the Billable reference, mirroring the amount-mismatch rule. Why: a user-like Billable model legitimately has many paid payments.
 - RD-45 (owner-confirmed, v0.7.0): Ambiguous: how renewals are scheduled. Decided: the Package charges due subscriptions itself through the Application's scheduler and queue with payWithBillingKey, not through PortOne payment schedules. Why: retries and expiry stay under the Package's rules and are testable without PortOne state.
 - RD-46 (owner-confirmed, v0.7.0): Ambiguous: Inertia React stubs. Decided: a second publish tag with TSX pages, an Inertia controller, and the same routes and JSON prepare actions; the Blade stubs stay. The two tags publish the controller and the route file to the same paths, so an Application uses one variant.
+- RD-47 (owner-confirmed, T-046): Ambiguous: AR-06 forbids unscoped lookup, but a BillingKey webhook carries only the billing key and the store ID. Decided: CMP-07 asks CMP-08 for the billing key information, and CMP-23 offers one lookup of the Billing key record by the Issue ID it reports, under exclusive access, used only by the BillingKey webhook path (FR-125). Why: the webhook names no Billable reference, and the Issue ID PortOne reports identifies exactly one record; every rule after the lookup is shared with EL-073.
+- RD-48 (owner-confirmed, T-046): Ambiguous: EL-021 carries the verified webhook object, and a BillingKey webhook object contains the billing key. Decided: WebhookReceived keeps the object as PortOne sent it; the Package stores no part of it with the key (FR-095) and writes it to no log. Why: PRODUCT_SPEC defines EL-021 with the verified webhook object, and the hand-off stays inside the Application's process without being persisted.
 

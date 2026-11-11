@@ -530,23 +530,25 @@
     - The [UNVERIFIED] mark is cleared only after human confirmation.
 
 - [ ] T-046 Billing keys and billing-key charges
-  - Satisfies: PRODUCT_SPEC.md SCR-012 (EL-070 to EL-077), Inputs (Issue ID), FR-118 to FR-130, ERR-023 to ERR-025, ERR-028, AC-100 to AC-105; ARCHITECTURE.md SF-13, SF-14, CMP-07, CMP-08, CMP-23, AR-17
+  - Satisfies: PRODUCT_SPEC.md SCR-012 (EL-070 to EL-077), Inputs (Issue ID), FR-118 to FR-130, FR-163, ERR-023 to ERR-025, ERR-028, AC-100 to AC-105; ARCHITECTURE.md SF-13, SF-14, CMP-07, CMP-08, CMP-23, AR-06, AR-17, RD-47, RD-48
   - Depends on: T-040, T-045
   - External boundary: yes
   - Acceptance criteria:
     - A migration adds the Billing key record table and the billing_key reference of Payment records.
     - Mocks of PortOne billing-key responses are traced to the T-045 observation.
     - A live billing key is issued, charged once, and deleted through the Package; BillingKey.Deleted from PortOne marks the record DELETED.
-    - The billing key value appears in no log, event, command output, or page.
+    - The billing key value appears in no log, event, command output, or page, except the verified webhook object of EL-021 (RD-48).
+    - The EL-075 refusal of a key charged by an ACTIVE or PAST_DUE subscription (FR-123 second sentence, that part of ERR-024 and AC-102) is covered by T-047, which adds the Subscription record.
     - Unit tests and static checks pass.
 
 - [ ] T-047 Subscriptions
-  - Satisfies: PRODUCT_SPEC.md SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-131 to FR-144, ERR-026 to ERR-028, FLOW-007, AC-106 to AC-110; ARCHITECTURE.md SF-15, CMP-24 to CMP-27, RD-45
+  - Satisfies: PRODUCT_SPEC.md SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-102, AC-106 to AC-110; ARCHITECTURE.md SF-15, CMP-24 to CMP-27, RD-45
   - Depends on: T-046
   - External boundary: yes
   - Acceptance criteria:
     - A migration adds the Subscription record table and the subscription reference of Payment records.
     - Renewal, retry with EL-058, expiry, cancel at period end, resume, and billing-key change follow SCR-013; a re-run after a crash never charges a period twice.
+    - EL-075 refuses a billing key charged by an ACTIVE or PAST_DUE Subscription record with InvalidBillingKeyException, sends no request, and changes no record (FR-123, ERR-024, AC-102).
     - A live subscription is started, renewed once by EL-085 with a forced due time, and fails a renewal with a refused billing key into PAST_DUE; the observation is recorded.
     - Unit tests and static checks pass.
 
