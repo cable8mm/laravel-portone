@@ -717,7 +717,8 @@ $gateway->assertCancelled($paymentId, fn (string $reason, ?int $amount) => $amou
 $gateway->assertNothingCancelled(); // 취소 요청이 없어야 할 때
 ```
 
-- `payment($id, $status, $totalAmount, $cancelledAmount)`: 결제 ID별 조회 응답. `$status`는 PortOne 값(`PAID`, `PARTIAL_CANCELLED`, `CANCELLED`, `READY`, `FAILED` 등)입니다.
+- `payment($id, $status, $totalAmount, $cancelledAmount, $receiptUrl)`: 결제 ID별 조회 응답. `$status`는 PortOne 값(`PAID`, `PARTIAL_CANCELLED`, `CANCELLED`, `READY`, `FAILED` 등)입니다.
+  `receiptUrl:`을 주면 조회 결과에 영수증 URL이 실려 결제 완료·취소 동기화가 `receipt_url`에 저장합니다. 주지 않으면 영수증 URL이 없는 조회입니다.
 - 지정하지 않은 결제 ID는 PortOne이 모르는 결제로 봅니다. `lookup()`은 `PAYMENT_NOT_FOUND` 예외, 만료 확인 조회는 `found` false입니다.
 - `failLookup($id, $exception)`, `failCancel($id, $exception)`: 조회·취소 실패. 실패한 취소 요청도 기록됩니다.
 - `cancel()`은 기록만 하고 응답을 바꾸지 않습니다. 취소 뒤의 조회 결과가 필요하면 `payment()`로 다시 지정하세요.

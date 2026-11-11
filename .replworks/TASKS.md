@@ -588,7 +588,7 @@
     - CHANGELOG.md is not edited by hand.
     - Tag v0.8.0 is released after CI passes.
 
-- [ ] T-052 Receipt URL on the fake gateway
+- [x] T-052 Receipt URL on the fake gateway
   - Satisfies: PRODUCT_SPEC.md FR-089, FR-113; ARCHITECTURE.md CMP-08
   - Depends on: T-042
   - External boundary: no
