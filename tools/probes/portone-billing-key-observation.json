@@ -1,0 +1,1252 @@
+{
+    "task": "T-045",
+    "browserSdk": "@portone/browser-sdk 0.1.13",
+    "channel": "NHN KCP test (PORTONE_E2E_CHANNEL_KEY)",
+    "client": "cable8mm/portone-php v0.7.0 (BillingKeyClient, PaymentClient, WebhookVerifier), not the Package",
+    "issueRequest": {
+        "billingKeyMethod": "CARD",
+        "forceRedirect": true
+    },
+    "chargeRequest": {
+        "amount": {
+            "total": 100
+        },
+        "currency": "KRW",
+        "orderName": "T-045 billing-key probe"
+    },
+    "secretsRecorded": false,
+    "redaction": "billingKey, merchant IDs, channel keys, card numbers and BINs, and customer personal fields, pgResponse (the PG raw response carries the card number), origin.ipAddress, and the webhook delivery URL and headers are replaced; strings equal to the issued billing key, the store ID, or the probe customer ID are replaced by a marker naming what they matched.",
+    "issuances": [
+        {
+            "source": "redirect query received by redirectUrl",
+            "observedAt": "2026-11-11T04:48:30+00:00",
+            "queryKeys": [
+                "billingKey",
+                "code",
+                "message",
+                "pgCode",
+                "pgMessage"
+            ],
+            "query": {
+                "billingKey": "[redacted]",
+                "code": "FAILURE_TYPE_PG",
+                "message": "[3017] 팝업 차단 상태",
+                "pgCode": "3017",
+                "pgMessage": "팝업 차단 상태"
+            },
+            "outcome": "failure (code present)"
+        },
+        {
+            "source": "redirect query received by redirectUrl",
+            "observedAt": "2026-11-11T04:51:58+00:00",
+            "queryKeys": [
+                "billingKey",
+                "code",
+                "message",
+                "pgCode",
+                "pgMessage"
+            ],
+            "query": {
+                "billingKey": "[redacted]",
+                "code": "FAILURE_TYPE_PG",
+                "message": "[9991] 네트워크 연결이 원할하지 않습니다. 다시 시도해주세요",
+                "pgCode": "9991",
+                "pgMessage": "네트워크 연결이 원할하지 않습니다. 다시 시도해주세요"
+            },
+            "outcome": "failure (code present)"
+        },
+        {
+            "source": "redirect query received by redirectUrl",
+            "observedAt": "2026-11-11T04:52:28+00:00",
+            "queryKeys": [
+                "billingKey",
+                "code",
+                "message"
+            ],
+            "query": {
+                "billingKey": "[redacted]",
+                "code": "FAILURE_TYPE_PG",
+                "message": "KCP 스크립트 로드에 실패하였습니다."
+            },
+            "outcome": "failure (code present)"
+        },
+        {
+            "source": "redirect query received by redirectUrl",
+            "observedAt": "2026-11-11T04:52:32+00:00",
+            "queryKeys": [
+                "billingKey",
+                "code",
+                "message"
+            ],
+            "query": {
+                "billingKey": "[redacted]",
+                "code": "FAILURE_TYPE_PG",
+                "message": "KCP 스크립트 로드에 실패하였습니다."
+            },
+            "outcome": "failure (code present)"
+        },
+        {
+            "source": "redirect query received by redirectUrl",
+            "observedAt": "2026-11-11T04:55:35+00:00",
+            "queryKeys": [
+                "billingKey"
+            ],
+            "query": {
+                "billingKey": "[redacted]"
+            },
+            "outcome": "success (billingKey without code)"
+        }
+    ],
+    "steps": {
+        "billingKeyInfo": {
+            "observedAt": "2026-11-11T04:55:35+00:00",
+            "result": "success",
+            "variant": "ISSUED",
+            "knownVariant": true,
+            "customerIdMatchesIssuance": true,
+            "issueIdMatchesIssuance": true,
+            "topLevelKeys": [
+                "status",
+                "billingKey",
+                "merchantId",
+                "storeId",
+                "methods",
+                "channels",
+                "customer",
+                "issueId",
+                "issueName",
+                "requestedAt",
+                "issuedAt",
+                "pgBillingKeyIssueResponses"
+            ],
+            "data": {
+                "status": "ISSUED",
+                "billingKey": "[the issued billing key]",
+                "merchantId": "[redacted]",
+                "storeId": "[PORTONE_STORE_ID]",
+                "methods": [
+                    {
+                        "type": "BillingKeyPaymentMethodCard",
+                        "card": {
+                            "publisher": "SHINHAN_CARD",
+                            "issuer": "SHINHAN_CARD",
+                            "brand": "MASTER",
+                            "type": "CREDIT",
+                            "ownerType": "PERSONAL",
+                            "bin": "[redacted]",
+                            "name": "신한카드",
+                            "number": "[redacted]"
+                        }
+                    }
+                ],
+                "channels": [
+                    {
+                        "type": "TEST",
+                        "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                        "key": "[redacted]",
+                        "name": "wifinote-net-test",
+                        "pgProvider": "KCP_V2",
+                        "pgMerchantId": "[redacted]"
+                    }
+                ],
+                "customer": {
+                    "id": "[the probe customerId]",
+                    "name": "[redacted]",
+                    "email": "[redacted]",
+                    "phoneNumber": "[redacted]"
+                },
+                "issueId": "bkdec740f2aa9af93a9667a4e3bac25515",
+                "issueName": "T-045 probe",
+                "requestedAt": "2026-11-11T04:54:36.07889676Z",
+                "issuedAt": "2026-11-11T04:55:35.497296523Z",
+                "pgBillingKeyIssueResponses": [
+                    {
+                        "type": "ISSUED",
+                        "channel": {
+                            "type": "TEST",
+                            "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                            "key": "[redacted]",
+                            "name": "wifinote-net-test",
+                            "pgProvider": "KCP_V2",
+                            "pgMerchantId": "[redacted]"
+                        },
+                        "pgTxId": "",
+                        "method": {
+                            "type": "BillingKeyPaymentMethodCard",
+                            "card": {
+                                "publisher": "SHINHAN_CARD",
+                                "issuer": "SHINHAN_CARD",
+                                "brand": "MASTER",
+                                "type": "CREDIT",
+                                "ownerType": "PERSONAL",
+                                "bin": "[redacted]",
+                                "name": "신한카드",
+                                "number": "[redacted]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        "charge": {
+            "observedAt": "2026-11-11T04:55:36+00:00",
+            "minimalRequest": {
+                "request": {
+                    "paymentId": "bkpaye852eaf2e6b050b8c2041985ce31271e",
+                    "orderName": "T-045 billing-key probe",
+                    "amount": {
+                        "total": 100
+                    },
+                    "currency": "KRW"
+                },
+                "result": "success",
+                "response": {
+                    "payment": {
+                        "pgTxId": "26565081463015",
+                        "paidAt": "2026-11-11T04:55:36.171858752Z"
+                    }
+                }
+            }
+        },
+        "chargedPaymentLookup": {
+            "observedAt": "2026-11-11T04:55:36+00:00",
+            "result": "success",
+            "variant": "PAID",
+            "totalAmount": 100,
+            "paidAmount": 100,
+            "cancelledAmount": 0,
+            "receiptUrlPresent": true,
+            "billingKeyIsTheIssuedKey": true,
+            "topLevelKeys": [
+                "status",
+                "id",
+                "transactionId",
+                "merchantId",
+                "storeId",
+                "method",
+                "channel",
+                "version",
+                "billingKey",
+                "requestedAt",
+                "updatedAt",
+                "statusChangedAt",
+                "orderName",
+                "amount",
+                "currency",
+                "customer",
+                "origin",
+                "promotionId",
+                "isCulturalExpense",
+                "paidAt",
+                "pgTxId",
+                "pgResponse",
+                "receiptUrl",
+                "disputes"
+            ],
+            "data": {
+                "status": "PAID",
+                "id": "bkpaye852eaf2e6b050b8c2041985ce31271e",
+                "transactionId": "01a1c8f6-20e9-dfa7-d095-0be562c055a3",
+                "merchantId": "[redacted]",
+                "storeId": "[PORTONE_STORE_ID]",
+                "method": {
+                    "type": "PaymentMethodCard",
+                    "card": {
+                        "publisher": "SHINHAN_CARD",
+                        "issuer": "SHINHAN_CARD",
+                        "brand": "MASTER",
+                        "type": "CREDIT",
+                        "ownerType": "PERSONAL",
+                        "bin": "[redacted]",
+                        "name": "신한카드",
+                        "number": "[redacted]"
+                    },
+                    "approvalNumber": "22132100",
+                    "installment": {
+                        "month": 0,
+                        "isInterestFree": false
+                    }
+                },
+                "channel": {
+                    "type": "TEST",
+                    "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                    "key": "[redacted]",
+                    "name": "wifinote-net-test",
+                    "pgProvider": "KCP_V2",
+                    "pgMerchantId": "[redacted]"
+                },
+                "version": "V2",
+                "billingKey": "[the issued billing key]",
+                "requestedAt": "2026-11-11T04:55:35.917664549Z",
+                "updatedAt": "2026-11-11T04:55:36.171858752Z",
+                "statusChangedAt": "2026-11-11T04:55:36Z",
+                "orderName": "T-045 billing-key probe",
+                "amount": {
+                    "total": 100,
+                    "taxFree": 0,
+                    "vat": 10,
+                    "supply": 90,
+                    "discount": 0,
+                    "paid": 100,
+                    "cancelled": 0,
+                    "cancelledTaxFree": 0
+                },
+                "currency": "KRW",
+                "customer": {
+                    "id": "[the probe customerId]"
+                },
+                "origin": {
+                    "platformType": "API",
+                    "userAgent": "GuzzleHttp/7",
+                    "ipAddress": "[redacted]"
+                },
+                "promotionId": "",
+                "isCulturalExpense": false,
+                "paidAt": "2026-11-11T04:55:36Z",
+                "pgTxId": "26565081463015",
+                "pgResponse": "[redacted]",
+                "receiptUrl": "https://testpartner.kcp.co.kr/bill/card?cmd=card_bill&tno=26565081463015&order_no=bkpaye852eaf2e6b050b8c2041985ce31271e&trade_mony=100",
+                "disputes": []
+            }
+        },
+        "chargeFailure": {
+            "observedAt": "2026-11-11T04:56:17+00:00",
+            "amountOneWon": {
+                "why": "KRW 1 is below the card minimum that PGs accept",
+                "request": {
+                    "paymentId": "bkfail9e550699f973d1b214c0d11c7a46b6b8",
+                    "orderName": "T-045 billing-key probe",
+                    "amount": {
+                        "total": 1
+                    },
+                    "currency": "KRW"
+                },
+                "result": "error",
+                "exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+                "message": "PortOne returned an error response.",
+                "httpStatus": 502,
+                "errorType": "PG_PROVIDER",
+                "responseBody": {
+                    "type": "PG_PROVIDER",
+                    "pgCode": "8105",
+                    "pgMessage": "포맷에러(지불|신용카드|금액)"
+                },
+                "paymentLookup": {
+                    "result": "success",
+                    "variant": "FAILED",
+                    "totalAmount": 1,
+                    "paidAmount": 1,
+                    "cancelledAmount": 0,
+                    "receiptUrlPresent": false,
+                    "billingKeyIsTheIssuedKey": true,
+                    "topLevelKeys": [
+                        "status",
+                        "id",
+                        "transactionId",
+                        "merchantId",
+                        "storeId",
+                        "channel",
+                        "version",
+                        "billingKey",
+                        "requestedAt",
+                        "updatedAt",
+                        "statusChangedAt",
+                        "orderName",
+                        "amount",
+                        "currency",
+                        "customer",
+                        "origin",
+                        "promotionId",
+                        "isCulturalExpense",
+                        "failedAt",
+                        "failure"
+                    ],
+                    "data": {
+                        "status": "FAILED",
+                        "id": "bkfail9e550699f973d1b214c0d11c7a46b6b8",
+                        "transactionId": "01a1c8f6-c1ed-3585-30d6-e1af949cb228",
+                        "merchantId": "[redacted]",
+                        "storeId": "[PORTONE_STORE_ID]",
+                        "channel": {
+                            "type": "TEST",
+                            "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                            "key": "[redacted]",
+                            "name": "wifinote-net-test",
+                            "pgProvider": "KCP_V2",
+                            "pgMerchantId": "[redacted]"
+                        },
+                        "version": "V2",
+                        "billingKey": "[the issued billing key]",
+                        "requestedAt": "2026-11-11T04:56:17.138796225Z",
+                        "updatedAt": "2026-11-11T04:56:17.254506172Z",
+                        "statusChangedAt": "2026-11-11T04:56:17.254506172Z",
+                        "orderName": "T-045 billing-key probe",
+                        "amount": {
+                            "total": 1,
+                            "taxFree": 0,
+                            "vat": 0,
+                            "supply": 1,
+                            "discount": 0,
+                            "paid": 1,
+                            "cancelled": 0,
+                            "cancelledTaxFree": 0
+                        },
+                        "currency": "KRW",
+                        "customer": {
+                            "id": "[the probe customerId]"
+                        },
+                        "origin": {
+                            "platformType": "API",
+                            "userAgent": "GuzzleHttp/7",
+                            "ipAddress": "[redacted]"
+                        },
+                        "promotionId": "",
+                        "isCulturalExpense": false,
+                        "failedAt": "2026-11-11T04:56:17.254506172Z",
+                        "failure": {
+                            "reason": "결제 승인 과정에서 PG사 에러가 발생했습니다: 포맷에러(지불|신용카드|금액)",
+                            "pgCode": "8105",
+                            "pgMessage": "포맷에러(지불|신용카드|금액)"
+                        }
+                    }
+                }
+            },
+            "installmentOnSmallAmount": {
+                "why": "Card installments are not allowed below KRW 50,000",
+                "request": {
+                    "paymentId": "bkfail5f27385497c4ca9abe480f91f7dca79b",
+                    "orderName": "T-045 billing-key probe",
+                    "amount": {
+                        "total": 100
+                    },
+                    "currency": "KRW",
+                    "installmentMonth": 3
+                },
+                "result": "error",
+                "exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+                "message": "PortOne returned an error response.",
+                "httpStatus": 502,
+                "errorType": "PG_PROVIDER",
+                "responseBody": {
+                    "type": "PG_PROVIDER",
+                    "pgCode": "8106",
+                    "pgMessage": "포맷에러(지불|신용카드|할부기간)"
+                },
+                "paymentLookup": {
+                    "result": "success",
+                    "variant": "FAILED",
+                    "totalAmount": 100,
+                    "paidAmount": 100,
+                    "cancelledAmount": 0,
+                    "receiptUrlPresent": false,
+                    "billingKeyIsTheIssuedKey": true,
+                    "topLevelKeys": [
+                        "status",
+                        "id",
+                        "transactionId",
+                        "merchantId",
+                        "storeId",
+                        "channel",
+                        "version",
+                        "billingKey",
+                        "requestedAt",
+                        "updatedAt",
+                        "statusChangedAt",
+                        "orderName",
+                        "amount",
+                        "currency",
+                        "customer",
+                        "origin",
+                        "promotionId",
+                        "isCulturalExpense",
+                        "failedAt",
+                        "failure"
+                    ],
+                    "data": {
+                        "status": "FAILED",
+                        "id": "bkfail5f27385497c4ca9abe480f91f7dca79b",
+                        "transactionId": "01a1c8f6-c358-d4f0-f6a1-3b1a8deac32a",
+                        "merchantId": "[redacted]",
+                        "storeId": "[PORTONE_STORE_ID]",
+                        "channel": {
+                            "type": "TEST",
+                            "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                            "key": "[redacted]",
+                            "name": "wifinote-net-test",
+                            "pgProvider": "KCP_V2",
+                            "pgMerchantId": "[redacted]"
+                        },
+                        "version": "V2",
+                        "billingKey": "[the issued billing key]",
+                        "requestedAt": "2026-11-11T04:56:17.501767658Z",
+                        "updatedAt": "2026-11-11T04:56:17.627965159Z",
+                        "statusChangedAt": "2026-11-11T04:56:17.627965159Z",
+                        "orderName": "T-045 billing-key probe",
+                        "amount": {
+                            "total": 100,
+                            "taxFree": 0,
+                            "vat": 9,
+                            "supply": 91,
+                            "discount": 0,
+                            "paid": 100,
+                            "cancelled": 0,
+                            "cancelledTaxFree": 0
+                        },
+                        "currency": "KRW",
+                        "customer": {
+                            "id": "[the probe customerId]"
+                        },
+                        "origin": {
+                            "platformType": "API",
+                            "userAgent": "GuzzleHttp/7",
+                            "ipAddress": "[redacted]"
+                        },
+                        "promotionId": "",
+                        "isCulturalExpense": false,
+                        "failedAt": "2026-11-11T04:56:17.627965159Z",
+                        "failure": {
+                            "reason": "결제 승인 과정에서 PG사 에러가 발생했습니다: 포맷에러(지불|신용카드|할부기간)",
+                            "pgCode": "8106",
+                            "pgMessage": "포맷에러(지불|신용카드|할부기간)"
+                        }
+                    }
+                }
+            }
+        },
+        "chargeCancellation": {
+            "observedAt": "2026-11-11T04:56:20+00:00",
+            "cancellation": {
+                "result": "error",
+                "exception": "Error",
+                "message": "Typed property Cable8mm\\PortonePhp\\Model\\OperationResponse::$data must not be accessed before initialization"
+            },
+            "lookupAfterCancellation": {
+                "result": "success",
+                "variant": "CANCELLED",
+                "totalAmount": 100,
+                "paidAmount": 100,
+                "cancelledAmount": 100,
+                "receiptUrlPresent": true,
+                "billingKeyIsTheIssuedKey": true,
+                "topLevelKeys": [
+                    "status",
+                    "id",
+                    "transactionId",
+                    "merchantId",
+                    "storeId",
+                    "method",
+                    "channel",
+                    "version",
+                    "billingKey",
+                    "webhooks",
+                    "requestedAt",
+                    "updatedAt",
+                    "statusChangedAt",
+                    "orderName",
+                    "amount",
+                    "currency",
+                    "customer",
+                    "origin",
+                    "promotionId",
+                    "isCulturalExpense",
+                    "paidAt",
+                    "pgTxId",
+                    "receiptUrl",
+                    "cancellations",
+                    "cancelledAt"
+                ],
+                "data": {
+                    "status": "CANCELLED",
+                    "id": "bkpaye852eaf2e6b050b8c2041985ce31271e",
+                    "transactionId": "01a1c8f6-20e9-dfa7-d095-0be562c055a3",
+                    "merchantId": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]",
+                    "method": {
+                        "type": "PaymentMethodCard",
+                        "card": {
+                            "publisher": "SHINHAN_CARD",
+                            "issuer": "SHINHAN_CARD",
+                            "brand": "MASTER",
+                            "type": "CREDIT",
+                            "ownerType": "PERSONAL",
+                            "bin": "[redacted]",
+                            "name": "신한카드",
+                            "number": "[redacted]"
+                        },
+                        "approvalNumber": "22132100",
+                        "installment": {
+                            "month": 0,
+                            "isInterestFree": false
+                        }
+                    },
+                    "channel": {
+                        "type": "TEST",
+                        "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                        "key": "[redacted]",
+                        "name": "wifinote-net-test",
+                        "pgProvider": "KCP_V2",
+                        "pgMerchantId": "[redacted]"
+                    },
+                    "version": "V2",
+                    "billingKey": "[the issued billing key]",
+                    "webhooks": [
+                        {
+                            "paymentStatus": "PAID",
+                            "id": "01a1c8f6-2207-0fa1-cd9b-bdba4ef908a5",
+                            "status": "SUCCEEDED",
+                            "url": "[redacted]",
+                            "isAsync": true,
+                            "currentExecutionCount": 1,
+                            "request": {
+                                "header": "[redacted]",
+                                "body": "{\"type\":\"Transaction.Paid\",\"timestamp\":\"2026-11-11T04:55:36Z\",\"data\":{\"transactionId\":\"01a1c8f6-20e9-dfa7-d095-0be562c055a3\",\"paymentId\":\"bkpaye852eaf2e6b050b8c2041985ce31271e\",\"storeId\":\"[PORTONE_STORE_ID]\"}}",
+                                "requestedAt": "2026-11-11T04:55:36.199292486Z"
+                            },
+                            "response": {
+                                "code": "200",
+                                "header": "[redacted]",
+                                "body": "",
+                                "respondedAt": "2026-11-11T04:55:36.423302858Z"
+                            },
+                            "triggeredAt": "2026-11-11T04:55:36.199286715Z"
+                        }
+                    ],
+                    "requestedAt": "2026-11-11T04:55:35.917664549Z",
+                    "updatedAt": "2026-11-11T04:56:20.152325783Z",
+                    "statusChangedAt": "2026-11-11T04:56:20Z",
+                    "orderName": "T-045 billing-key probe",
+                    "amount": {
+                        "total": 100,
+                        "taxFree": 0,
+                        "vat": 10,
+                        "supply": 90,
+                        "discount": 0,
+                        "paid": 100,
+                        "cancelled": 100,
+                        "cancelledTaxFree": 0
+                    },
+                    "currency": "KRW",
+                    "customer": {
+                        "id": "[the probe customerId]"
+                    },
+                    "origin": {
+                        "platformType": "API",
+                        "userAgent": "GuzzleHttp/7",
+                        "ipAddress": "[redacted]"
+                    },
+                    "promotionId": "",
+                    "isCulturalExpense": false,
+                    "paidAt": "2026-11-11T04:55:36Z",
+                    "pgTxId": "26565081463015",
+                    "receiptUrl": "https://testpartner.kcp.co.kr/bill/card?cmd=card_bill&tno=26565081463015&order_no=bkpaye852eaf2e6b050b8c2041985ce31271e&trade_mony=100",
+                    "cancellations": [
+                        {
+                            "status": "SUCCEEDED",
+                            "id": "01a1c8f6-cc98-e56e-60f7-11e404c1e10d",
+                            "pgCancellationId": "26565081463015",
+                            "totalAmount": 100,
+                            "taxFreeAmount": 0,
+                            "vatAmount": 9,
+                            "reason": "T-045 probe cancellation",
+                            "cancelledAt": "2026-11-11T04:56:20Z",
+                            "requestedAt": "2026-11-11T04:56:20Z",
+                            "receiptUrl": "https://testpartner.kcp.co.kr/bill/card?cmd=card_bill&tno=26565081463015&order_no=bkpaye852eaf2e6b050b8c2041985ce31271e&trade_mony=100",
+                            "trigger": "API"
+                        }
+                    ],
+                    "cancelledAt": "2026-11-11T04:56:20Z"
+                }
+            },
+            "note": "cancelPayment succeeded at PortOne: the lookup after it reports CANCELLED with one SUCCEEDED cancellation of 100 and a Transaction.Cancelled webhook arrived. The recorded error is the probe's own: it read $response->data, but CancelPaymentResponse does not call the OperationResponse constructor, so $data stays uninitialized. The probe now reads $response->cancellation."
+        },
+        "deletion": {
+            "observedAt": "2026-11-11T04:56:21+00:00",
+            "deletion": {
+                "result": "error",
+                "exception": "Error",
+                "message": "Typed property Cable8mm\\PortonePhp\\Model\\OperationResponse::$data must not be accessed before initialization"
+            },
+            "billingKeyInfoAfterDeletion": {
+                "result": "success",
+                "variant": "DELETED",
+                "knownVariant": true,
+                "customerIdMatchesIssuance": true,
+                "issueIdMatchesIssuance": true,
+                "topLevelKeys": [
+                    "status",
+                    "billingKey",
+                    "merchantId",
+                    "storeId",
+                    "methods",
+                    "channels",
+                    "customer",
+                    "issueId",
+                    "issueName",
+                    "requestedAt",
+                    "issuedAt",
+                    "pgBillingKeyIssueResponses",
+                    "deletedAt"
+                ],
+                "data": {
+                    "status": "DELETED",
+                    "billingKey": "[the issued billing key]",
+                    "merchantId": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]",
+                    "methods": [
+                        {
+                            "type": "BillingKeyPaymentMethodCard",
+                            "card": {
+                                "publisher": "SHINHAN_CARD",
+                                "issuer": "SHINHAN_CARD",
+                                "brand": "MASTER",
+                                "type": "CREDIT",
+                                "ownerType": "PERSONAL",
+                                "bin": "[redacted]",
+                                "name": "신한카드",
+                                "number": "[redacted]"
+                            }
+                        }
+                    ],
+                    "channels": [
+                        {
+                            "type": "TEST",
+                            "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                            "key": "[redacted]",
+                            "name": "wifinote-net-test",
+                            "pgProvider": "KCP_V2",
+                            "pgMerchantId": "[redacted]"
+                        }
+                    ],
+                    "customer": {
+                        "id": "[the probe customerId]",
+                        "name": "[redacted]",
+                        "email": "[redacted]",
+                        "phoneNumber": "[redacted]"
+                    },
+                    "issueId": "bkdec740f2aa9af93a9667a4e3bac25515",
+                    "issueName": "T-045 probe",
+                    "requestedAt": "2026-11-11T04:54:36.07889676Z",
+                    "issuedAt": "2026-11-11T04:55:35.497296523Z",
+                    "pgBillingKeyIssueResponses": [
+                        {
+                            "type": "ISSUED",
+                            "channel": {
+                                "type": "TEST",
+                                "id": "channel-id-aa554b8e-0d27-4874-baed-d514962fcc13",
+                                "key": "[redacted]",
+                                "name": "wifinote-net-test",
+                                "pgProvider": "KCP_V2",
+                                "pgMerchantId": "[redacted]"
+                            },
+                            "pgTxId": "",
+                            "method": {
+                                "type": "BillingKeyPaymentMethodCard",
+                                "card": {
+                                    "publisher": "SHINHAN_CARD",
+                                    "issuer": "SHINHAN_CARD",
+                                    "brand": "MASTER",
+                                    "type": "CREDIT",
+                                    "ownerType": "PERSONAL",
+                                    "bin": "[redacted]",
+                                    "name": "신한카드",
+                                    "number": "[redacted]"
+                                }
+                            }
+                        }
+                    ],
+                    "deletedAt": "2026-11-11T04:56:21.334743665Z"
+                }
+            },
+            "note": "deleteBillingKey succeeded at PortOne: getBillingKeyInfo afterwards reports DELETED with deletedAt, a BillingKey.Deleted webhook arrived, and a second deletion is refused with BILLING_KEY_ALREADY_DELETED. The recorded error is the probe's own: it read $response->data, but DeleteBillingKeyResponse does not call the OperationResponse constructor, so $data stays uninitialized. The probe now reads $response->deletedAt."
+        },
+        "afterDeletion": {
+            "observedAt": "2026-11-11T04:56:23+00:00",
+            "chargeDeletedKey": {
+                "request": {
+                    "paymentId": "bkdelb47df1555a94bef234d9e36e431688d8",
+                    "orderName": "T-045 billing-key probe",
+                    "amount": {
+                        "total": 100
+                    },
+                    "currency": "KRW"
+                },
+                "result": "error",
+                "exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+                "message": "PortOne returned an error response.",
+                "httpStatus": 409,
+                "errorType": "BILLING_KEY_ALREADY_DELETED",
+                "responseBody": {
+                    "type": "BILLING_KEY_ALREADY_DELETED"
+                },
+                "paymentLookup": {
+                    "result": "error",
+                    "exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+                    "message": "payment not found",
+                    "httpStatus": 404,
+                    "errorType": "PAYMENT_NOT_FOUND",
+                    "responseBody": {
+                        "type": "PAYMENT_NOT_FOUND",
+                        "message": "payment not found"
+                    }
+                }
+            },
+            "deleteAgain": {
+                "result": "error",
+                "exception": "Cable8mm\\PortonePhp\\Exception\\UnknownException",
+                "message": "PortOne returned an error response.",
+                "httpStatus": 409,
+                "errorType": "BILLING_KEY_ALREADY_DELETED",
+                "responseBody": {
+                    "type": "BILLING_KEY_ALREADY_DELETED"
+                }
+            }
+        }
+    },
+    "webhooks": [
+        {
+            "receivedAt": "2026-11-11T04:48:18+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8ef-7579-48d9-5b84-2f90a4c63739",
+                "webhook-timestamp": "1794372498"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:48:18.781542323Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:48:35+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8ef-b611-9e19-7a90-9d2e96bb7513",
+                "webhook-timestamp": "1794372515"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:48:35.315337289Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:52:03+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f2-e0bc-1050-b8f3-18e8de2ee684",
+                "webhook-timestamp": "1794372722"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:52:02.849762868Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:52:28+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f3-449b-550f-a823-c48c77c26eec",
+                "webhook-timestamp": "1794372748"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:52:28.415407425Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:52:32+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f3-52d8-6a86-edaf-80e4810404e7",
+                "webhook-timestamp": "1794372752"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:52:32.063084353Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:52:37+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f3-67b6-9427-1d97-45df94c14cd3",
+                "webhook-timestamp": "1794372757"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:52:37.400725999Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:52:49+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f3-95a7-6ff1-3b46-ffff0e245c56",
+                "webhook-timestamp": "1794372769"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:52:49.165617289Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:53:50+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f4-8538-8dc4-64f6-88b3a2e82585",
+                "webhook-timestamp": "1794372830"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:53:50.499167845Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:54:11+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f4-d744-235a-a6bf-9b14b1501559",
+                "webhook-timestamp": "1794372851"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:54:11.492907442Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:54:36+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f5-3748-49fe-c19b-cf7b5b31f834",
+                "webhook-timestamp": "1794372876"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Ready",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": false,
+            "body": {
+                "type": "BillingKey.Ready",
+                "timestamp": "2026-11-11T04:54:36.078896760Z",
+                "data": {
+                    "billingKey": "[redacted]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:55:36+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f6-1f70-16d2-5ffb-339f4dcb7dbe",
+                "webhook-timestamp": "1794372935"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Issued",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": true,
+            "body": {
+                "type": "BillingKey.Issued",
+                "timestamp": "2026-11-11T04:55:35.505318435Z",
+                "data": {
+                    "billingKey": "[the issued billing key]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:55:36+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f6-2207-0fa1-cd9b-bdba4ef908a5",
+                "webhook-timestamp": "1794372936"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookTransaction",
+            "type": "Transaction.Paid",
+            "dataKeys": [
+                "transactionId",
+                "paymentId",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": null,
+            "body": {
+                "type": "Transaction.Paid",
+                "timestamp": "2026-11-11T04:55:36Z",
+                "data": {
+                    "transactionId": "01a1c8f6-20e9-dfa7-d095-0be562c055a3",
+                    "paymentId": "bkpaye852eaf2e6b050b8c2041985ce31271e",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:56:17+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f6-c288-aaca-aa30-01a392b16b2c",
+                "webhook-timestamp": "1794372977"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookTransaction",
+            "type": "Transaction.Failed",
+            "dataKeys": [
+                "transactionId",
+                "paymentId",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": null,
+            "body": {
+                "type": "Transaction.Failed",
+                "timestamp": "2026-11-11T04:56:17.254506172Z",
+                "data": {
+                    "transactionId": "01a1c8f6-c1ed-3585-30d6-e1af949cb228",
+                    "paymentId": "bkfail9e550699f973d1b214c0d11c7a46b6b8",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:56:17+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f6-c3fc-a838-1891-be3c2fd82969",
+                "webhook-timestamp": "1794372977"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookTransaction",
+            "type": "Transaction.Failed",
+            "dataKeys": [
+                "transactionId",
+                "paymentId",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": null,
+            "body": {
+                "type": "Transaction.Failed",
+                "timestamp": "2026-11-11T04:56:17.627965159Z",
+                "data": {
+                    "transactionId": "01a1c8f6-c358-d4f0-f6a1-3b1a8deac32a",
+                    "paymentId": "bkfail5f27385497c4ca9abe480f91f7dca79b",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:56:20+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f6-cdd1-144f-f16f-c68375485528",
+                "webhook-timestamp": "1794372980"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookTransaction",
+            "type": "Transaction.Cancelled",
+            "dataKeys": [
+                "transactionId",
+                "paymentId",
+                "storeId",
+                "cancellationId"
+            ],
+            "billingKeyIsTheIssuedKey": null,
+            "body": {
+                "type": "Transaction.Cancelled",
+                "timestamp": "2026-11-11T04:56:20.152325783Z",
+                "data": {
+                    "transactionId": "01a1c8f6-20e9-dfa7-d095-0be562c055a3",
+                    "paymentId": "bkpaye852eaf2e6b050b8c2041985ce31271e",
+                    "storeId": "[PORTONE_STORE_ID]",
+                    "cancellationId": "01a1c8f6-cc98-e56e-60f7-11e404c1e10d"
+                }
+            }
+        },
+        {
+            "receivedAt": "2026-11-11T04:56:21+00:00",
+            "headers": {
+                "webhook-id": "msg-01a1c8f6-d276-d918-fa6b-ff9c747a482e",
+                "webhook-timestamp": "1794372981"
+            },
+            "webhookClass": "Cable8mm\\PortonePhp\\Webhook\\WebhookBillingKey",
+            "type": "BillingKey.Deleted",
+            "dataKeys": [
+                "billingKey",
+                "storeId"
+            ],
+            "billingKeyIsTheIssuedKey": true,
+            "body": {
+                "type": "BillingKey.Deleted",
+                "timestamp": "2026-11-11T04:56:21.334743665Z",
+                "data": {
+                    "billingKey": "[the issued billing key]",
+                    "storeId": "[PORTONE_STORE_ID]"
+                }
+            }
+        }
+    ],
+    "requirementFields": {
+        "FR-121": {
+            "operation": "getBillingKeyInfo after the browser redirect",
+            "candidateFields": [
+                "status",
+                "customer.id",
+                "issueId",
+                "issuedAt"
+            ],
+            "reliesOn": [
+                "status (ISSUED after issuance, DELETED after deletion)",
+                "customer.id (equals the customerId sent on issuance)",
+                "issueId (equals the issueId sent on issuance)",
+                "issuedAt"
+            ],
+            "observedIn": [
+                "issuances[4] (success redirect: only billingKey)",
+                "issuances[0..3] (failure redirects: code and message, pgCode and pgMessage when the PG gave them, and a billingKey that is never issued)",
+                "steps.billingKeyInfo",
+                "steps.deletion.billingKeyInfoAfterDeletion"
+            ]
+        },
+        "FR-125": {
+            "operation": "verified BillingKey.Issued and BillingKey.Deleted webhooks",
+            "candidateFields": [
+                "type",
+                "timestamp",
+                "data.billingKey",
+                "data.storeId"
+            ],
+            "reliesOn": [
+                "type (BillingKey.Issued, BillingKey.Deleted; BillingKey.Ready is sent for every issuance window, including failed ones, with a key that is not issued)",
+                "data.billingKey (the issued key for Issued and Deleted; no issueId or customer is carried)",
+                "data.storeId"
+            ],
+            "observedIn": [
+                "webhooks[0..9] (BillingKey.Ready)",
+                "webhooks[10] (BillingKey.Issued)",
+                "webhooks[15] (BillingKey.Deleted)"
+            ]
+        },
+        "FR-126": {
+            "operation": "payWithBillingKey request and success response, then getPayment of the charged payment",
+            "candidateFields": [
+                "request: paymentId, billingKey, orderName, amount.total, currency",
+                "response: payment.pgTxId, payment.paidAt",
+                "getPayment: status, amount.total, amount.paid, billingKey, receiptUrl"
+            ],
+            "reliesOn": [
+                "request: paymentId, billingKey, orderName, amount.total, currency (no customer or other field needed)",
+                "response: payment.pgTxId, payment.paidAt",
+                "getPayment: status PAID, amount.total, amount.paid, billingKey (the charged key), receiptUrl"
+            ],
+            "observedIn": [
+                "steps.charge.minimalRequest",
+                "steps.chargedPaymentLookup",
+                "webhooks[11] (Transaction.Paid)"
+            ]
+        },
+        "FR-127": {
+            "operation": "payWithBillingKey failure",
+            "candidateFields": [
+                "HTTP status",
+                "error type",
+                "message",
+                "pgCode",
+                "pgMessage",
+                "getPayment of the failed payment ID"
+            ],
+            "reliesOn": [
+                "the call throws: HTTP 502, error type PG_PROVIDER, pgCode and pgMessage (portone-php raises UnknownException)",
+                "getPayment of the failed payment ID: status FAILED with failure.pgCode and failure.pgMessage; amount.paid equals amount.total even though nothing was paid",
+                "HTTP 409 BILLING_KEY_ALREADY_DELETED for a deleted key, with no payment created (getPayment 404 PAYMENT_NOT_FOUND)"
+            ],
+            "observedIn": [
+                "steps.chargeFailure.amountOneWon (pgCode 8105)",
+                "steps.chargeFailure.installmentOnSmallAmount (pgCode 8106)",
+                "webhooks[12..13] (Transaction.Failed)",
+                "steps.afterDeletion.chargeDeletedKey"
+            ]
+        }
+    },
+    "refusedCardNote": "The run recorded PG refusals, not a refused card; the human accepted the two PG refusals (KRW 1, and a 3-month installment on KRW 100) as the FR-127 failure observation."
+}

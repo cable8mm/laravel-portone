@@ -13,3 +13,5 @@
 /tests/E2E/debug/
 /.claude/launch.json
 /tools/probes/*.jsonl
+/tools/probes/*.local.json
+/tools/probes/*.lock
