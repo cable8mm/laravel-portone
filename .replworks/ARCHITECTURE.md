@@ -31,8 +31,8 @@
 - **Payment event**: the one event of SCR-011 that a committed change of a Payment record produces. Computed together with the Precomputed outcome, held until the write commits, dispatched once by CMP-22 (RD-42).
 - **Webhook record**: one per webhook-id. The receiver writes it before any effect and marks it processed or failed afterwards; a processed record turns every later delivery of the same webhook-id into a no-op (RD-43).
 - **Billing key record**: owned by exactly one Billable reference. Lifecycle: PENDING -> ISSUED -> DELETED, PENDING -> FAILED, FAILED -> ISSUED, ISSUED -> DELETED. The billing key value is stored encrypted and leaves CMP-23 only toward CMP-08.
-- **Subscription record**: owned by exactly one Billable reference and charging one of its ISSUED Billing key records. Lifecycle: ACTIVE <-> PAST_DUE, ACTIVE -> ENDED, PAST_DUE -> ENDED, PAST_DUE -> EXPIRED. Each period is paid by one Payment record linked to it.
-- **Single-payment Billable model**: a Billable model whose EL-069 returns true. Its Payment records are completed under exclusive access of the Billable reference, so that at most one becomes PAID (RD-44).
+- **Subscription record**: owned by exactly one Billable reference and charging one of its ISSUED Billing key records. Lifecycle: ACTIVE <-> PAST_DUE, ACTIVE -> ENDED, PAST_DUE -> ENDED, PAST_DUE -> EXPIRED, and ACTIVE -> EXPIRED when EL-058 has no entries (FR-139). Each period is paid by one Payment record linked to it.
+- **Single-payment Billable model**: a Billable model whose EL-069 returns true. Its Payment records are completed under exclusive access of the Billable reference, so that at most one becomes PAID (RD-44). Payment records of subscriptions are exempt (FR-164, RD-52).
 - **Exclusive access**: a period during which no other operation of the Package can read a given Payment record for a decision or write it. Provided by the Payment Ledger, requested by Payment Operations.
 - **Precomputed outcome**: the complete set of absolute field values (status, cancelled_amount, paid_at, paid_amount) computed before any PortOne request that changes remote state. Written to the record as absolute values, never as increments.
 - **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status, the total paid amount when paid, the cancelled amount (amount.cancelled) when PortOne reports one, and the receipt URL (receiptUrl) when PortOne reports one. For an expiry check only, it can also say that PortOne does not know the payment.
@@ -157,7 +157,7 @@ Runs inside the exclusive access of SF-2 or SF-7, after the lookup reported paid
 ### SF-12 Duplicate check (FR-109 to FR-112)
 
 1. A completion of a record of a single-payment Billable model takes exclusive access of the Billable reference before the record's own.
-2. When CMP-06 would produce PAID and CMP-05 reports another PAID, PARTIALLY_CANCELLED, or CANCELLED record of the same reference, CMP-06 produces the two duplicate outcomes instead.
+2. When CMP-06 would produce PAID and CMP-05 reports another PAID, PARTIALLY_CANCELLED, or CANCELLED record of the same reference, CMP-06 produces the two duplicate outcomes instead. A record linked to a Subscription record, or the first-period record of EL-079, skips this step (FR-164, RD-52).
 3. CMP-08 cancels without an amount with EL-055; CMP-07 writes DUPLICATE_CANCELLED or DUPLICATE, as SF-9 does for an amount mismatch.
 
 ### SF-13 Billing key (FLOW-007 steps 1-2)
@@ -521,7 +521,7 @@ Each responsibility has exactly one owner.
 | Webhook record, de-duplication, prune of processed records                 | CMP-21                       | FR-095 to FR-097, FR-102                                             |
 | Webhook processing order, failure marking, WebhookFailed                    | CMP-10                       | FR-098 to FR-101                                                     |
 | After-commit, exactly-once dispatch of payment, billing-key, subscription events | CMP-22                  | FR-103 to FR-108, FR-124, FR-133, FR-140                             |
-| Duplicate decision and sequence                                             | CMP-06, CMP-07               | FR-109 to FR-112, ERR-020                                            |
+| Duplicate decision and sequence                                             | CMP-06, CMP-07               | FR-109 to FR-112, FR-164, ERR-020                                    |
 | Receipt URL                                                                 | CMP-08, CMP-07               | FR-113, FR-114                                                       |
 | Payment-method entries and easy-payment values in the stub flows            | CMP-11, CMP-28, CMP-29       | FR-115 to FR-117, ERR-021                                            |
 | Billing key records and their secrecy                                       | CMP-23                       | FR-118 to FR-120, FR-130                                             |
@@ -695,12 +695,12 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, AMOUNT_MI
 
 ## Architectural Rules
 
-- AR-01: Only CMP-07 changes a Payment record after creation, and only by writing a Precomputed outcome produced by CMP-06. The only deletion is model:prune through the CMP-05 prunable selection of EL-035.
+- AR-01: Only CMP-07 changes a Payment record after creation, and only by writing a Precomputed outcome produced by CMP-06. The one other write is CMP-07 setting the Subscription reference of the first-period Payment record when CMP-25 creates its Subscription record (FR-131, RD-49). The only deletion is model:prune through the CMP-05 prunable selection of EL-035.
 - AR-02: CMP-06 never reads the clock; CMP-07 supplies the time.
 - AR-03: Payment Operations runs checks in the order of RD-09 and stops at the first failure.
 - AR-04: A PortOne request that changes remote state (cancellation) is sent only while the caller holds exclusive access on the record, only after the Precomputed outcome exists, and is never repeated by any retry.
 - AR-05: Records are written as absolute values computed before the PortOne request, so a repeated write of the same outcome is harmless.
-- AR-06: All records reachable from a Billable model are reached through its Billable reference; lookup by Payment ID alone, without scope, does not exist anywhere in the Core. The unscoped selections are the stale PENDING selection for CMP-15, which hands each record's own Billable reference onward (RD-26), the prunable selection of EL-035, the lookup by Payment ID used by EL-042 and SF-10 (RD-37, RD-39), and the Billing key record lookup by Issue ID, taken from the PortOne billing key information, used only by the BillingKey webhook path (RD-47).
+- AR-06: All records reachable from a Billable model are reached through its Billable reference; lookup by Payment ID alone, without scope, does not exist anywhere in the Core. The unscoped selections are the stale PENDING selection for CMP-15, which hands each record's own Billable reference onward (RD-26), the prunable selection of EL-035, the lookup by Payment ID used by EL-042 and SF-10 (RD-37, RD-39), and the Billing key record lookup by Issue ID, taken from the PortOne billing key information, used only by the BillingKey webhook path (RD-47), the due-subscription selection of CMP-26 across all Billable references (FR-134, RD-50), and the lookup of a Subscription record by its key in EL-085 (RD-50).
 - AR-07: Exceptions from CMP-08 and CMP-05 pass through CMP-07 and CMP-03 unmodified.
 - AR-08: The webhook route is the only Package route that is open to unauthenticated requests without a forgery token. No stub route is.
 - AR-09: Authenticity is decided on the raw body exactly as received, before any decoding.
@@ -711,7 +711,7 @@ Steps 3 to 5 happen only when the record is PAID, PARTIALLY_CANCELLED, AMOUNT_MI
 - AR-15: Every effect of a webhook is preceded by its Webhook record and followed, in the same unit of work, by marking it processed (RD-43).
 - AR-16: Payment, billing-key, and subscription events are dispatched only by CMP-22, only after commit, at most once per committed change (RD-42).
 - AR-17: The billing key value is never written to a log, an event, a response, or a published page; only CMP-23 decrypts it and only CMP-08 sends it. Exception: EL-021 WebhookReceived hands the verified webhook object, as PortOne sent it, to in-process listeners; it is not stored (RD-48).
-- AR-14: The Package registers no schedule; the Application decides whether and when EL-031 and model:prune run (FR-065).
+- AR-14: The Package registers no schedule; the Application decides whether and when EL-031, EL-084, and model:prune run (FR-065).
 
 ## Failure Boundaries
 
@@ -856,4 +856,7 @@ Each entry: what was ambiguous, what was decided, why. Entries marked **owner-co
 - RD-46 (owner-confirmed, v0.7.0): Ambiguous: Inertia React stubs. Decided: a second publish tag with TSX pages, an Inertia controller, and the same routes and JSON prepare actions; the Blade stubs stay. The two tags publish the controller and the route file to the same paths, so an Application uses one variant.
 - RD-47 (owner-confirmed, T-046): Ambiguous: AR-06 forbids unscoped lookup, but a BillingKey webhook carries only the billing key and the store ID. Decided: CMP-07 asks CMP-08 for the billing key information, and CMP-23 offers one lookup of the Billing key record by the Issue ID it reports, under exclusive access, used only by the BillingKey webhook path (FR-125). Why: the webhook names no Billable reference, and the Issue ID PortOne reports identifies exactly one record; every rule after the lookup is shared with EL-073.
 - RD-48 (owner-confirmed, T-046): Ambiguous: EL-021 carries the verified webhook object, and a BillingKey webhook object contains the billing key. Decided: WebhookReceived keeps the object as PortOne sent it; the Package stores no part of it with the key (FR-095) and writes it to no log. Why: PRODUCT_SPEC defines EL-021 with the verified webhook object, and the hand-off stays inside the Application's process without being persisted.
-
+- RD-49 (owner-confirmed, T-047): Ambiguous: AR-01 allows only Precomputed outcomes as Payment record writes, but FR-131 links the first-period Payment record to a Subscription record that exists only after that record is PAID. Decided: CMP-07 writes the Subscription reference of that record in the unit of work in which CMP-25 creates the Subscription record; renewal records carry the reference from creation. Why: the link is not a state change of the payment and must commit together with the Subscription record.
+- RD-50 (owner-confirmed, T-047): Ambiguous: AR-06 forbids unscoped lookup, but EL-084 must see due subscriptions of every Billable model and EL-085 receives only a Subscription record. Decided: CMP-26 selects the keys of due ACTIVE and PAST_DUE records across all Billable references and queues one EL-085 per key; CMP-25 reads the record by that key and uses its own Billable reference for every charge and billing-key lookup. Why: mirrors RD-26; every decision and write after the selection stays inside the record's scope.
+- RD-51 (owner-confirmed, T-047): Ambiguous: FR-140 requires exclusive access of a Subscription record across the payWithBillingKey request, while AC-109 requires the renewal Payment record to be committed before that request, so the exclusive access cannot be one open unit of work. Decided: CMP-25 holds a per-record lock that is independent of units of work for the whole of EL-081, EL-082, EL-083, and EL-085, and makes each write in its own unit of work under the record's row lock after re-reading it. The lock expires by itself after a crash; a caller that cannot obtain it in time fails without a change. Why: a re-run after a crash finds the committed PENDING record, and concurrent runs cannot charge one period twice.
+- RD-52 (owner-confirmed, T-047): Ambiguous: a single-payment Billable model (EL-069) that subscribes would have every renewal cancelled as a duplicate. Decided: the duplicate check of SF-12 is skipped for a Payment record linked to a Subscription record and for the first-period record of EL-079, which CMP-07 completes knowing that it is for a subscription (FR-164). Why: a subscription is paid once per period by design.
