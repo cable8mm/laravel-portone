@@ -79,6 +79,13 @@ Route::middleware(TrustLoopbackProxies::class)->group(function () use ($controll
         ]);
     })->name('workbench.pay');
 
+    // Lets the human open that page in their own browser: KCP identity verification refuses the automated one.
+    Route::middleware('signed:relative')->get('/workbench/billing-key/{issueId}/sign-in/{userId}', function (string $issueId, string $userId) {
+        auth()->loginUsingId($userId) ?: abort(404);
+
+        return redirect()->route('workbench.billing-key', ['issueId' => $issueId]);
+    })->name('workbench.billing-key.sign-in');
+
     // Lets a live test have the human register a card for a Package-prepared billing key of the signed-in user.
     Route::middleware('auth')->get('/workbench/billing-key/{issueId}', function (string $issueId) {
         $record = auth()->user()->billingKeys()->where('issue_id', $issueId)->first() ?? abort(404);
