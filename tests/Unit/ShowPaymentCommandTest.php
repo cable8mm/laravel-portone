@@ -65,6 +65,30 @@ class ShowPaymentCommandTest extends TestCase
         $this->assertSame(self::response(), json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR));
     }
 
+    public function test_command_never_prints_the_billing_key_of_a_billing_key_payment(): void
+    {
+        // T-045: getPayment of a billing-key payment carries the charged key as billingKey
+        // (tools/probes/portone-billing-key-observation.json, steps.chargedPaymentLookup); the value here is a placeholder.
+        $this->app->instance(PortOneGateway::class, new class extends PortOneGateway
+        {
+            public function paymentResponse(string $paymentId): array
+            {
+                return ShowPaymentCommandTest::response() + ['billingKey' => 'billing-key-00000000-0000-0000-0000-000000000001'];
+            }
+        });
+
+        foreach ([[], ['--raw' => true]] as $options) {
+            $this->assertSame(0, Artisan::call('portone:payment', ['paymentId' => 'payment-1'] + $options));
+            $output = Artisan::output();
+            $printed = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
+
+            $this->assertStringNotContainsString('billing-key-00000000', $output);
+            $this->assertSame('[REDACTED]', $printed['billingKey']);
+        }
+
+        $this->assertSame('Hong Gildong', $printed['customer']['name']);
+    }
+
     public function test_redactor_keeps_every_key_and_leaves_the_input_untouched(): void
     {
         $response = self::response();

@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone;
 
+use Cable8mm\LaravelPortone\Events\BillingKeyDeleted;
+use Cable8mm\LaravelPortone\Events\BillingKeyEventSource;
+use Cable8mm\LaravelPortone\Events\BillingKeyIssued;
 use Cable8mm\LaravelPortone\Events\PaymentEventSource;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotFoundException;
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotIssuedException;
 use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
+use Cable8mm\LaravelPortone\Exceptions\InvalidBillingKeyException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
+use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
@@ -29,7 +36,9 @@ class PaymentOperations
      * @param  PaymentLedger  $payments  결제 레코드 저장소
      * @param  PaymentGateway  $gateway  PortOne API 호출
      * @param  PaymentLifecycle  $lifecycle  상태 전이 계산
-     * @param  EventDispatcher  $events  커밋 뒤 결제 이벤트 발송
+     * @param  EventDispatcher  $events  커밋 뒤 결제·빌링키 이벤트 발송
+     * @param  BillingKeyRegistry  $billingKeys  빌링키 기록 저장소
+     * @param  BillingKeyGateway  $billingKeyGateway  PortOne 빌링키 API 호출
      */
     public function __construct(
         private readonly CustomerRegistry $customers,
@@ -37,6 +46,8 @@ class PaymentOperations
         private readonly PaymentGateway $gateway,
         private readonly PaymentLifecycle $lifecycle,
         private readonly EventDispatcher $events,
+        private readonly BillingKeyRegistry $billingKeys,
+        private readonly BillingKeyGateway $billingKeyGateway,
     ) {}
 
     /**
@@ -304,6 +315,216 @@ class PaymentOperations
                 return $this->write($payment, $outcome, PaymentEventSource::Refund);
             },
         );
+    }
+
+    /**
+     * PENDING 빌링키 기록을 미리 만든다. PortOne을 호출하지 않는다.
+     *
+     * 고객 레코드 확보와 기록 생성을 하나의 트랜잭션으로 처리한다.
+     *
+     * @param  Model  $billable  빌링키를 소유할 Billable 모델
+     * @param  string  $issueName  발급 이름(PortOne issueName)
+     * @return BillingKey 생성된 PENDING 빌링키 기록
+     */
+    public function prepareBillingKey(Model $billable, string $issueName): BillingKey
+    {
+        return DB::transaction(function () use ($billable, $issueName): BillingKey {
+            $customerId = $this->customers->ensureId($billable);
+
+            return $this->billingKeys->createPending($billable, $customerId, $issueName);
+        });
+    }
+
+    /**
+     * 브라우저가 돌려준 빌링키를 PortOne에 확인하고 기록을 ISSUED로 바꾼다.
+     *
+     * PENDING·FAILED 기록만 PortOne에 조회한다. PortOne이 이 기록의 고객에게 발급했다고 하면 빌링키를 암호화해 저장하고
+     * ISSUED로 바꾼 뒤 커밋 뒤에 BillingKeyIssued(source call)를 보낸다. 그렇지 않으면 FAILED를 저장한 뒤 예외를 던진다.
+     * 같은 빌링키로 이미 ISSUED인 기록은 PortOne을 부르지 않고 그대로 반환한다.
+     *
+     * @param  Model  $billable  빌링키 기록을 소유한 Billable 모델
+     * @param  string  $issueId  Issue ID
+     * @param  string  $billingKey  브라우저 리다이렉트가 돌려준 평문 빌링키
+     * @return BillingKey ISSUED(또는 그대로인) 빌링키 기록
+     *
+     * @throws BillingKeyNotFoundException 범위 안에 PENDING·FAILED·ISSUED 기록이 없을 때
+     * @throws BillingKeyNotIssuedException PortOne이 발급하지 않았거나 다른 고객에게 발급했다고 할 때, ISSUED 기록에 다른 빌링키를 넘겼을 때
+     */
+    public function completeBillingKey(Model $billable, string $issueId, #[\SensitiveParameter] string $billingKey): BillingKey
+    {
+        $failure = null;
+
+        $record = $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($billingKey, &$failure): BillingKey {
+            if ($record === null || ! in_array($record->status, ['PENDING', 'FAILED', 'ISSUED'], true)) {
+                throw new BillingKeyNotFoundException('The billing-key issuance does not belong to this Billable model.');
+            }
+
+            if ($record->status === 'ISSUED') {
+                if (! $this->billingKeys->holds($record, $billingKey)) {
+                    throw new BillingKeyNotIssuedException('The billing-key issuance already holds another billing key.');
+                }
+
+                return $record;
+            }
+
+            $failure = $this->applyIssuance($record, $billingKey, $this->billingKeyGateway->billingKeyInfo($billingKey), BillingKeyEventSource::Call);
+
+            return $record;
+        });
+
+        // 트랜잭션 안에서 던지면 저장한 FAILED가 롤백되므로, 커밋 뒤에 던진다.
+        if ($failure !== null) {
+            throw $failure;
+        }
+
+        return $record;
+    }
+
+    /**
+     * ISSUED 빌링키를 PortOne에서 삭제하고 기록을 DELETED로 바꾼다. 커밋 뒤에 BillingKeyDeleted(source call)를 보낸다.
+     *
+     * @param  Model  $billable  빌링키 기록을 소유한 Billable 모델
+     * @param  string  $issueId  Issue ID
+     * @param  string  $reason  PortOne에 전달할 삭제 사유
+     * @return BillingKey DELETED 빌링키 기록
+     *
+     * @throws InvalidBillingKeyException 범위 안에 ISSUED 기록이 없을 때
+     */
+    public function deleteBillingKey(Model $billable, string $issueId, string $reason): BillingKey
+    {
+        return $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($reason): BillingKey {
+            $billingKey = $this->issuedKey($record);
+            $this->billingKeyGateway->deleteBillingKey($billingKey, $reason);
+            $this->billingKeys->markDeleted($record, now());
+            $this->events->dispatchAfterCommit(new BillingKeyDeleted($record, BillingKeyEventSource::Call));
+
+            return $record;
+        });
+    }
+
+    /**
+     * ISSUED 빌링키로 결제한다.
+     *
+     * preparePayment()처럼 그 빌링키 기록을 가리키는 PENDING 결제 레코드를 만들고 커밋한 뒤 payWithBillingKey를 요청한다.
+     * 요청이 실패하면 레코드는 PENDING으로 남고 PortOne 예외가 그대로 전파된다. 성공하면 completeByPaymentId()의 규칙으로
+     * 확정하며, 결제 이벤트의 source는 charge이다.
+     *
+     * @param  Model  $billable  빌링키 기록을 소유한 Billable 모델
+     * @param  string  $issueId  Issue ID
+     * @param  int  $amount  결제 금액(원, 0보다 커야 함)
+     * @param  string  $orderName  주문명(빈 문자열 불가)
+     * @return Payment 확정된 결제 레코드
+     *
+     * @throws \InvalidArgumentException 금액이 0 이하이거나 주문명이 비었을 때
+     * @throws InvalidBillingKeyException 범위 안에 ISSUED 기록이 없을 때
+     * @throws PaymentNotPaidException PortOne이 결제 완료로 표시하지 않았을 때
+     * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
+     */
+    public function chargeBillingKey(Model $billable, string $issueId, int $amount, string $orderName): Payment
+    {
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException('Payment amount must be greater than zero.');
+        }
+
+        if ($orderName === '') {
+            throw new \InvalidArgumentException('Payment order name must not be empty.');
+        }
+
+        [$payment, $billingKey] = $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($billable, $amount, $orderName): array {
+            $billingKey = $this->issuedKey($record);
+            // ERR-028: 요청을 보낼 수 없으면 결제 레코드도 만들지 않는다.
+            $this->billingKeyGateway->assertConfigured();
+            $customerId = $this->customers->ensureId($billable);
+
+            return [$this->payments->createPending($billable, $customerId, $amount, $orderName, $record->id), $billingKey];
+        });
+
+        $this->billingKeyGateway->payWithBillingKey($payment->payment_id, $billingKey, $orderName, $amount);
+
+        return $this->completeByPaymentId($payment->payment_id, PaymentEventSource::Charge);
+    }
+
+    /**
+     * 검증된 BillingKey 웹훅을 반영한다. 웹훅에는 빌링키만 있으므로 PortOne에 조회해 Issue ID로 기록을 찾는다.
+     *
+     * BillingKey.Issued: PENDING 기록이면 completeBillingKey()와 같은 규칙으로 ISSUED(또는 FAILED)가 된다.
+     * BillingKey.Deleted: 같은 빌링키를 가진 ISSUED 기록이 DELETED가 된다. 이벤트의 source는 webhook이다.
+     * 그 밖의 종류이거나, 기록이 없거나 상태가 맞지 않으면 아무것도 바꾸지 않으며 PortOne에 조회하지 않는 종류도 있다.
+     *
+     * @param  string  $type  웹훅 종류(BillingKey.Issued, BillingKey.Deleted 등)
+     * @param  string  $billingKey  웹훅 data.billingKey
+     */
+    public function applyBillingKeyWebhook(string $type, #[\SensitiveParameter] string $billingKey): void
+    {
+        if (! in_array($type, ['BillingKey.Issued', 'BillingKey.Deleted'], true) || $billingKey === '') {
+            return;
+        }
+
+        $info = $this->billingKeyGateway->billingKeyInfo($billingKey);
+
+        if ($info->issueId === null) {
+            return;
+        }
+
+        $this->billingKeys->withExclusiveAccessByIssueId($info->issueId, function (?BillingKey $record) use ($type, $billingKey, $info): void {
+            if ($type === 'BillingKey.Issued' && $record?->status === 'PENDING') {
+                // FAILED가 되어도 웹훅 처리는 성공이다(예외를 던지지 않고 버린다).
+                $this->applyIssuance($record, $billingKey, $info, BillingKeyEventSource::Webhook);
+
+                return;
+            }
+
+            if ($type === 'BillingKey.Deleted' && $record?->status === 'ISSUED' && $this->billingKeys->holds($record, $billingKey)) {
+                $this->billingKeys->markDeleted($record, now());
+                $this->events->dispatchAfterCommit(new BillingKeyDeleted($record, BillingKeyEventSource::Webhook));
+            }
+        });
+    }
+
+    /**
+     * 잠금을 잡은 PENDING·FAILED 기록에 PortOne 빌링키 조회 결과를 반영한다.
+     *
+     * 이 기록의 고객에게 발급되었으면 ISSUED를 저장하고 BillingKeyIssued를 커밋 뒤에 보내도록 넘긴다.
+     * 아니면 FAILED를 저장하고, 호출자가 커밋 뒤에 던질 예외를 반환한다.
+     *
+     * @param  BillingKey  $record  잠금을 잡은 PENDING 또는 FAILED 기록
+     * @param  string  $billingKey  평문 빌링키
+     * @param  GatewayBillingKey  $info  그 빌링키의 PortOne 조회 결과
+     * @param  BillingKeyEventSource  $source  빌링키 이벤트의 source
+     */
+    private function applyIssuance(BillingKey $record, #[\SensitiveParameter] string $billingKey, GatewayBillingKey $info, BillingKeyEventSource $source): ?BillingKeyNotIssuedException
+    {
+        if (! $this->lifecycle->isIssuedFor($record, $info)) {
+            $this->billingKeys->markFailed($record);
+
+            return new BillingKeyNotIssuedException('PortOne did not report the billing key issued for this customer.');
+        }
+
+        $this->billingKeys->markIssued($record, $billingKey, now());
+        $this->events->dispatchAfterCommit(new BillingKeyIssued($record, $source));
+
+        return null;
+    }
+
+    /**
+     * ISSUED 기록의 평문 빌링키를 반환한다. 기록이 없거나 ISSUED가 아니면 예외를 던진다.
+     *
+     * @param  BillingKey|null  $record  범위 안에서 잠금을 잡은 기록
+     *
+     * @phpstan-assert BillingKey $record
+     *
+     * @throws InvalidBillingKeyException 기록이 없거나 ISSUED가 아닐 때
+     */
+    private function issuedKey(?BillingKey $record): string
+    {
+        $billingKey = $record?->status === 'ISSUED' ? $this->billingKeys->plainKey($record) : null;
+
+        if ($billingKey === null) {
+            throw new InvalidBillingKeyException('The billing key is not an issued billing key of this Billable model.');
+        }
+
+        return $billingKey;
     }
 
     /**

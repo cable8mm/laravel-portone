@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone\Concerns;
 
+use Cable8mm\LaravelPortone\BillingKeyRegistry;
 use Cable8mm\LaravelPortone\CustomerRegistry;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotFoundException;
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotIssuedException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
+use Cable8mm\LaravelPortone\Exceptions\InvalidBillingKeyException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidPaymentStatusException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidRefundAmountException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
+use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentLedger;
 use Cable8mm\LaravelPortone\PaymentOperations;
@@ -146,5 +151,86 @@ trait Billable
     public function findPayment(string $paymentId): ?Payment
     {
         return app(PaymentLedger::class)->find($this, $paymentId);
+    }
+
+    /**
+     * 빌링키 발급 기록을 미리 만든다. PortOne을 호출하지 않으며 상태는 PENDING이다.
+     *
+     * 반환한 기록의 issueParameters()를 브라우저 빌링키 발급(requestIssueBillingKey)에 넘긴다.
+     *
+     * @param  string  $issueName  발급 이름(PortOne issueName)
+     * @return BillingKey 생성된 PENDING 빌링키 기록
+     */
+    public function prepareBillingKey(string $issueName): BillingKey
+    {
+        return app(PaymentOperations::class)->prepareBillingKey($this, $issueName);
+    }
+
+    /**
+     * 브라우저 발급이 돌려준 빌링키를 PortOne에 확인하고 기록을 ISSUED로 바꾼다.
+     *
+     * 빌링키는 암호화해 저장한다. 같은 빌링키로 이미 ISSUED인 기록은 그대로 반환한다.
+     *
+     * @param  string  $issueId  prepareBillingKey()가 만든 기록의 Issue ID
+     * @param  string  $billingKey  리다이렉트 쿼리의 billingKey
+     * @return BillingKey ISSUED 빌링키 기록
+     *
+     * @throws BillingKeyNotFoundException 내 범위에 PENDING·FAILED·ISSUED 기록이 없을 때
+     * @throws BillingKeyNotIssuedException PortOne이 이 고객에게 발급하지 않았다고 할 때(기록은 FAILED)
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
+     */
+    public function completeBillingKey(string $issueId, #[\SensitiveParameter] string $billingKey): BillingKey
+    {
+        return app(PaymentOperations::class)->completeBillingKey($this, $issueId, $billingKey);
+    }
+
+    /**
+     * 이 모델의 빌링키 기록 관계(최신순)를 반환한다.
+     *
+     * @return MorphMany<BillingKey, $this> 생성일 내림차순 빌링키 기록 관계
+     */
+    public function billingKeys(): MorphMany
+    {
+        return app(BillingKeyRegistry::class)->billingKeys($this);
+    }
+
+    /**
+     * ISSUED 빌링키를 PortOne에서 삭제하고 기록을 DELETED로 바꾼다.
+     *
+     * @param  string  $issueId  삭제할 빌링키 기록의 Issue ID
+     * @param  string  $reason  PortOne에 전달할 삭제 사유
+     * @return BillingKey DELETED 빌링키 기록
+     *
+     * @throws InvalidBillingKeyException 내 범위에 ISSUED 기록이 없을 때
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
+     */
+    public function deleteBillingKey(string $issueId, string $reason): BillingKey
+    {
+        return app(PaymentOperations::class)->deleteBillingKey($this, $issueId, $reason);
+    }
+
+    /**
+     * ISSUED 빌링키로 결제하고 결제 레코드를 확정해 반환한다.
+     *
+     * 결제 레코드는 빌링키 기록을 가리킨다. PortOne이 결제를 거절하면 레코드는 PENDING으로 남는다.
+     *
+     * @param  string  $issueId  결제할 빌링키 기록의 Issue ID
+     * @param  int  $amount  결제 금액(원, 0보다 커야 함)
+     * @param  string  $orderName  주문명(빈 문자열 불가)
+     * @return Payment 확정된 결제 레코드
+     *
+     * @throws \InvalidArgumentException 금액이 0 이하이거나 주문명이 비었을 때
+     * @throws InvalidBillingKeyException 내 범위에 ISSUED 기록이 없을 때
+     * @throws PaymentNotPaidException PortOne이 결제 완료로 표시하지 않았을 때
+     * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException payWithBillingKey가 실패했을 때 (원문 그대로 전달, 레코드는 PENDING)
+     */
+    public function chargeBillingKey(string $issueId, int $amount, string $orderName): Payment
+    {
+        return app(PaymentOperations::class)->chargeBillingKey($this, $issueId, $amount, $orderName);
     }
 }
