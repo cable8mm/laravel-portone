@@ -544,6 +544,7 @@
 - [ ] T-047 Subscriptions
   - Satisfies: PRODUCT_SPEC.md SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-102, AC-106 to AC-110; ARCHITECTURE.md SF-15, CMP-24 to CMP-27, RD-45
   - Depends on: T-046
+  - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
   - External boundary: yes
   - Acceptance criteria:
     - A migration adds the Subscription record table and the subscription reference of Payment records.
@@ -555,6 +556,7 @@
 - [ ] T-048 Billing-key stubs (Blade)
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-092, EL-093, billing-key routes), EL-057, FR-040, FR-117, FR-155 to FR-160, ERR-022, AC-112; ARCHITECTURE.md CMP-29
   - Depends on: T-046
+  - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
   - External boundary: yes (browser billing-key window)
   - Acceptance criteria:
     - vendor:publish with EL-024 also publishes the billing-key view and script and their routes and actions.
@@ -564,6 +566,7 @@
 - [ ] T-049 Inertia React stubs
   - Satisfies: PRODUCT_SPEC.md SCR-014 (EL-087 to EL-091), EL-059, FR-150 to FR-154, FLOW-008, AC-111; TECH_STACK.md section 1 and section 4; ARCHITECTURE.md SF-16, CMP-28, RD-46
   - Depends on: T-048
+  - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
   - External boundary: yes (browser payment and billing-key windows)
   - Acceptance criteria:
     - vendor:publish with EL-059 publishes the three TSX pages, the Inertia controller, and the route file.
@@ -574,18 +577,19 @@
 
 - [ ] T-050 README and release v0.7.0
   - Satisfies: PRODUCT_SPEC.md Purpose, Product Goals; TECH_STACK.md section 6
-  - Depends on: T-039 to T-042, T-045 to T-049, T-052
+  - Depends on: T-039 to T-042, T-045, T-046, T-052
   - External boundary: no
   - Acceptance criteria:
-    - README documents webhook logging, payment events, duplicate cancellation, receipts, billing keys, subscriptions, and both stub variants, and the "업그레이드" section lists every breaking change from v0.6 with its replacement.
+    - README documents webhook logging, payment events, duplicate cancellation, receipts, and billing keys with billing-key charges, and the "업그레이드" section lists every breaking change from v0.6 with its replacement.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.0 is released after CI passes.
 
 - [ ] T-051 README and release v0.8.0
-  - Satisfies: PRODUCT_SPEC.md Purpose (easy-payment methods), External Systems "Easy payment methods"; TECH_STACK.md section 6
-  - Depends on: T-043, T-044, T-050
+  - Satisfies: PRODUCT_SPEC.md Purpose (subscriptions, billing-key and Inertia React stubs, easy-payment methods), External Systems "Easy payment methods"; TECH_STACK.md section 6
+  - Depends on: T-043, T-044, T-047, T-048, T-049, T-050
   - External boundary: no
   - Acceptance criteria:
+    - README documents subscriptions, the billing-key Blade stubs, and the Inertia React stubs.
     - README documents the payment methods of EL-053 and EL-054, including easy payments limited to card funding, for both stub variants.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.8.0 is released after CI passes.
