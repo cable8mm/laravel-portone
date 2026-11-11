@@ -1,0 +1,37 @@
+{
+	"recordedAt": "2026-11-11T04:08:30+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"billable": "one Workbench user whose allowsOnlyOnePaidPayment() returns true",
+	"payments": [
+		"c0b7c456-e1a4-4477-9c17-ae0b5846c444",
+		"f0735cb3-336f-4ca5-8945-acdfa9b183e4"
+	],
+	"recordStatusesBeforeTestCompletion": [
+		"PENDING",
+		"PENDING"
+	],
+	"completedBy": "completePayment() in the test process",
+	"paid": {
+		"paymentId": "c0b7c456-e1a4-4477-9c17-ae0b5846c444",
+		"recordStatus": "PAID",
+		"portOneStatus": "PAID"
+	},
+	"duplicate": {
+		"paymentId": "f0735cb3-336f-4ca5-8945-acdfa9b183e4",
+		"cancelReason": "\uc911\ubcf5 \uacb0\uc81c\ub85c \uc790\ub3d9 \ucde8\uc18c",
+		"exception": "Cable8mm\\LaravelPortone\\Exceptions\\DuplicatePaymentException",
+		"recordStatus": "DUPLICATE_CANCELLED",
+		"recordPaidAmount": 100,
+		"recordCancelledAmount": 100,
+		"portOneStatusAfterCancel": "CANCELLED",
+		"portOneCancelledAmount": 100
+	},
+	"paymentEventsInTestProcess": [
+		{
+			"paymentId": "f0735cb3-336f-4ca5-8945-acdfa9b183e4",
+			"wasCancelled": true,
+			"source": "complete"
+		}
+	],
+	"secretsRecorded": false
+}
