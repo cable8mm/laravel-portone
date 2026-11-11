@@ -575,7 +575,7 @@
     - A Workbench Inertia app completes a live payment and a live billing-key issuance through the published React pages.
     - Unit tests and static checks pass.
 
-- [ ] T-050 README and release v0.7.0
+- [x] T-050 README and release v0.7.0
   - Satisfies: PRODUCT_SPEC.md Purpose, Product Goals; TECH_STACK.md section 6
   - Depends on: T-039 to T-042, T-045, T-046, T-052
   - External boundary: no
