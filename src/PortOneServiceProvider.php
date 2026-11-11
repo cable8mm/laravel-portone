@@ -53,6 +53,7 @@ class PortOneServiceProvider extends ServiceProvider
                 '2026_10_15_000000_add_paid_amount_to_portone_payments_table.php',
                 '2026_10_16_000000_backfill_paid_amount_on_portone_payments_table.php',
                 '2026_11_11_000000_create_portone_webhooks_table.php',
+                '2026_11_11_000001_add_receipt_url_to_portone_payments_table.php',
             ]), 'portone-migrations');
 
             $this->publishes([

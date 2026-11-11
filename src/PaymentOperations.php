@@ -146,9 +146,10 @@ class PaymentOperations
                     return $payment;
                 }
 
-                $outcome = $this->lifecycle->syncCancellation($payment, $this->gateway->lookup($payment->payment_id));
+                $gatewayPayment = $this->gateway->lookup($payment->payment_id);
+                $outcome = $this->lifecycle->syncCancellation($payment, $gatewayPayment);
 
-                return $outcome === null ? $payment : $this->write($payment, $outcome, $source);
+                return $outcome === null ? $payment : $this->write($payment, $outcome, $source, $gatewayPayment);
             },
         );
     }
@@ -197,7 +198,7 @@ class PaymentOperations
                 return $payment;
             }
 
-            return $this->write($payment, $outcome, $source);
+            return $this->write($payment, $outcome, $source, $gatewayPayment);
         };
         $operation = fn (): Payment => $lock($complete);
 
@@ -257,7 +258,8 @@ class PaymentOperations
             }
 
             if ($outcome !== null) {
-                $this->write($payment, $outcome, PaymentEventSource::Expiry);
+                // 영수증 URL은 PAID 확정(FR-060)에만 저장한다. EXPIRED는 결제되지 않은 조회 결과이다.
+                $this->write($payment, $outcome, PaymentEventSource::Expiry, $outcome['status'] === 'PAID' ? $gatewayPayment : null);
             }
         };
         $operation = fn () => $this->payments->withExclusiveAccessByReference($billableType, $billableId, $paymentId, $expire);
@@ -322,10 +324,10 @@ class PaymentOperations
         try {
             $this->gateway->cancel($payment->payment_id, $this->amountMismatchCancelReason(), null);
         } catch (Throwable $exception) {
-            return AmountMismatchException::fromPayment($this->write($payment, $outcomes['failed'], $source), $exception);
+            return AmountMismatchException::fromPayment($this->write($payment, $outcomes['failed'], $source, $gatewayPayment), $exception);
         }
 
-        return AmountMismatchException::fromPayment($this->write($payment, $outcomes['cancelled'], $source));
+        return AmountMismatchException::fromPayment($this->write($payment, $outcomes['cancelled'], $source, $gatewayPayment));
     }
 
     /**
@@ -346,10 +348,10 @@ class PaymentOperations
         try {
             $this->gateway->cancel($payment->payment_id, $this->duplicateCancelReason(), null);
         } catch (Throwable $exception) {
-            return DuplicatePaymentException::fromPayment($this->write($payment, $outcomes['failed'], $source), $exception);
+            return DuplicatePaymentException::fromPayment($this->write($payment, $outcomes['failed'], $source, $gatewayPayment), $exception);
         }
 
-        return DuplicatePaymentException::fromPayment($this->write($payment, $outcomes['cancelled'], $source));
+        return DuplicatePaymentException::fromPayment($this->write($payment, $outcomes['cancelled'], $source, $gatewayPayment));
     }
 
     /**
@@ -388,14 +390,21 @@ class PaymentOperations
      * 미리 계산된 결과를 저장한다. 실패하면 같은 값으로 최대 3회까지 시도한다.
      *
      * 저장한 변경의 결제 이벤트는 커밋 뒤에 1번 발송되도록 넘긴다. 롤백되면 발송되지 않는다.
+     * PortOne 조회를 반영하는 저장이면 그 조회의 영수증 URL을 receipt_url에 함께 쓰고,
+     * 조회에 영수증 URL이 없으면 receipt_url을 그대로 둔다(FR-113).
      *
      * @param  Payment  $payment  갱신할 결제 레코드
      * @param  array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
      * @param  PaymentEventSource  $source  결제 이벤트의 source
+     * @param  GatewayPayment|null  $lookup  이 저장이 반영하는 PortOne 조회 결과, 조회 없이 쓰면(환불) null
      * @return Payment 갱신된 결제 레코드
      */
-    private function write(Payment $payment, array $outcome, PaymentEventSource $source): Payment
+    private function write(Payment $payment, array $outcome, PaymentEventSource $source, ?GatewayPayment $lookup = null): Payment
     {
+        if ($lookup?->receiptUrl !== null) {
+            $outcome['receipt_url'] = $lookup->receiptUrl;
+        }
+
         $previousStatus = $payment->status;
         $previousCancelledAmount = $payment->cancelled_amount;
 

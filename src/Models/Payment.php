@@ -34,6 +34,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $paid_amount PortOne이 확인해 준 실결제액(원). PAID 확정과 금액 불일치·중복 결제 때 저장하며, PortOne이 아직
  *                                 실결제액을 알려 주지 않은 PENDING·EXPIRED는 null이다
  * @property Carbon|null $paid_at
+ * @property string|null $receipt_url PortOne 영수증 URL(receiptUrl). 그 레코드에 마지막으로 쓴 PortOne 조회가 알려 준 값이며,
+ *                                    영수증 URL이 없는 조회는 이전 값을 그대로 둔다
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */

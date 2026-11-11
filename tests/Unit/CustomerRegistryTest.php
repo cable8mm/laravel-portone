@@ -114,7 +114,7 @@ class CustomerRegistryTest extends TestCase
 
         $paths = glob($this->app->databasePath('migrations/*_portone_*_table.php'));
         $this->assertIsArray($paths);
-        $this->assertCount(5, $paths);
+        $this->assertCount(6, $paths);
         array_push($this->publishedMigrations, ...$paths);
         $customerMigrations = glob($this->app->databasePath('migrations/*_create_portone_customers_table.php'));
         $this->assertIsArray($customerMigrations);

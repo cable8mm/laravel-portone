@@ -491,7 +491,7 @@
     - A live run pays two payments of one single-payment Billable model; the second is cancelled at PortOne; the observation is recorded.
     - Unit tests and static checks pass.
 
-- [ ] T-042 Receipt URL
+- [x] T-042 Receipt URL
   - Satisfies: PRODUCT_SPEC.md Outputs (receipt_url), External Systems "PortOne V2 payment receipt", FR-113, FR-114, AC-098; ARCHITECTURE.md CMP-08
   - Depends on: T-038
   - External boundary: yes (lookup of a live paid and a live cancelled payment)
