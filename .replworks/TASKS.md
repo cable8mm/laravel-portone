@@ -519,13 +519,13 @@
     - A live card payment and a live easy payment of each provider confirmed by T-043 complete through the stubs.
     - Unit tests (PHPUnit, Vitest) and static checks pass.
 
-- [ ] T-045 Observe billing-key issuance, charge, and deletion
+- [x] T-045 Observe billing-key issuance, charge, and deletion
   - Satisfies: PRODUCT_SPEC.md External Systems "PortOne V2 billing keys and billing-key payments"
   - Depends on: T-038
   - Blocked by: billing-capable PortOne test channel key supplied as a local secret (human step)
   - External boundary: yes
   - Acceptance criteria:
-    - Probes record, on the test channel: a browser billing-key issuance and its redirect, getBillingKeyInfo, payWithBillingKey success and a refused-card failure, the lookup of the charged payment, deleteBillingKey, and the BillingKey webhooks.
+    - Probes record, on the test channel: a browser billing-key issuance and its redirect, getBillingKeyInfo, payWithBillingKey success and a PG-refused billing-key payment, the lookup of the charged payment, deleteBillingKey, and the BillingKey webhooks.
     - The observation states which fields FR-121, FR-125, FR-126, and FR-127 rely on.
     - The [UNVERIFIED] mark is cleared only after human confirmation.
 
@@ -589,7 +589,7 @@
     - Tag v0.8.0 is released after CI passes.
 
 - [x] T-052 Receipt URL on the fake gateway
-  - Satisfies: PRODUCT_SPEC.md FR-089, FR-113; ARCHITECTURE.md CMP-08
+  - Satisfies: PRODUCT_SPEC.md FR-089, FR-113; ARCHITECTURE.md CMP-18
   - Depends on: T-042
   - External boundary: no
   - Acceptance criteria:

@@ -144,7 +144,7 @@
 - The Package relies on the PortOne payment lookup response carrying receiptUrl for a paid payment. Observed: the key is present in the live response recorded by T-030 (tests/E2E/portone-payment-command-observation.json); its value there is redacted.
 - Observed by T-042 (tests/E2E/portone-receipt-url-observation.json, URL redacted): receiptUrl is non-empty for a PAID payment and for a CANCELLED payment, on the host testpartner.kcp.co.kr for the NHN KCP test channel, and does not change when the payment is cancelled.
 
-### PortOne V2 billing keys and billing-key payments [UNVERIFIED]
+### PortOne V2 billing keys and billing-key payments
 
 - Documented by the PortOne V2 API (operations issueBillingKey, getBillingKeyInfo, deleteBillingKey, payWithBillingKey) as modelled by cable8mm/portone-php, and by the browser SDK requestIssueBillingKey as modelled by cable8mm/portone-php BrowserBillingKeyRequest and BillingKeyRedirectResult:
   - The browser issues a billing key for a channel that supports billing and returns the billing key on the redirect.
@@ -152,7 +152,13 @@
   - payWithBillingKey charges a billing key with a payment ID, an order name, an amount, and a currency; the payment is then looked up like any payment.
   - deleteBillingKey deletes a billing key.
   - BillingKey.Ready, BillingKey.Issued, BillingKey.Failed, BillingKey.Deleted, and BillingKey.Updated webhooks follow the PortOne webhook documentation as modelled by cable8mm/portone-php.
-- Unverified: the issuance redirect query, the getBillingKeyInfo response fields used by FR-121 (status and customer ID), the payWithBillingKey response and failure codes for a refused card, the lookup of a billing-key payment, and the BillingKey webhook bodies. Each must be recorded live on a billing-capable test channel before the requirement that uses it is implemented.
+- Observed by T-045 on the NHN KCP test channel through cable8mm/portone-php (tools/probes/portone-billing-key-observation.json, billing key and card data redacted):
+  - Issuance redirect: a success carries only billingKey; a failure carries code and message, pgCode and pgMessage when the PG gives them, and also a billingKey, which is not the key later issued.
+  - getBillingKeyInfo after issuance: status ISSUED, customer.id and issueId equal to the values sent on issuance, issuedAt, and methods (the card). After deletion: status DELETED with deletedAt.
+  - payWithBillingKey with only the billing key, paymentId, orderName, amount.total, and currency succeeds and returns payment.pgTxId and payment.paidAt. getPayment then reports PAID with billingKey equal to the charged key and a receiptUrl.
+  - A PG refusal of payWithBillingKey is HTTP 502 with type PG_PROVIDER, pgCode, and pgMessage (pgCode 8105 for KRW 1, 8106 for a 3-month installment on KRW 100). getPayment then reports FAILED with failure.pgCode and failure.pgMessage; amount.paid equals amount.total although nothing was paid.
+  - payWithBillingKey on a deleted key is HTTP 409 BILLING_KEY_ALREADY_DELETED and creates no payment (getPayment is 404 PAYMENT_NOT_FOUND). Deleting a deleted key again is HTTP 409 BILLING_KEY_ALREADY_DELETED.
+  - Webhooks: BillingKey.Ready for every issuance window, including failed ones; BillingKey.Issued after issuance; BillingKey.Deleted after deletion. Each carries only data.billingKey and data.storeId. Billing-key payments send Transaction.Paid, Transaction.Failed, and Transaction.Cancelled like other payments.
 
 ### Easy payment methods [UNVERIFIED]
 
