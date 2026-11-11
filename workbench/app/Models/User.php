@@ -21,6 +21,16 @@ class User extends Authenticatable
     use Billable, HasFactory, Notifiable;
 
     /**
+     * Live tests mark a user paid at most once, as an order would be, by this e-mail domain (EL-069).
+     */
+    public const SINGLE_PAYMENT_EMAIL_DOMAIN = '@single-payment.workbench.test';
+
+    public function allowsOnlyOnePaidPayment(): bool
+    {
+        return str_ends_with((string) $this->email, self::SINGLE_PAYMENT_EMAIL_DOMAIN);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

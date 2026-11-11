@@ -17,10 +17,11 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 - `Billable` 트레이트로 어떤 모델에도 결제 기능 추가
 - 결제 사전 생성 (`PENDING`), 브라우저 결제 후 검증·확정 (`PAID`), 웹훅용 결제 ID만으로 확정
 - 실결제액이 준비 금액과 다르면 PortOne 결제를 자동 전액 취소 (`AMOUNT_MISMATCH_CANCELLED`)
+- 주문처럼 한 번만 결제되는 모델은 두 번째로 결제된 건을 자동 전액 취소 (`DUPLICATE_CANCELLED`)
 - 전액 / 부분 환불 (`PARTIALLY_CANCELLED` / `CANCELLED`), 콘솔 환불은 취소 웹훅·`syncByPaymentId()`로 레코드에 반영
 - 모델별 결제 내역 조회
 - 포트원 웹훅을 Laravel 이벤트로 수신 (`WebhookReceived`), 같은 웹훅은 한 번만 처리
-- 결제 상태가 바뀔 때마다 무엇이 바꿨든 한 번만 발송되는 결제 이벤트 (`PaymentCompleted`·`PaymentPartiallyRefunded`·`PaymentRefunded`·`PaymentAmountMismatched`·`PaymentExpired`)
+- 결제 상태가 바뀔 때마다 무엇이 바꿨든 한 번만 발송되는 결제 이벤트 (`PaymentCompleted`·`PaymentPartiallyRefunded`·`PaymentRefunded`·`PaymentAmountMismatched`·`PaymentDuplicated`·`PaymentExpired`)
 - 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고 결과를 이벤트로 알림, 보관 기간 뒤 정리
 - 테스트용 가짜 게이트웨이(`FakePaymentGateway`)와 서명된 웹훅 도우미, 로컬 웹훅 재전송 명령(`portone:webhook-replay`)
 - 수정 가능한 체크아웃 출발 파일(뷰·스크립트·컨트롤러·라우트) 발행
@@ -57,6 +58,7 @@ PORTONE_PENDING_EXPIRE_AFTER=
 PORTONE_EXPIRED_RETENTION_DAYS=
 PORTONE_WEBHOOK_RETENTION_DAYS=
 PORTONE_AMOUNT_MISMATCH_CANCEL_REASON=
+PORTONE_DUPLICATE_CANCEL_REASON=
 ```
 
 | 변수                                    | 설명                                                 | 기본값                         |
@@ -71,6 +73,7 @@ PORTONE_AMOUNT_MISMATCH_CANCEL_REASON=
 | `PORTONE_EXPIRED_RETENTION_DAYS`        | `EXPIRED` 결제를 지우기 전까지 보관할 일수           | `90`                           |
 | `PORTONE_WEBHOOK_RETENTION_DAYS`        | 처리된 웹훅 기록을 지우기 전까지 보관할 일수         | `90`                           |
 | `PORTONE_AMOUNT_MISMATCH_CANCEL_REASON` | 금액 불일치 자동 취소 때 PortOne에 보낼 취소 사유    | `결제 금액 불일치로 자동 취소` |
+| `PORTONE_DUPLICATE_CANCEL_REASON`       | 중복 결제 자동 취소 때 PortOne에 보낼 취소 사유      | `중복 결제로 자동 취소`        |
 
 ### 2. 설정 / 마이그레이션 발행
 
@@ -124,12 +127,14 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
 | ------ | ------------------------------- | --------------------------------------- | ------------------------------ |
 | v0.3.0 | `amount_mismatch_cancel_reason` | `PORTONE_AMOUNT_MISMATCH_CANCEL_REASON` | `결제 금액 불일치로 자동 취소` |
 | v0.7.0 | `webhook_retention_days`        | `PORTONE_WEBHOOK_RETENTION_DAYS`        | `90`                           |
+| v0.7.0 | `duplicate_cancel_reason`       | `PORTONE_DUPLICATE_CANCEL_REASON`       | `중복 결제로 자동 취소`        |
 
 ```php
 // config/portone.php (v0.3.0에서 추가)
 'amount_mismatch_cancel_reason' => env('PORTONE_AMOUNT_MISMATCH_CANCEL_REASON') ?: '결제 금액 불일치로 자동 취소',
 // config/portone.php (v0.7.0에서 추가)
 'webhook_retention_days' => (int) (env('PORTONE_WEBHOOK_RETENTION_DAYS') ?: 90),
+'duplicate_cancel_reason' => env('PORTONE_DUPLICATE_CANCEL_REASON') ?: '중복 결제로 자동 취소',
 ```
 
 ### 버전별 동작 변경
@@ -162,6 +167,9 @@ Laravel은 발행할 때 파일명 앞 날짜를 발행 시각으로 바꾸므�
   - **`Transaction.Paid` 웹훅으로 결제 확정(동작 변경):** 패키지가 `Transaction.Paid` 웹훅을 받으면 `completeByPaymentId()`와 같은 규칙으로
     결제를 확정합니다. `PaymentPaid`·`WebhookReceived` 리스너에서 `completeByPaymentId()`·`completePayment()`를 부르던 코드는 지우세요.
     그대로 둬도 이미 `PAID`인 레코드는 바뀌지 않고 이벤트도 다시 나가지 않습니다.
+  - **새 상태값 `DUPLICATE_CANCELLED`·`DUPLICATE`:** `allowsOnlyOnePaidPayment()`가 `true`인 모델에 이미 결제된 레코드가 있으면 두 번째로
+    결제된 건은 `PAID`가 되지 않고 자동 전액 취소됩니다([중복 결제 자동 취소](#중복-결제-자동-취소)). 기본값은 `false`라 기존 모델은 그대로입니다.
+    `status`로 분기하던 코드는 두 상태를 처리하세요. 새 예외 `DuplicatePaymentException`, 새 설정 키 `duplicate_cancel_reason`.
   - 처리된 웹훅 기록을 정리하려면 `model:prune`에 `Cable8mm\LaravelPortone\Models\Webhook`을 추가하세요([웹훅 기록](#웹훅-기록)).
 - **v0.6.0**
   - **체크아웃 단일 리다이렉트 흐름(동작 변경):** `requestPayment`에 `redirectUrl`과 `forceRedirect: true`를 넣어 PC·모바일이 같은 흐름으로 동작합니다.
@@ -452,13 +460,14 @@ Event::listen(PaymentCompleted::class, function (PaymentCompleted $event) {
 
 PortOne 콘솔이나 다른 시스템에서 환불하면 `Transaction.Cancelled`·`Transaction.PartialCancelled` 웹훅이 옵니다. 패키지는 서명을 검증한 뒤
 **이벤트를 보내기 전에** PortOne에 결제를 다시 조회해 레코드를 맞춥니다. 레코드가 바뀌면 `PaymentRefunded`·`PaymentPartiallyRefunded`
-(`AMOUNT_MISMATCH`였으면 `PaymentAmountMismatched`)가 `source` = `webhook`으로 발송되고, `WebhookReceived` 리스너는 이미 갱신된 레코드를 읽습니다. 웹훅 내용이 아니라 PortOne 조회 결과(`amount.cancelled`)를 기준으로 합니다.
+(`AMOUNT_MISMATCH`였으면 `PaymentAmountMismatched`, `DUPLICATE`였으면 `PaymentDuplicated`)가 `source` = `webhook`으로 발송되고, `WebhookReceived` 리스너는 이미 갱신된 레코드를 읽습니다. 웹훅 내용이 아니라 PortOne 조회 결과(`amount.cancelled`)를 기준으로 합니다.
 
 | 로컬 상태                    | PortOne 조회 결과                             | 결과                                                  |
 | ---------------------------- | --------------------------------------------- | ----------------------------------------------------- |
 | `PAID`·`PARTIALLY_CANCELLED` | `CANCELLED`, 취소 총액 = `amount`             | `CANCELLED`, `cancelled_amount` = 취소 총액           |
 | `PAID`·`PARTIALLY_CANCELLED` | `PARTIAL_CANCELLED`, 0 < 취소 총액 < `amount` | `PARTIALLY_CANCELLED`, `cancelled_amount` = 취소 총액 |
 | `AMOUNT_MISMATCH`            | `CANCELLED`, 취소 총액 = `paid_amount`        | `AMOUNT_MISMATCH_CANCELLED`                           |
+| `DUPLICATE`                  | `CANCELLED`, 취소 총액 = `paid_amount`        | `DUPLICATE_CANCELLED`                                 |
 | 그 밖                        | 그 밖(아직 `PAID` 등)                         | 그대로. 결제 이벤트 없음, `WebhookReceived`만         |
 
 - `refund()`와 같은 잠금을 쓰고 절대값으로 저장하므로 같은 웹훅이 여러 번 와도 결과가 같습니다.
@@ -484,6 +493,7 @@ $payment = app(PaymentOperations::class)->syncByPaymentId($paymentId);
 - 이미 브라우저 복귀로 확정된 결제면 바뀌는 것이 없어 `PaymentCompleted`가 다시 나가지 않음
 - PortOne이 아직 결제되지 않았다고 하거나 이 패키지가 만들지 않은 결제면 그대로 두고 웹훅 처리는 성공
 - 금액이 다르면 금액 불일치 규칙대로 저장하고 웹훅 처리는 성공
+- 한 번만 결제되는 모델의 두 번째 결제면 중복 결제 규칙대로 저장하고 웹훅 처리는 성공
 - PortOne 조회 실패·설정 누락이면 `WebhookFailed`, 요청 실패, PortOne이 다시 보냄
 
 웹훅 없이 결제 ID만으로 확정하려면 `PaymentOperations::completeByPaymentId()`를 부르세요. 결제가 없으면 `PaymentNotFoundException`입니다.
@@ -500,9 +510,12 @@ $payment = app(PaymentOperations::class)->syncByPaymentId($paymentId);
 - 금액 불일치: `PENDING`·`EXPIRED` → `AMOUNT_MISMATCH_CANCELLED`(자동 취소 성공) 또는 `AMOUNT_MISMATCH`(자동 취소 실패).
   두 상태는 환불할 수 없습니다. `AMOUNT_MISMATCH`를 PortOne 콘솔에서 취소하면 [취소 동기화](#취소-웹훅과-결제-레코드-동기화)가
   `AMOUNT_MISMATCH_CANCELLED`로 바꿉니다
+- 중복 결제: 한 번만 결제되는 모델의 `PENDING`·`EXPIRED` → `DUPLICATE_CANCELLED`(자동 취소 성공) 또는 `DUPLICATE`(자동 취소 실패).
+  두 상태는 환불할 수 없습니다. `DUPLICATE`를 PortOne 콘솔에서 취소하면 [취소 동기화](#취소-웹훅과-결제-레코드-동기화)가
+  `DUPLICATE_CANCELLED`로 바꿉니다
 - PortOne 콘솔 등에서 환불한 결제는 취소 웹훅이나 `syncByPaymentId()`로 `PARTIALLY_CANCELLED`·`CANCELLED`가 됩니다
 
-`paid_amount`는 **PortOne이 알려 준 실결제액**입니다. PAID로 확정할 때와 금액 불일치 때 저장하므로, 상태와 상관없이
+`paid_amount`는 **PortOne이 알려 준 실결제액**입니다. PAID로 확정할 때와 금액 불일치·중복 결제 때 저장하므로, 상태와 상관없이
 `paid_amount` 하나로 실결제액을 볼 수 있습니다. `PENDING`·`EXPIRED`처럼 PortOne이 아직 실결제액을 알려 주지 않은 결제만 `null`입니다.
 환불해도 `paid_amount`는 바뀌지 않고, 환불액은 `cancelled_amount`에 쌓입니다.
 
@@ -576,6 +589,57 @@ try {
   Payment::query()->where('status', 'AMOUNT_MISMATCH')->get();
   ```
 
+## 중복 결제 자동 취소
+
+주문처럼 **한 번만 결제되어야 하는 모델**은 구매자가 결제 창을 두 번 열어 둘 다 결제할 수 있습니다. 모델에서
+`allowsOnlyOnePaidPayment()`가 `true`를 반환하게 하면 패키지가 두 번째로 결제된 건을 PortOne에서 **전액** 취소합니다.
+기본값은 `false`입니다(사용자처럼 결제가 여러 번인 모델).
+
+```php
+class Order extends Model
+{
+    use Billable;
+
+    public function allowsOnlyOnePaidPayment(): bool
+    {
+        return true;
+    }
+}
+```
+
+결제 확정(`completePayment()`, `completeByPaymentId()`, `Transaction.Paid` 웹훅, 만료 검사 잡)이 결제·금액 일치인 결제를 만났을 때,
+같은 모델에 이미 `PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`인 결제가 있으면:
+
+1. `PAID`로 바꾸지 않고 PortOne에 전액 취소를 요청합니다. 사유는 `PORTONE_DUPLICATE_CANCEL_REASON`(기본값 `중복 결제로 자동 취소`)입니다.
+2. 결과를 레코드에 저장하고 `PaymentDuplicated`(`wasCancelled`)를 보냅니다.
+
+   | 결과      | `status`              | `paid_amount` | `cancelled_amount` | `paid_at` |
+   | --------- | --------------------- | ------------- | ------------------ | --------- |
+   | 취소 성공 | `DUPLICATE_CANCELLED` | 실결제액      | 실결제액           | 현재 시각 |
+   | 취소 실패 | `DUPLICATE`           | 실결제액      | `0`                | 현재 시각 |
+
+3. `completePayment()`·`completeByPaymentId()`는 `DuplicatePaymentException`을 던집니다. 웹훅 처리는 성공으로 끝나고, 만료 검사 잡은
+   금액 불일치와 같이 취소가 실패했을 때만 PortOne 예외로 실패합니다.
+
+```php
+use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
+
+try {
+    $order->completePayment($paymentId);
+} catch (DuplicatePaymentException $e) {
+    $e->paidAmount();   // PortOne 실결제액 (원)
+    $e->wasCancelled(); // 자동 취소 성공 여부
+    $e->getPrevious();  // 취소 실패 때 PortOne 예외, 성공이면 null
+}
+```
+
+- 같은 모델의 결제 확정은 모델 단위로 잠가 차례로 처리하므로, 두 결제가 동시에 확정돼도 `PAID`는 하나뿐입니다.
+- 웹훅·만료 검사처럼 결제 ID만으로 확정할 때는 결제 레코드의 `billable_type`·`billable_id`로 모델을 조회해 `allowsOnlyOnePaidPayment()`를
+  부릅니다. 모델을 찾을 수 없으면 `false`로 봅니다.
+- 이미 `DUPLICATE_CANCELLED`·`DUPLICATE`인 결제를 다시 확정하면 PortOne을 부르지 않고 레코드를 그대로 반환합니다.
+- `DUPLICATE`는 `AMOUNT_MISMATCH`처럼 **운영자가 처리해야 하는 건**입니다. 포트원 콘솔에서 취소하면 취소 웹훅이나 `syncByPaymentId()`가
+  `DUPLICATE_CANCELLED`로 기록합니다.
+
 ## 결제 대기 건 만료와 정리
 
 결제를 시작(`prepare`)하고 끝내지 않은 `PENDING` 결제는 그대로 쌓입니다. 패키지는 스케줄을
@@ -599,11 +663,12 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
   (실제 관측), `completePayment()`를 부르거나 `Transaction.Paid` 웹훅이 오면 `PAID`로 복구됩니다.
 - 잡은 레코드를 바꾼 뒤(커밋 뒤) 결과를 `source` = `expiry`인 [결제 이벤트](#결제-이벤트)로 알립니다. 바꾼 것이 없으면 보내지 않습니다.
 
-  | 결과                                | 이벤트                                     |
-  | ----------------------------------- | ------------------------------------------ |
-  | 미결제 확정 → `EXPIRED`             | `PaymentExpired`                           |
-  | 뒤늦은 결제(금액 일치) → `PAID`     | `PaymentCompleted`                         |
-  | 다른 금액으로 결제 → 자동 취소 규칙 | `PaymentAmountMismatched` (`wasCancelled`) |
+  | 결과                                 | 이벤트                                     |
+  | ------------------------------------ | ------------------------------------------ |
+  | 미결제 확정 → `EXPIRED`              | `PaymentExpired`                           |
+  | 뒤늦은 결제(금액 일치) → `PAID`      | `PaymentCompleted`                         |
+  | 다른 금액으로 결제 → 자동 취소 규칙  | `PaymentAmountMismatched` (`wasCancelled`) |
+  | 한 번만 결제되는 모델의 두 번째 결제 | `PaymentDuplicated` (`wasCancelled`)       |
 
   자동 취소가 실패하면(`wasCancelled` false, `AMOUNT_MISMATCH`) 이벤트를 보낸 다음 잡이 PortOne 예외로 실패합니다.
 
@@ -617,21 +682,22 @@ Schedule::command('model:prune', ['--model' => [Payment::class]])->daily();
   ```
 
 - `model:prune`은 `PORTONE_EXPIRED_RETENTION_DAYS`일이 지난 `EXPIRED` 결제만 지웁니다.
-  결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 기록과 금액 불일치(`AMOUNT_MISMATCH_CANCELLED`·`AMOUNT_MISMATCH`) 기록은 절대 지우지 않습니다.
+  결제된(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`) 기록과 금액 불일치(`AMOUNT_MISMATCH_CANCELLED`·`AMOUNT_MISMATCH`)·중복 결제(`DUPLICATE_CANCELLED`·`DUPLICATE`) 기록은 절대 지우지 않습니다.
 - 웹 요청(예: 관리자 화면의 버튼)에서 만료 검사를 바로 돌리려면 `Artisan::queue('portone:expire-pending')`를
   쓰세요. 패키지 명령은 콘솔에서만 등록되므로 웹 요청 안의 `Artisan::call()`은 "command does not exist"로 실패합니다.
 
 ## 예외
 
-| 예외                                        | HTTP (스텁 기준) | 의미                                                                                |
-| ------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
-| `PaymentNotFoundException`                  | `422`            | 내 범위에 해당 `payment_id` 없음                                                    |
-| `PaymentNotPaidException`                   | `422`            | PortOne에서 미결제 상태                                                             |
-| `AmountMismatchException`                   | `422`            | 서버 금액과 PortOne 실결제액 불일치. 결제는 자동 전액 취소됨(`wasCancelled()`)      |
-| `InvalidPaymentStatusException`             | —                | 결제되지 않았거나(`PENDING`·`EXPIRED`) 이미 전액 취소됐거나 금액 불일치 결제를 환불 |
-| `InvalidRefundAmountException`              | —                | 환불 금액이 0 이하이거나 환불 가능액 초과                                           |
-| `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락                                                      |
-| `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)                                                 |
+| 예외                                        | HTTP (스텁 기준) | 의미                                                                                     |
+| ------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| `PaymentNotFoundException`                  | `422`            | 내 범위에 해당 `payment_id` 없음                                                         |
+| `PaymentNotPaidException`                   | `422`            | PortOne에서 미결제 상태                                                                  |
+| `AmountMismatchException`                   | `422`            | 서버 금액과 PortOne 실결제액 불일치. 결제는 자동 전액 취소됨(`wasCancelled()`)           |
+| `DuplicatePaymentException`                 | `422`            | 한 번만 결제되는 모델에 이미 결제된 건이 있음. 결제는 자동 전액 취소됨(`wasCancelled()`) |
+| `InvalidPaymentStatusException`             | —                | 결제되지 않았거나(`PENDING`·`EXPIRED`) 이미 전액 취소됐거나 금액 불일치·중복 결제를 환불 |
+| `InvalidRefundAmountException`              | —                | 환불 금액이 0 이하이거나 환불 가능액 초과                                                |
+| `ConfigurationException`                    | `500`            | `api_secret` 등 필수 설정 누락                                                           |
+| `PortOneException` (`cable8mm/portone-php`) | `500`            | PortOne API 실패 (원문 그대로 전달)                                                      |
 
 ## 테스트 도우미
 

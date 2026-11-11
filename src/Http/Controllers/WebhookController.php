@@ -9,6 +9,7 @@ use Cable8mm\LaravelPortone\Events\WebhookFailed;
 use Cable8mm\LaravelPortone\Events\WebhookReceived;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
+use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\PaymentOperations;
@@ -135,8 +136,8 @@ final class WebhookController
                 'Transaction.Cancelled', 'Transaction.PartialCancelled' => $operations->syncByPaymentId($webhook->data->paymentId, PaymentEventSource::Webhook),
                 default => null,
             };
-        } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException) {
-            // 이 패키지로 만들지 않은 결제, 아직 결제되지 않은 결제, 저장을 마친 금액 불일치는 처리 성공이다.
+        } catch (PaymentNotFoundException|PaymentNotPaidException|AmountMismatchException|DuplicatePaymentException) {
+            // 이 패키지로 만들지 않은 결제, 아직 결제되지 않은 결제, 저장을 마친 금액 불일치·중복 결제는 처리 성공이다.
         }
     }
 }

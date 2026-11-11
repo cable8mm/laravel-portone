@@ -10,6 +10,7 @@ use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -130,6 +131,84 @@ class PaymentLedger
     }
 
     /**
+     * Billable 참조(타입·키)의 결제 레코드를 모두 id 순서로 잠근 채 콜백을 실행한다.
+     *
+     * 한 번만 결제되는 Billable 모델의 결제 확정 전용이다. 레코드 자신의 잠금보다 먼저 잡아,
+     * 같은 모델의 두 결제가 동시에 확정되어도 차례로 처리되게 한다.
+     *
+     * @template TResult
+     *
+     * @param  string  $billableType  소유 Billable 모델의 morph 타입
+     * @param  string  $billableId  소유 Billable 모델의 키
+     * @param  Closure(): TResult  $operation  잠금 안에서 실행할 연산
+     * @return TResult 콜백이 반환한 값
+     */
+    public function withBillableExclusiveAccess(string $billableType, string $billableId, Closure $operation): mixed
+    {
+        return DB::transaction(function () use ($billableType, $billableId, $operation): mixed {
+            Payment::query()
+                ->where('billable_type', $billableType)
+                ->where('billable_id', $billableId)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->pluck('id');
+
+            return $operation();
+        });
+    }
+
+    /**
+     * 결제 ID로 소유 Billable 참조를 읽는다. 잠그지 않는다.
+     *
+     * @param  string  $paymentId  PortOne 결제 식별자
+     * @return array{0: string, 1: string}|null [morph 타입, 키], 레코드가 없으면 null
+     */
+    public function billableReference(string $paymentId): ?array
+    {
+        $payment = Payment::query()
+            ->where('payment_id', $paymentId)
+            ->first(['billable_type', 'billable_id']);
+
+        return $payment === null ? null : [$payment->billable_type, $payment->billable_id];
+    }
+
+    /**
+     * Billable 참조가 가리키는 모델을 조회한다.
+     *
+     * @param  string  $billableType  소유 Billable 모델의 morph 타입
+     * @param  string  $billableId  소유 Billable 모델의 키
+     * @return Model|null 소유 Billable 모델, 클래스나 레코드를 찾을 수 없으면 null
+     */
+    public function billableModel(string $billableType, string $billableId): ?Model
+    {
+        $class = Relation::getMorphedModel($billableType) ?? $billableType;
+
+        if (! class_exists($class) || ! is_subclass_of($class, Model::class)) {
+            return null;
+        }
+
+        return $class::query()->find($billableId);
+    }
+
+    /**
+     * 같은 Billable 참조에 이 레코드 말고 이미 결제된(PAID·PARTIALLY_CANCELLED·CANCELLED) 레코드가 있는지 확인한다.
+     *
+     * withBillableExclusiveAccess() 안에서 부르며, 커밋된 최신 값을 읽도록 잠금 조회를 쓴다.
+     *
+     * @param  Payment  $payment  확정하려는 결제 레코드
+     */
+    public function hasOtherPaid(Payment $payment): bool
+    {
+        return Payment::query()
+            ->where('billable_type', $payment->billable_type)
+            ->where('billable_id', $payment->billable_id)
+            ->whereKeyNot($payment->getKey())
+            ->whereIn('status', ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'])
+            ->lockForUpdate()
+            ->exists();
+    }
+
+    /**
      * 기준 시각보다 먼저 만들어진 PENDING 결제를 모든 Billable에 걸쳐 고른다.
      *
      * 만료 명령 전용인 유일한 범위 밖 조회이며, 각 레코드의 Billable 참조와 결제 ID만 돌려준다.
@@ -150,7 +229,7 @@ class PaymentLedger
      * 미리 계산된 결과 값을 레코드에 그대로 쓴다. 증가분이 아닌 절대값이다.
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon, paid_amount: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
+     * @param  array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
      * @return Payment 갱신된 결제 레코드
      */
     public function update(Payment $payment, array $values): Payment
@@ -199,6 +278,17 @@ class PaymentLedger
                 }
             }
         }
+    }
+
+    /**
+     * Billable 모델의 참조(morph 타입, 문자열 키)를 반환한다.
+     *
+     * @param  Model  $billable  참조를 만들 Billable 모델
+     * @return array{0: string, 1: string} [morph 타입, 키]
+     */
+    public function reference(Model $billable): array
+    {
+        return [$billable->getMorphClass(), $this->billableId($billable)];
     }
 
     /**

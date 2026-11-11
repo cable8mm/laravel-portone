@@ -7,6 +7,7 @@ namespace Cable8mm\LaravelPortone\Concerns;
 use Cable8mm\LaravelPortone\CustomerRegistry;
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
+use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidPaymentStatusException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidRefundAmountException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
@@ -81,12 +82,27 @@ trait Billable
      * @throws PaymentNotFoundException 내 범위에 해당 결제가 없을 때
      * @throws PaymentNotPaidException PortOne에서 미결제로 조회될 때
      * @throws AmountMismatchException 서버 금액과 PortOne 실결제액이 다를 때
+     * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있어 이 결제를 자동 취소했을 때
      * @throws ConfigurationException API Secret이 설정되지 않았을 때
      * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
      */
     public function completePayment(string $paymentId): Payment
     {
         return app(PaymentOperations::class)->complete($this, $paymentId);
+    }
+
+    /**
+     * 이 모델이 한 번만 결제되는지(예: 주문) 선언한다. 기본값은 false이다.
+     *
+     * true를 반환하면 이 모델의 결제 확정은 모델 단위 배타 접근 안에서 이루어지고, 이미 PAID·PARTIALLY_CANCELLED·
+     * CANCELLED인 결제가 있을 때 두 번째로 결제된 건은 PAID가 되지 않고 PortOne에서 자동 전액 취소된다
+     * (DUPLICATE_CANCELLED, 취소 실패 시 DUPLICATE).
+     * 웹훅·만료 검사처럼 결제 ID만으로 확정할 때는 결제 레코드의 billable_type·billable_id로 모델을 조회해 호출하며,
+     * 모델을 찾을 수 없으면 false로 본다.
+     */
+    public function allowsOnlyOnePaidPayment(): bool
+    {
+        return false;
     }
 
     /**

@@ -13,4 +13,5 @@ return [
     'expired_retention_days' => (int) (env('PORTONE_EXPIRED_RETENTION_DAYS') ?: 90),
     'webhook_retention_days' => (int) (env('PORTONE_WEBHOOK_RETENTION_DAYS') ?: 90),
     'amount_mismatch_cancel_reason' => env('PORTONE_AMOUNT_MISMATCH_CANCEL_REASON') ?: '결제 금액 불일치로 자동 취소',
+    'duplicate_cancel_reason' => env('PORTONE_DUPLICATE_CANCEL_REASON') ?: '중복 결제로 자동 취소',
 ];

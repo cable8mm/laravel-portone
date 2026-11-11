@@ -481,7 +481,7 @@
     - A live payment completed by the browser return and then by its Transaction.Paid webhook dispatches PaymentCompleted once; the observation is recorded.
     - Unit tests and static checks pass.
 
-- [ ] T-041 Duplicate payment cancellation
+- [x] T-041 Duplicate payment cancellation
   - Satisfies: PRODUCT_SPEC.md EL-069, Outputs (DUPLICATE_CANCELLED, DUPLICATE), FR-023, FR-060, FR-064, FR-083, FR-107, FR-109 to FR-112, ERR-008, ERR-020, AC-095 to AC-097; ARCHITECTURE.md Core Concepts, SF-12, RD-44
   - Depends on: T-040
   - External boundary: yes (automatic cancellation at live PortOne)
