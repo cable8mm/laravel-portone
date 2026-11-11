@@ -549,7 +549,7 @@
     - A migration adds the Subscription record table and the subscription reference of Payment records.
     - Renewal, retry with EL-058, expiry, cancel at period end, resume, and billing-key change follow SCR-013; a re-run after a crash never charges a period twice.
     - EL-075 refuses a billing key charged by an ACTIVE or PAST_DUE Subscription record with InvalidBillingKeyException, sends no request, and changes no record (FR-123, ERR-024, AC-102).
-    - The duplicate-payment rules do not apply to the first charge of EL-079 or to renewals (FR-164, AC-114).
+    - The duplicate-payment rules do not apply to the first charge of EL-079 or to renewals, and subscription payments do not count as another paid payment (FR-164, AC-114).
     - A live subscription is started, renewed once by EL-085 with a forced due time, and fails a renewal with a refused billing key into PAST_DUE; the observation is recorded.
     - Unit tests and static checks pass.
 
