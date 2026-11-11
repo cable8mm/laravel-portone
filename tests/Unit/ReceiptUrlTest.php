@@ -9,7 +9,6 @@ use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\GatewayPayment;
 use Cable8mm\LaravelPortone\Models\Payment;
-use Cable8mm\LaravelPortone\PaymentGateway;
 use Cable8mm\LaravelPortone\PaymentOperations;
 use Cable8mm\LaravelPortone\PortOneGateway;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
@@ -22,7 +21,7 @@ use Orchestra\Testbench\TestCase;
 
 /**
  * T-042: every write that applies a PortOne lookup stores its receiptUrl in receipt_url, and a lookup without
- * one leaves receipt_url unchanged (FR-113, FR-114, AC-098).
+ * one leaves receipt_url unchanged (FR-113, FR-114, AC-098). T-052: the receipt URL is set on FakePaymentGateway (FR-089).
  *
  * The live lookups recorded in tests/E2E/portone-receipt-url-observation.json carry a non-empty receiptUrl on
  * host testpartner.kcp.co.kr for a PAID and a CANCELLED payment; the URL paths here are placeholders because
@@ -35,8 +34,6 @@ class ReceiptUrlTest extends TestCase
     private const CANCELLED_RECEIPT = 'https://testpartner.kcp.co.kr/receipt-cancelled';
 
     private FakePaymentGateway $fake;
-
-    private ReceiptGateway $gateway;
 
     protected function getPackageProviders($app): array
     {
@@ -58,8 +55,6 @@ class ReceiptUrlTest extends TestCase
         }
 
         $this->fake = FakePaymentGateway::bind();
-        $this->gateway = new ReceiptGateway($this->fake);
-        $this->app->instance(PaymentGateway::class, $this->gateway);
     }
 
     public function test_lookup_maps_receipt_url_and_treats_missing_or_empty_as_none(): void
@@ -215,8 +210,7 @@ class ReceiptUrlTest extends TestCase
 
     private function respond(string $paymentId, string $status, ?int $total, ?int $cancelled, ?string $receiptUrl): void
     {
-        $this->fake->payment($paymentId, $status, totalAmount: $total, cancelledAmount: $cancelled);
-        $this->gateway->receiptUrls[$paymentId] = $receiptUrl;
+        $this->fake->payment($paymentId, $status, totalAmount: $total, cancelledAmount: $cancelled, receiptUrl: $receiptUrl);
     }
 
     private function stored(ReceiptUser|ReceiptOrder $billable, string $status, ?string $receiptUrl = null): Payment
@@ -257,37 +251,6 @@ class ReceiptUrlTest extends TestCase
                 return $this->gatewayPayment('PAID', $data);
             }
         })->map($data);
-    }
-}
-
-/**
- * Adds a receiptUrl per Payment ID to the results of FakePaymentGateway, which sets status and amounts only.
- */
-class ReceiptGateway implements PaymentGateway
-{
-    /** @var array<string, string|null> */
-    public array $receiptUrls = [];
-
-    public function __construct(private readonly FakePaymentGateway $fake) {}
-
-    public function lookup(string $paymentId): GatewayPayment
-    {
-        return $this->withReceipt($paymentId, $this->fake->lookup($paymentId));
-    }
-
-    public function lookupForExpiry(string $paymentId): GatewayPayment
-    {
-        return $this->withReceipt($paymentId, $this->fake->lookupForExpiry($paymentId));
-    }
-
-    public function cancel(string $paymentId, string $reason, ?int $amount): void
-    {
-        $this->fake->cancel($paymentId, $reason, $amount);
-    }
-
-    private function withReceipt(string $paymentId, GatewayPayment $result): GatewayPayment
-    {
-        return new GatewayPayment($result->status, $result->totalAmount, $result->found, $result->cancelledAmount, $this->receiptUrls[$paymentId] ?? null);
     }
 }
 

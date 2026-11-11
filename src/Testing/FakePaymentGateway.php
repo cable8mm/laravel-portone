@@ -19,7 +19,7 @@ use Throwable;
  * cancel()은 기록만 하며 지정한 응답을 바꾸지 않는다. 취소 뒤의 조회 결과는 payment()로 다시 지정한다.
  *
  *     $gateway = FakePaymentGateway::bind()
- *         ->payment($paymentId, 'PAID', totalAmount: 10000, cancelledAmount: 0);
+ *         ->payment($paymentId, 'PAID', totalAmount: 10000, cancelledAmount: 0, receiptUrl: 'https://example.com/receipt');
  *     // ... 테스트 대상 실행
  *     $gateway->assertLookedUp($paymentId, times: 1);
  *     $gateway->assertCancelled($paymentId, fn (string $reason, ?int $amount): bool => $amount === null);
@@ -57,10 +57,11 @@ final class FakePaymentGateway implements PaymentGateway
      * @param  string  $status  PortOne 결제 상태(예: PAID, PARTIAL_CANCELLED, CANCELLED, READY, FAILED)
      * @param  int|null  $totalAmount  실결제 총액(amount.total)
      * @param  int|null  $cancelledAmount  취소 총액(amount.cancelled)
+     * @param  string|null  $receiptUrl  영수증 URL(receiptUrl). null이면 조회 결과에 영수증 URL이 없다.
      */
-    public function payment(string $paymentId, string $status, ?int $totalAmount = null, ?int $cancelledAmount = null): self
+    public function payment(string $paymentId, string $status, ?int $totalAmount = null, ?int $cancelledAmount = null, ?string $receiptUrl = null): self
     {
-        $this->payments[$paymentId] = new GatewayPayment($status, $totalAmount, cancelledAmount: $cancelledAmount);
+        $this->payments[$paymentId] = new GatewayPayment($status, $totalAmount, cancelledAmount: $cancelledAmount, receiptUrl: $receiptUrl);
 
         return $this;
     }

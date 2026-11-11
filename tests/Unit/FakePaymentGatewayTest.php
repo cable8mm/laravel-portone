@@ -44,6 +44,18 @@ class FakePaymentGatewayTest extends TestCase
         $this->assertSame('PARTIAL_CANCELLED', $gateway->lookupForExpiry('payment-1')->status);
     }
 
+    public function test_set_receipt_url_is_returned_and_none_by_default(): void
+    {
+        $gateway = (new FakePaymentGateway)
+            ->payment('payment-1', 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: 'https://example.com/receipt-1')
+            ->payment('payment-2', 'PAID', totalAmount: 100, cancelledAmount: 0);
+
+        $this->assertSame('https://example.com/receipt-1', $gateway->lookup('payment-1')->receiptUrl);
+        $this->assertSame('https://example.com/receipt-1', $gateway->lookupForExpiry('payment-1')->receiptUrl);
+        $this->assertNull($gateway->lookup('payment-2')->receiptUrl);
+        $this->assertNull($gateway->lookupForExpiry('never-opened')->receiptUrl);
+    }
+
     public function test_unset_payment_is_unknown_to_portone(): void
     {
         $gateway = new FakePaymentGateway;
