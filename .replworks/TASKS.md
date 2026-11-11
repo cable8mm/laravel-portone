@@ -529,7 +529,7 @@
     - The observation states which fields FR-121, FR-125, FR-126, and FR-127 rely on.
     - The [UNVERIFIED] mark is cleared only after human confirmation.
 
-- [ ] T-046 Billing keys and billing-key charges
+- [x] T-046 Billing keys and billing-key charges
   - Satisfies: PRODUCT_SPEC.md SCR-012 (EL-070 to EL-077), Inputs (Issue ID), FR-118 to FR-130, FR-163, ERR-023 to ERR-025, ERR-028, AC-100 to AC-105; ARCHITECTURE.md SF-13, SF-14, CMP-07, CMP-08, CMP-23, AR-06, AR-17, RD-47, RD-48
   - Depends on: T-040, T-045
   - External boundary: yes

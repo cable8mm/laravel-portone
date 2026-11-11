@@ -10,7 +10,7 @@
     <main data-workbench-billing-key data-result="pending">
         <button id="workbench-billing-key-button" type="button" disabled>Register a test card ({{ $issuance['issueName'] }})</button>
     </main>
-    <script id="workbench-billing-key-config" type="application/json">@json(['storeId' => $storeId, 'channelKey' => $channelKey, 'issuance' => $issuance, 'redirectUrl' => $redirectUrl])</script>
+    <script id="workbench-billing-key-config" type="application/json">{!! json_encode(compact('storeId', 'channelKey', 'issuance', 'redirectUrl'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) !!}</script>
     <script type="module">
         import PortOne from "{{ $sdkUrl }}";
 
