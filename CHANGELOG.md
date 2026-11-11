@@ -1,5 +1,45 @@
 # Release Notes
 
+## v0.7.0 - 2026-11-11
+
+v0.7.0은 웹훅 기록과 중복 처리 방지, 상태 변경마다 한 번만 발송되는 결제 이벤트, 한 번만 결제되는 모델(`allowsOnlyOnePaidPayment()`)의 중복 결제 자동 취소, PortOne 영수증 URL(`receipt_url`) 저장, 빌링키 발급·확인·삭제와 빌링키 결제(`chargeBillingKey()`)를 추가합니다. 테스트용 `FakePaymentGateway`에서 영수증 URL을 지정할 수 있습니다. 구독과 빌링키·React 스텁은 이 버전에 포함되지 않습니다.
+
+### 호환성이 깨지는 변경
+
+README "업그레이드 > v0.6.x에서 v0.7.0으로"를 참고하세요.
+
+- `cable8mm/portone-php` `^0.7.0` 필요
+- 마이그레이션 4개 필수: `create_portone_webhooks_table`, `add_receipt_url_to_portone_payments_table`, `create_portone_billing_keys_table`, `add_billing_key_to_portone_payments_table` (`vendor:publish --tag=portone-migrations` 후 `migrate`)
+- 이벤트 삭제: `PaymentPaid`→`PaymentCompleted`, `PaymentCancelled`→`PaymentRefunded`, `PaymentPartiallyCancelled`→`PaymentPartiallyRefunded`, `PaymentFailed`→없음(`WebhookReceived`의 `Transaction.Failed`), `PaymentPaidOnExpiry`→`PaymentCompleted`(`source`=`expiry`), `PaymentAmountMismatchedOnExpiry`→`PaymentAmountMismatched`(`source`=`expiry`), `PaymentWebhookEvent`·`PaymentExpiryEvent`→`PaymentEvent`
+- `PaymentExpired` 생성자가 `(payment, source)`로 변경, `source` 속성 추가
+- `Transaction.Paid` 웹훅이 결제를 자동 확정: 리스너의 `completeByPaymentId()`·`completePayment()` 호출 제거
+- `WebhookReceived`는 `webhook-id`당 한 번만 발송, 처리 실패 시 `WebhookFailed`
+- `Billable`에 새 메서드(`allowsOnlyOnePaidPayment`, `prepareBillingKey`, `completeBillingKey`, `billingKeys`, `deleteBillingKey`, `chargeBillingKey`): 같은 이름의 모델 메서드는 이름 변경 필요
+
+### What's Changed
+
+* test: drop an assertion PHPStan 2.3.5 proves always true by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/50
+* docs(spec): plan v0.7.0 webhook log, payment events, billing keys, and subscriptions by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/51
+* build: require cable8mm/portone-php ^0.7.0 by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/52
+* docs(architecture): align webhook and duplicate rules with the v0.7.0 spec by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/53
+* feat: record webhooks and process each webhook-id once by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/54
+* docs(tasks): defer easy payments to v0.8.0 by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/55
+* feat!: dispatch one payment event per status change by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/56
+* chore(deps): bump [@vitest](https://github.com/vitest)/mocker and vitest by [@dependabot](https://github.com/dependabot)[bot] in https://github.com/cable8mm/laravel-portone/pull/48
+* feat: cancel the second paid payment of a single-payment billable by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/57
+* feat: store the PortOne receipt URL on payment records by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/58
+* feat(testing): set the receipt URL on the fake gateway by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/59
+* test: observe billing-key issuance, charge, and deletion (T-045) by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/60
+* feat: billing keys and billing-key charges by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/61
+* docs(tasks): release v0.7.0 without subscriptions and stubs by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/62
+* docs: document v0.7.0 features and upgrade from v0.6.x by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/63
+
+### New Contributors
+
+* [@dependabot](https://github.com/dependabot)[bot] made their first contribution in https://github.com/cable8mm/laravel-portone/pull/48
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.6.0...v0.7.0
+
 ## v0.6.0 - 2026-10-16
 
 ### What's Changed
