@@ -35,7 +35,7 @@
 - **Single-payment Billable model**: a Billable model whose EL-069 returns true. Its Payment records are completed under exclusive access of the Billable reference, so that at most one becomes PAID (RD-44).
 - **Exclusive access**: a period during which no other operation of the Package can read a given Payment record for a decision or write it. Provided by the Payment Ledger, requested by Payment Operations.
 - **Precomputed outcome**: the complete set of absolute field values (status, cancelled_amount, paid_at, paid_amount) computed before any PortOne request that changes remote state. Written to the record as absolute values, never as increments.
-- **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status, the total paid amount when paid, and the cancelled amount (amount.cancelled) when PortOne reports one. For an expiry check only, it can also say that PortOne does not know the payment.
+- **Gateway result**: what the PortOne Gateway returns for a payment lookup: the PortOne payment status, the total paid amount when paid, the cancelled amount (amount.cancelled) when PortOne reports one, and the receipt URL (receiptUrl) when PortOne reports one. For an expiry check only, it can also say that PortOne does not know the payment.
 - **Stale PENDING record**: a PENDING record whose created_at is older than EL-033.
 - **Verified webhook**: a webhook whose authenticity was established by the Webhook Verifier. The only kind of webhook the Package acts on.
 - **Cancellation sync**: SF-10. Reading the PortOne cancellation state of one payment and recording it in the Payment record. The only reconciliation with PortOne besides SF-7.
