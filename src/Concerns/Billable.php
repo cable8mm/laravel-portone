@@ -106,6 +106,7 @@ trait Billable
      * (DUPLICATE_CANCELLED, 취소 실패 시 DUPLICATE).
      * 웹훅·만료 검사처럼 결제 ID만으로 확정할 때는 결제 레코드의 billable_type·billable_id로 모델을 조회해 호출하며,
      * 모델을 찾을 수 없으면 false로 본다.
+     * 구독 결제(subscribe()의 첫 기간 결제와 갱신 결제)에는 이 규칙을 적용하지 않는다.
      */
     public function allowsOnlyOnePaidPayment(): bool
     {

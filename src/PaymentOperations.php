@@ -207,7 +207,8 @@ class PaymentOperations
 
             $outcome = $this->lifecycle->complete($payment, $gatewayPayment, now());
 
-            if ($singlePayment !== null && $this->payments->hasOtherPaid($payment)) {
+            // FR-164: a Payment record of a subscription is never cancelled as a duplicate.
+            if ($singlePayment !== null && $payment->subscription_id === null && $this->payments->hasOtherPaid($payment)) {
                 $failure = $this->cancelDuplicate($payment, $gatewayPayment, $source);
 
                 return $payment;
@@ -266,7 +267,7 @@ class PaymentOperations
 
             $outcome = $this->lifecycle->expire($payment, $gatewayPayment, now());
 
-            if ($outcome !== null && $outcome['status'] === 'PAID' && $singlePayment && $this->payments->hasOtherPaid($payment)) {
+            if ($outcome !== null && $outcome['status'] === 'PAID' && $singlePayment && $payment->subscription_id === null && $this->payments->hasOtherPaid($payment)) {
                 $cancellationFailure = $this->cancelDuplicate($payment, $gatewayPayment, PaymentEventSource::Expiry)->getPrevious();
 
                 return;
@@ -425,6 +426,7 @@ class PaymentOperations
      * @param  int  $amount  결제 금액(원, 0보다 커야 함)
      * @param  string  $orderName  주문명(빈 문자열 불가)
      * @param  int|null  $subscriptionId  구독 갱신 결제면 레코드를 만들 때 연결할 구독 기록의 키
+     * @param  bool  $forSubscription  구독 첫 기간 결제면 true. 구독 결제는 중복 결제 규칙을 적용하지 않는다(FR-164)
      * @return Payment 확정된 결제 레코드
      *
      * @throws \InvalidArgumentException 금액이 0 이하이거나 주문명이 비었을 때
@@ -433,7 +435,7 @@ class PaymentOperations
      * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
      * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
-    public function chargeBillingKey(Model $billable, string $issueId, int $amount, string $orderName, ?int $subscriptionId = null): Payment
+    public function chargeBillingKey(Model $billable, string $issueId, int $amount, string $orderName, ?int $subscriptionId = null, bool $forSubscription = false): Payment
     {
         if ($amount <= 0) {
             throw new \InvalidArgumentException('Payment amount must be greater than zero.');
@@ -453,6 +455,16 @@ class PaymentOperations
         });
 
         $this->billingKeyGateway->payWithBillingKey($payment->payment_id, $billingKey, $orderName, $amount);
+
+        if ($forSubscription || $subscriptionId !== null) {
+            $paymentId = $payment->payment_id;
+
+            return $this->completeLocked(
+                null,
+                fn (Closure $operation): Payment => $this->payments->withExclusiveAccessByPaymentId($paymentId, $operation),
+                PaymentEventSource::Charge,
+            );
+        }
 
         return $this->completeByPaymentId($payment->payment_id, PaymentEventSource::Charge);
     }
