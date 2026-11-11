@@ -181,7 +181,7 @@
 - Elements:
   - EL-001: hasPortOneId(): bool. Purpose: report whether a Customer record exists. User action: call.
   - EL-002: portOneId(): ?string. Purpose: return the Customer ID. User action: call.
-  - EL-069: allowsOnlyOnePaidPayment(): bool. Purpose: declare that the Billable model is paid at most once (for example an order), so that a second paid payment is cancelled (FR-109). Default false. User action: override.
+  - EL-069: allowsOnlyOnePaidPayment(): bool. Purpose: declare that the Billable model is paid at most once (for example an order), so that a second paid payment is cancelled (FR-109); Payment records of subscriptions are exempt (FR-164). Default false. User action: override.
   - EL-003: createOrGetPortOneCustomerId(): string. Purpose: ensure a Customer record exists and return its Customer ID. User action: call.
   - EL-004: preparePayment(int $amount, string $orderName): Payment. Purpose: create a Payment record before the Payer pays. User action: call.
   - EL-005: completePayment(string $paymentId): Payment. Purpose: verify with PortOne and mark a Payment record as paid. User action: call.
@@ -670,10 +670,11 @@
 
 ### Duplicate payment
 
-- FR-109: When a completion (EL-005, EL-032, FR-101, EL-076) finds a Payment record paid with the same amount, and its Billable model returns true from EL-069, and another Payment record of the same Billable model has status PAID, PARTIALLY_CANCELLED, or CANCELLED, the Package MUST NOT set PAID; it MUST send a cancellation request containing the Payment ID and the reason set by EL-055, without an amount.
+- FR-109: When a completion (EL-005, EL-032, FR-101, EL-076) other than one exempted by FR-164 finds a Payment record paid with the same amount, and its Billable model returns true from EL-069, and another Payment record of the same Billable model has status PAID, PARTIALLY_CANCELLED, or CANCELLED, the Package MUST NOT set PAID; it MUST send a cancellation request containing the Payment ID and the reason set by EL-055, without an amount.
 - FR-110: After PortOne accepts the cancellation request of FR-109, the Package MUST set status to DUPLICATE_CANCELLED, paid_amount and cancelled_amount to the total paid amount, and paid_at to the current time.
 - FR-111: When the cancellation request of FR-109 fails, the Package MUST set status to DUPLICATE, paid_amount to the total paid amount, and paid_at to the current time.
 - FR-112: The checks of FR-109 MUST run under the exclusive access of the Billable model, so that two payments of the same Billable model completed at the same time cannot both become PAID. EL-005 MUST throw the exception of ERR-020 after FR-110 or FR-111; EL-032 and FR-101 MUST finish as after FR-069 or FR-070 (FR-072 and FR-101).
+- FR-164: FR-109 through FR-112 MUST NOT apply to a Payment record linked to a Subscription record or created by EL-079 for the first period; such a record becomes PAID by FR-023 even when its Billable model returns true from EL-069.
 
 ### Receipt
 
@@ -711,14 +712,17 @@
 - FR-134: EL-084 MUST dispatch exactly one EL-085 for each Subscription record whose status is ACTIVE or PAST_DUE and whose next_charge_at is not later than the current time, and MUST NOT send any request to PortOne.
 - FR-135: EL-085 MUST change nothing when, at the time it runs, the Subscription record is not ACTIVE or PAST_DUE or next_charge_at is later than the current time.
 - FR-136: When cancel_at_period_end is true, EL-085 MUST set status ENDED and ended_at, charge nothing, and dispatch SubscriptionEnded.
-- FR-137: Otherwise EL-085 MUST charge the period: when a PENDING Payment record of this subscription for the period starting at current_period_end exists, it MUST complete that record under the rules of EL-042 first and charge again only when PortOne reports it not paid; otherwise it MUST charge by EL-076 and link the Payment record to the subscription.
+- FR-137: Otherwise EL-085 MUST charge the period: when a PENDING Payment record of this subscription for the period starting at current_period_end exists (a PENDING Payment record linked to the Subscription record whose created_at is not earlier than current_period_end; when several exist, they are completed oldest first until one becomes PAID), it MUST complete that record under the rules of EL-042 first and charge again only when PortOne reports it not paid; otherwise it MUST charge by EL-076 and link the Payment record to the subscription.
 - FR-138: When the charge becomes PAID, EL-085 MUST set status ACTIVE, current_period_start to the previous current_period_end, current_period_end and next_charge_at to that plus the interval, and failed_attempts 0, and dispatch SubscriptionRenewed.
 - FR-139: When the charge fails or does not become PAID, EL-085 MUST increase failed_attempts by 1; when failed_attempts does not exceed the number of entries of EL-058, it MUST set status PAST_DUE and next_charge_at to the current time plus the entry at position failed_attempts, and dispatch SubscriptionRenewalFailed; otherwise it MUST set status EXPIRED and ended_at and dispatch SubscriptionExpired.
 - FR-140: Every write of EL-085 MUST be made under the exclusive access of the Subscription record, and its events MUST be dispatched after the write is committed, exactly once per write.
-- FR-141: EL-081 MUST set cancel_at_period_end true on an ACTIVE or PAST_DUE record and dispatch SubscriptionCancelled; on a PAST_DUE record it MUST also set status ENDED and ended_at and dispatch SubscriptionEnded instead of waiting for a retry.
+- FR-141: EL-081 MUST set cancel_at_period_end true on an ACTIVE or PAST_DUE record and dispatch SubscriptionCancelled; on a PAST_DUE record it MUST also set status ENDED and ended_at and dispatch SubscriptionEnded instead of waiting for a retry. On an ACTIVE record whose cancel_at_period_end is already true it MUST change nothing and dispatch nothing.
 - FR-142: EL-082 MUST set cancel_at_period_end false on an ACTIVE record whose cancel_at_period_end is true and dispatch SubscriptionResumed.
-- FR-143: EL-083 MUST reference another ISSUED Billing key record of the same Billable model from the next charge on (ERR-024).
+- FR-143: EL-083 MUST reference another ISSUED Billing key record of the same Billable model from the next charge on (ERR-024). It accepts an ACTIVE or PAST_DUE record; on any other status it throws ERR-027.
 - FR-144: The Package MUST NOT delete Subscription records or Billing key records.
+- FR-165: Adding an interval of <n>m or <n>y (FR-131, FR-138) MUST keep the day of the month and clamp it to the last day of the target month when that month is shorter (January 31 plus 1m is February 28, or February 29 in a leap year); <n>d adds n days.
+- FR-166: A verified BillingKey.Deleted webhook sets the Billing key record DELETED by FR-125 even when an ACTIVE or PAST_DUE Subscription record charges it; the refusal of FR-123 applies only to EL-075. Each later EL-085 run of that subscription then fails its charge (ERR-024) and follows FR-139 until the subscription expires, unless EL-083 references another ISSUED Billing key record first.
+- FR-167: When EL-079 stops after the first Payment record became PAID and before the Subscription record is created, the PAID Payment record stays without a Subscription record. The Package MUST NOT create the Subscription record later or cancel the payment; the Application handles it from the payment events (PaymentCompleted with source charge).
 
 ### Published Inertia React stubs
 
@@ -912,7 +916,7 @@
 - AC-063: EL-005 on an EXPIRED record that PortOne reports paid with the same amount sets status PAID (FR-021); on a record that is neither PENDING nor EXPIRED it sends no request (FR-022).
 - AC-064: EL-006 on an EXPIRED record throws InvalidPaymentStatusException and sends no request (ERR-008).
 - AC-065: EL-033 reads PORTONE_PENDING_EXPIRE_AFTER with default 1440, and EL-034 reads PORTONE_EXPIRED_RETENTION_DAYS with default 90 (SCR-004).
-- AC-066: Installing the Package registers no schedule for EL-031 or model:prune (FR-065).
+- AC-066: Installing the Package registers no schedule for EL-031, EL-084, or model:prune (FR-065).
 - AC-067: portone.checkout.completed renders EL-036 with the order name, amount, Payment ID, paid_at, and status for a PAID, PARTIALLY_CANCELLED, or CANCELLED payment of the authenticated user (FR-066, FR-067).
 - AC-068: portone.checkout.completed responds HTTP 404 for a PENDING or EXPIRED payment, for another Billable model's payment, and for an unknown Payment ID, and an unauthenticated request does not reach the action (FR-042, FR-066).
 - AC-069: In the case of AC-016, when the cancellation request fails, the record has status AMOUNT_MISMATCH, paid_amount 100, cancelled_amount 0, and amount 10000, and AmountMismatchException has wasCancelled false and the PortOne exception as its previous exception (FR-070, ERR-007).
@@ -960,3 +964,4 @@
 - AC-111: After vendor:publish with EL-059 the files of SCR-014 exist; the Inertia controller renders the three pages with the same values as the Blade views; the React checkout posts to prepare and calls requestPayment with the response unchanged (FR-150 to FR-154).
 - AC-112: The billing-key stub flow issues a billing key through requestIssueBillingKey and the completed action marks it ISSUED; a failure redirect touches no record (FR-155 to FR-159, ERR-022).
 - AC-113: model:prune for the Webhook model deletes only processed records older than EL-056 (FR-102).
+- AC-114: For a Billable model whose EL-069 returns true and that has a PAID record, the first charge of EL-079 and each renewal of EL-085 become PAID without a cancellation request (FR-164).
