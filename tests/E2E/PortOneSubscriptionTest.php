@@ -17,7 +17,7 @@ use Cable8mm\LaravelPortone\Exceptions\InvalidBillingKeyException;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\PaymentGateway;
 use Illuminate\Support\Facades\Event;
-use Laravel\Dusk\Browser;
+use Illuminate\Support\Facades\URL;
 use Workbench\Database\Factories\UserFactory;
 
 /**
@@ -67,17 +67,20 @@ class PortOneSubscriptionTest extends TestCase
         $user = UserFactory::new()->create();
         $record = $user->prepareBillingKey('PortOne subscription probe');
 
-        // Issuance: the human registers a card; the completed page calls completeBillingKey() in the served app.
-        $this->browse(function (Browser $browser) use ($user, $record): void {
-            $browser->loginAs($user)
-                ->visit(route('workbench.billing-key', ['issueId' => $record->issue_id], false))
-                ->waitFor('button#workbench-billing-key-button:enabled')
-                ->click('#workbench-billing-key-button');
-
-            $this->instruct("Register a test card in the KCP window (billing-key issuance {$record->issue_id}).");
-            $browser->waitFor('[data-workbench-billing-key-completed], [data-workbench-billing-key][data-result="error"]', self::PAYER_TIMEOUT);
-            self::assertSame('issued', $browser->attribute('[data-workbench-billing-key-completed]', 'data-result'), 'The billing-key issuance did not complete.');
-        });
+        // Issuance in the human's own browser (KCP identity verification refuses the automated one);
+        // the completed page calls completeBillingKey() in the served app.
+        $signIn = rtrim(static::applicationBaseUrl(), '/').URL::temporarySignedRoute(
+            'workbench.billing-key.sign-in',
+            now()->addSeconds(self::PAYER_TIMEOUT),
+            ['issueId' => $record->issue_id, 'userId' => $user->getKey()],
+            absolute: false,
+        );
+        $this->instruct("Open this URL in your own Chrome and register a test card in the KCP window (billing-key issuance {$record->issue_id}):\n{$signIn}");
+        $deadline = time() + self::PAYER_TIMEOUT;
+        while (! in_array($record->fresh()->status, ['ISSUED', 'FAILED'], true) && time() < $deadline) {
+            sleep(2);
+        }
+        self::assertSame('ISSUED', $record->fresh()->status, 'The billing-key issuance did not complete.');
 
         $issued = $record->fresh();
         self::assertSame('ISSUED', $issued->status);
