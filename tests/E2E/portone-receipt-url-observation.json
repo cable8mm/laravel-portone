@@ -1,0 +1,40 @@
+{
+	"recordedAt": "2026-11-11T04:15:46+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"source": "live 100 KRW test payments paid by T-041 (portone-duplicate-payment-observation.json); no new payment",
+	"paid": {
+		"paymentId": "c0b7c456-e1a4-4477-9c17-ae0b5846c444",
+		"portOneStatus": "PAID",
+		"receiptUrl": {
+			"nonEmpty": true,
+			"host": "testpartner.kcp.co.kr"
+		},
+		"recordStatus": "PAID",
+		"recordReceiptUrlEqualsLookup": true
+	},
+	"cancelledThroughPackage": {
+		"paymentId": "c0b7c456-e1a4-4477-9c17-ae0b5846c444",
+		"portOneStatusAfterCancel": "CANCELLED",
+		"portOneCancelledAmount": 100,
+		"receiptUrl": {
+			"nonEmpty": true,
+			"host": "testpartner.kcp.co.kr"
+		},
+		"receiptUrlUnchangedByCancellation": true,
+		"recordStatus": "CANCELLED",
+		"recordReceiptUrlEqualsLookup": true
+	},
+	"alreadyCancelled": {
+		"paymentId": "f0735cb3-336f-4ca5-8945-acdfa9b183e4",
+		"portOneStatus": "CANCELLED",
+		"receiptUrl": {
+			"nonEmpty": true,
+			"host": "testpartner.kcp.co.kr"
+		},
+		"recordStatusBeforeSync": "DUPLICATE",
+		"recordStatus": "DUPLICATE_CANCELLED",
+		"recordReceiptUrlEqualsLookup": true
+	},
+	"urlsRedacted": true,
+	"secretsRecorded": false
+}

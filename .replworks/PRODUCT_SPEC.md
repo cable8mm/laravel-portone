@@ -142,6 +142,7 @@
 ### PortOne V2 payment receipt
 
 - The Package relies on the PortOne payment lookup response carrying receiptUrl for a paid payment. Observed: the key is present in the live response recorded by T-030 (tests/E2E/portone-payment-command-observation.json); its value there is redacted.
+- Observed by T-042 (tests/E2E/portone-receipt-url-observation.json, URL redacted): receiptUrl is non-empty for a PAID payment and for a CANCELLED payment, on the host testpartner.kcp.co.kr for the NHN KCP test channel, and does not change when the payment is cancelled.
 
 ### PortOne V2 billing keys and billing-key payments [UNVERIFIED]
 
@@ -631,7 +632,7 @@
 
 ### Testing support
 
-- FR-089: EL-049 MUST implement PaymentGateway, send no request to PortOne, and let the Developer set, per Payment ID, the PortOne status, total paid amount, and cancelled amount returned by a lookup, or a failure to throw for a lookup or a cancellation.
+- FR-089: EL-049 MUST implement PaymentGateway, send no request to PortOne, and let the Developer set, per Payment ID, the PortOne status, total paid amount, cancelled amount, and receipt URL returned by a lookup, or a failure to throw for a lookup or a cancellation.
 - FR-090: For a Payment ID with no set response, EL-049 lookup MUST throw the PortOne exception for PAYMENT_NOT_FOUND, and its expiry lookup MUST return the result that PortOne does not know the payment, as the PortOne Gateway does (External Systems "PortOne V2 lookup of abandoned payments").
 - FR-091: EL-049 MUST record every lookup and cancellation request, MUST provide assertions on the number of lookups per Payment ID and on the cancellation requests (Payment ID, reason, amount), and MUST provide one call that binds the instance as the PaymentGateway of the Application's container.
 - FR-092: EL-050 MUST build a webhook body with the given type, the current timestamp, and data holding the Payment ID, the store ID of EL-022, and the additional data; sign it with the value of EL-016 in the format the Webhook Verifier accepts; and send it as a POST request to EL-011 through the Application's test HTTP kernel.

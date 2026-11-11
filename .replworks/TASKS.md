@@ -491,7 +491,7 @@
     - A live run pays two payments of one single-payment Billable model; the second is cancelled at PortOne; the observation is recorded.
     - Unit tests and static checks pass.
 
-- [ ] T-042 Receipt URL
+- [x] T-042 Receipt URL
   - Satisfies: PRODUCT_SPEC.md Outputs (receipt_url), External Systems "PortOne V2 payment receipt", FR-113, FR-114, AC-098; ARCHITECTURE.md CMP-08
   - Depends on: T-038
   - External boundary: yes (lookup of a live paid and a live cancelled payment)
@@ -572,7 +572,7 @@
 
 - [ ] T-050 README and release v0.7.0
   - Satisfies: PRODUCT_SPEC.md Purpose, Product Goals; TECH_STACK.md section 6
-  - Depends on: T-039 to T-042, T-045 to T-049
+  - Depends on: T-039 to T-042, T-045 to T-049, T-052
   - External boundary: no
   - Acceptance criteria:
     - README documents webhook logging, payment events, duplicate cancellation, receipts, billing keys, subscriptions, and both stub variants, and the "업그레이드" section lists every breaking change from v0.6 with its replacement.
@@ -587,3 +587,13 @@
     - README documents the payment methods of EL-053 and EL-054, including easy payments limited to card funding, for both stub variants.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.8.0 is released after CI passes.
+
+- [ ] T-052 Receipt URL on the fake gateway
+  - Satisfies: PRODUCT_SPEC.md FR-089, FR-113; ARCHITECTURE.md CMP-08
+  - Depends on: T-042
+  - External boundary: no
+  - Acceptance criteria:
+    - The Developer can set, per Payment ID, the receipt URL that an EL-049 lookup returns; with none set, the lookup carries no receipt URL.
+    - A completion and a cancellation sync through EL-049 store the set receipt URL in receipt_url.
+    - README documents setting the receipt URL on EL-049.
+    - Unit tests and static checks pass.
