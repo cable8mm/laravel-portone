@@ -86,7 +86,7 @@ class SubscriptionOperations
     {
         $this->lifecycle->validate($name, $amount, $orderName, $interval);
 
-        $payment = $this->payments->chargeBillingKey($billable, $issueId, $amount, $orderName);
+        $payment = $this->payments->chargeBillingKey($billable, $issueId, $amount, $orderName, forSubscription: true);
 
         if ($payment->status !== 'PAID' || $payment->paid_at === null || $payment->billing_key_id === null) {
             throw new PaymentNotPaidException('The first subscription charge did not become paid.');

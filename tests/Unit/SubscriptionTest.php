@@ -24,6 +24,7 @@ use Cable8mm\LaravelPortone\Jobs\ChargeSubscription;
 use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Cable8mm\LaravelPortone\Models\Subscription;
+use Cable8mm\LaravelPortone\PaymentOperations;
 use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Cable8mm\LaravelPortone\SubscriptionLifecycle;
 use Cable8mm\LaravelPortone\SubscriptionOperations;
@@ -41,7 +42,7 @@ use Orchestra\Testbench\TestCase;
 use Throwable;
 
 /**
- * T-047: subscriptions (SCR-013, EL-058, FR-065, FR-123, FR-131 to FR-144, ERR-024, ERR-026 to ERR-028, FLOW-007,
+ * T-047: subscriptions (SCR-013, EL-058, FR-065, FR-123, FR-131 to FR-144, FR-164, FR-165, ERR-024, ERR-026 to ERR-028, FLOW-007,
  * AC-102, AC-106 to AC-110).
  *
  * Every PortOne value below is traced to the T-045 observation (tools/probes/portone-billing-key-observation.json):
@@ -494,6 +495,40 @@ class SubscriptionTest extends TestCase
         $this->assertSame([], $this->gateway->requestsOf('billingKeyInfo'));
     }
 
+    public function test_duplicate_payment_rules_do_not_apply_to_subscription_payments(): void
+    {
+        $user = SingleSubscriptionUser::query()->create();
+        $order = $user->preparePayment(100, 'Order A');
+        $this->payments->payment($order->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+        $this->assertSame('PAID', $user->completePayment($order->payment_id)->status);
+        $key = $this->issuedKey($user, self::KEY);
+        $this->chargesSucceed();
+
+        $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+        $this->travelTo($subscription->next_charge_at);
+        $this->runCharge($subscription);
+
+        $this->assertSame(['PAID', 'PAID'], Payment::query()->where('subscription_id', $subscription->id)->orderBy('id')->pluck('status')->all());
+        $this->assertSame('ACTIVE', $subscription->fresh()->status);
+        $this->payments->assertNothingCancelled();
+
+        // A PENDING renewal record found paid by the expiry check also becomes PAID.
+        $this->failCharges();
+        $this->travelTo($subscription->fresh()->next_charge_at);
+        $this->runCharge($subscription);
+        $attempt = Payment::query()->where('subscription_id', $subscription->id)->where('status', 'PENDING')->sole();
+        $this->payments->payment($attempt->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+        $this->app->make(PaymentOperations::class)->expire($attempt->billable_type, $attempt->billable_id, $attempt->payment_id);
+        $this->assertSame('PAID', $attempt->fresh()->status);
+        $this->payments->assertNothingCancelled();
+
+        // A second ordinary payment of the same model is still cancelled as a duplicate.
+        $second = $user->preparePayment(100, 'Order B');
+        $this->payments->payment($second->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+        $this->caught(fn () => $user->completePayment($second->payment_id));
+        $this->assertSame('DUPLICATE_CANCELLED', $second->fresh()->status);
+    }
+
     public function test_deleting_a_billing_key_charged_by_an_active_or_past_due_subscription_is_refused(): void
     {
         $user = SubscriptionUser::query()->create();
@@ -623,6 +658,14 @@ class SubscriptionUser extends Model
     public $timestamps = false;
 
     protected $guarded = [];
+}
+
+class SingleSubscriptionUser extends SubscriptionUser
+{
+    public function allowsOnlyOnePaidPayment(): bool
+    {
+        return true;
+    }
 }
 
 final class SubscriptionBillingKeyGateway implements BillingKeyGateway
