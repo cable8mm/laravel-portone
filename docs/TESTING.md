@@ -174,14 +174,16 @@ composer live -- --filter PortOneCheckoutFlowTest    # 하나만
 | `PortOneWebhookTest`             | 100원 결제 1회 완료                 | `PORTONE_WEBHOOK_PUBLIC_URL`, `PORTONE_WEBHOOK_SECRET`, ngrok (§2.5)              |
 | `PortOneCancellationSyncTest`    | 1,000원 결제 1회 완료               | ngrok (§2.5), 포트원 콘솔에서 300원 부분 취소 → 나머지 700원 취소 (안내에 따라)   |
 | `PortOneWebhookReplayTest`       | 없음                                | 취소 테스트 관측(이미 취소된 결제 ID, 재사용 가능), `PORTONE_WEBHOOK_SECRET`      |
+| `PortOneBillingKeyTest`          | KCP 창에서 테스트 카드 1회 등록     | ngrok (§2.5), `PORTONE_E2E_CHANNEL_KEY`(빌링키 KCP 테스트 채널), 100원 1회 청구   |
 
-- `PortOneWebhookTest`·`PortOneWebhookEventsTest`·`PortOneCancellationSyncTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
+- `PortOneWebhookTest`·`PortOneWebhookEventsTest`·`PortOneCancellationSyncTest`·`PortOneBillingKeyTest`는 `PORTONE_WEBHOOK_PUBLIC_URL`이 없으면 **스킵**됩니다.
 - 각 테스트는 **단독으로 실행**할 수 있습니다. 소모하는 결제는 테스트가 직접 만들고,
   다른 테스트가 먼저 돌 필요가 없습니다. 미결제·취소 상태로 고정된 결제 ID처럼 몇 번이든
   다시 쓸 수 있는 기록만 재사용합니다.
 - 결제 페이지는 두 가지입니다. 체크아웃 테스트는 **발행된 스텁 페이지**
   (`/portone/checkout`)를, 나머지는 패키지가 준비한 임의 결제를 띄우는 워크벤치 전용
-  페이지(`/workbench/pay/{paymentId}`)를 씁니다.
+  페이지(`/workbench/pay/{paymentId}`)를 씁니다. 빌링키 테스트는 워크벤치 전용 발급 페이지
+  (`/workbench/billing-key/{issueId}`)를 씁니다.
 
 ### 2.4 사람이 하는 일
 

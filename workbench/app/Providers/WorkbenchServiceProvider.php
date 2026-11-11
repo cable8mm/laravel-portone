@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Workbench\App\Providers;
 
+use Cable8mm\LaravelPortone\Events\BillingKeyDeleted;
+use Cable8mm\LaravelPortone\Events\BillingKeyEvent;
+use Cable8mm\LaravelPortone\Events\BillingKeyIssued;
 use Cable8mm\LaravelPortone\Events\PaymentAmountMismatched;
 use Cable8mm\LaravelPortone\Events\PaymentCompleted;
 use Cable8mm\LaravelPortone\Events\PaymentDuplicated;
@@ -108,6 +111,21 @@ class WorkbenchServiceProvider extends ServiceProvider
                     'webhookId' => $request?->headers->get('webhook-id'),
                     'recordStatus' => $payment?->status,
                     'recordCancelledAmount' => $payment?->cancelled_amount,
+                ]);
+            });
+        }
+
+        foreach ([BillingKeyIssued::class, BillingKeyDeleted::class] as $billingKeyEvent) {
+            Event::listen($billingKeyEvent, static function (BillingKeyEvent $event) use ($observationDirectory): void {
+                $request = app()->bound('request') ? request() : null;
+
+                // Never the billing key: only the issuance and the record state the listener sees.
+                self::appendJsonLine($observationDirectory.'/billing-key-events.jsonl', [
+                    'event' => $event::class,
+                    'issueId' => $event->billingKey->issue_id,
+                    'source' => $event->source->value,
+                    'webhookId' => $request?->headers->get('webhook-id'),
+                    'recordStatus' => $event->billingKey->fresh()?->status,
                 ]);
             });
         }

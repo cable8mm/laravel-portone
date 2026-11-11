@@ -46,7 +46,14 @@ final class PaymentResponseRedactor
         'userAgent',
         'receiptUrl',
         'webhooks',
+        // 빌링키 결제의 빌링키(FR-130)
+        self::BILLING_KEY,
     ];
+
+    /**
+     * 빌링키 키 이름. --raw 출력에서도 가린다(FR-130).
+     */
+    public const BILLING_KEY = 'billingKey';
 
     /**
      * 응답의 복사본에서 KEYS에 해당하는 값을 가려 반환한다.
@@ -56,11 +63,32 @@ final class PaymentResponseRedactor
      */
     public function redact(array $response): array
     {
+        return $this->redactKeys($response, self::KEYS);
+    }
+
+    /**
+     * 응답의 복사본에서 빌링키 값만 가려 반환한다. portone:payment --raw가 쓴다.
+     *
+     * @param  array<mixed>  $response  PortOne 결제 조회 응답
+     * @return array<mixed> 빌링키를 가린 응답
+     */
+    public function redactBillingKey(array $response): array
+    {
+        return $this->redactKeys($response, [self::BILLING_KEY]);
+    }
+
+    /**
+     * @param  array<mixed>  $response  PortOne 결제 조회 응답
+     * @param  list<string>  $keys  값을 가릴 키 이름
+     * @return array<mixed> 가린 응답
+     */
+    private function redactKeys(array $response, array $keys): array
+    {
         foreach ($response as $key => $value) {
-            if (is_string($key) && in_array($key, self::KEYS, true)) {
+            if (is_string($key) && in_array($key, $keys, true)) {
                 $response[$key] = self::REDACTED;
             } elseif (is_array($value)) {
-                $response[$key] = $this->redact($value);
+                $response[$key] = $this->redactKeys($value, $keys);
             }
         }
 

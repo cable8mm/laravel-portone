@@ -29,7 +29,8 @@ use Illuminate\Http\Response;
  *
  * 원문(raw body)으로 서명을 검증한 뒤, 어떤 효과보다 먼저 webhook-id의 웹훅 기록을 남기고(WebhookLog),
  * 처음 처리하는 webhook-id만 처리한다. Transaction.Paid면 결제 ID로 결제를 확정하고, 취소 웹훅(Transaction.Cancelled·
- * Transaction.PartialCancelled)이면 PortOne을 조회해 취소 상태를 맞춘다(둘 다 source webhook). 그 밖의 종류는 레코드를
+ * Transaction.PartialCancelled)이면 PortOne을 조회해 취소 상태를 맞춘다(둘 다 source webhook). BillingKey.Issued·BillingKey.Deleted는
+ * 빌링키 기록을 ISSUED·DELETED로 바꾼다. 그 밖의 종류는 레코드를
  * 건드리지 않는다. 효과와 처리 완료 표시는 한 트랜잭션이며, 커밋 뒤 결제 이벤트, 이어서 WebhookReceived를 발송한다.
  * 이미 처리된 webhook-id는 아무것도 하지 않고 200을 반환한다. 설정 누락이나 PortOne 예외로 처리가 실패하면 효과를
  * 롤백하고 기록을 실패로 표시한 뒤 WebhookFailed만 발송하고 예외를 전파해 PortOne이 다시 보내게 한다.
@@ -80,7 +81,7 @@ final class WebhookController
             $processed = $log->process(
                 $webhookId,
                 $type,
-                $request->getContent(),
+                $this->recordedBody($webhook, $request->getContent()),
                 fn () => $this->applyEffect($webhook, $operations),
             );
         } catch (ConfigurationException|PortOneException $exception) {
@@ -97,6 +98,21 @@ final class WebhookController
         event(new WebhookReceived($webhook, $webhookId));
 
         return response('', 200);
+    }
+
+    /**
+     * 웹훅 기록에 남길 본문을 반환한다. BillingKey 웹훅은 빌링키 값을 [REDACTED]로 바꾸고, 나머지는 받은 그대로이다.
+     *
+     * @param  Webhook  $webhook  검증된 포트원 웹훅 객체
+     * @param  string  $body  받은 그대로의 요청 본문
+     */
+    private function recordedBody(Webhook $webhook, string $body): string
+    {
+        if (! $webhook instanceof WebhookBillingKey || $webhook->data->billingKey === '') {
+            return $body;
+        }
+
+        return str_replace($webhook->data->billingKey, '[REDACTED]', $body);
     }
 
     /**
@@ -119,13 +135,20 @@ final class WebhookController
      * 웹훅 종류의 효과를 적용한다. 결제 레코드가 없으면 건너뛴다.
      *
      * Transaction.Paid는 결제를 확정한다. PortOne이 아직 결제되지 않았다고 하면 레코드를 그대로 두고, 금액이 다르면
-     * 금액 불일치 결과를 저장한 뒤 처리를 마친다. 취소 웹훅은 취소 상태를 맞춘다.
+     * 금액 불일치 결과를 저장한 뒤 처리를 마친다. 취소 웹훅은 취소 상태를 맞춘다. BillingKey.Issued·BillingKey.Deleted는
+     * PortOne에 빌링키를 조회해 찾은 빌링키 기록을 ISSUED·DELETED로 바꾼다.
      *
      * @param  Webhook  $webhook  검증된 포트원 웹훅 객체
      * @param  PaymentOperations  $operations  결제 확정과 취소 동기화
      */
     private function applyEffect(Webhook $webhook, PaymentOperations $operations): void
     {
+        if ($webhook instanceof WebhookBillingKey) {
+            $operations->applyBillingKeyWebhook($webhook->type, $webhook->data->billingKey);
+
+            return;
+        }
+
         if (! $webhook instanceof WebhookTransaction) {
             return;
         }

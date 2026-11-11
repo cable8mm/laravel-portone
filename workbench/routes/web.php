@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotIssuedException;
+use Cable8mm\PortonePhp\Browser\BillingKeyRedirectResult;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Workbench\App\Http\Controllers\CustomerController;
 use Workbench\App\Http\Controllers\PaymentController;
@@ -75,4 +78,44 @@ Route::middleware(TrustLoopbackProxies::class)->group(function () use ($controll
             'sdkUrl' => MapBrowserSdkImport::SDK_URL,
         ]);
     })->name('workbench.pay');
+
+    // Lets a live test have the human register a card for a Package-prepared billing key of the signed-in user.
+    Route::middleware('auth')->get('/workbench/billing-key/{issueId}', function (string $issueId) {
+        $record = auth()->user()->billingKeys()->where('issue_id', $issueId)->first() ?? abort(404);
+
+        return view('workbench::billing-key', [
+            'storeId' => config('portone.store_id'),
+            'channelKey' => config('portone.billing_channel_key'),
+            'issuance' => $record->issueParameters(),
+            'redirectUrl' => route('workbench.billing-key.completed', ['issueId' => $issueId]),
+            'sdkUrl' => MapBrowserSdkImport::SDK_URL,
+        ]);
+    })->name('workbench.billing-key');
+
+    // The redirectUrl of that page: completes the issuance through the Package (EL-073).
+    Route::middleware('auth')->get('/workbench/billing-key/{issueId}/completed', function (Request $request, string $issueId) {
+        $user = auth()->user();
+        $user->billingKeys()->where('issue_id', $issueId)->exists() || abort(404);
+        $redirect = BillingKeyRedirectResult::fromQuery($request->query());
+        $result = 'failed';
+        $error = null;
+
+        // A failure redirect also carries a never-issued billingKey (T-045), so decide by the failure first.
+        if ($redirect->isFailure() || $redirect->billingKey === null) {
+            $error = $redirect->code;
+        } else {
+            try {
+                $result = $user->completeBillingKey($issueId, $redirect->billingKey)->status === 'ISSUED' ? 'issued' : 'failed';
+            } catch (BillingKeyNotIssuedException $exception) {
+                $error = $exception->getMessage();
+            }
+        }
+
+        return view('workbench::billing-key-completed', [
+            'issueId' => $issueId,
+            'result' => $result,
+            'status' => $user->billingKeys()->where('issue_id', $issueId)->value('status'),
+            'error' => $error,
+        ]);
+    })->name('workbench.billing-key.completed');
 });

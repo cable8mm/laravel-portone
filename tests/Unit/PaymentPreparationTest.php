@@ -133,7 +133,7 @@ class PaymentPreparationTest extends TestCase
 
         $paths = glob($this->app->databasePath('migrations/*_portone_*_table.php'));
         $this->assertIsArray($paths);
-        $this->assertCount(6, $paths);
+        $this->assertCount(8, $paths);
         array_push($this->publishedMigrations, ...$paths);
 
         foreach ($paths as $migration) {
@@ -147,6 +147,8 @@ class PaymentPreparationTest extends TestCase
         $this->assertTrue(Schema::hasTable('portone_customers'));
         $this->assertTrue(Schema::hasTable('portone_payments'));
         $this->assertTrue(Schema::hasTable('portone_webhooks'));
+        $this->assertTrue(Schema::hasTable('portone_billing_keys'));
+        $this->assertTrue(Schema::hasColumn('portone_payments', 'billing_key_id'));
         $this->assertTrue(Schema::hasColumns('portone_payments', [
             'payment_id',
             'billable_type',

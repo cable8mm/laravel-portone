@@ -249,9 +249,10 @@ class PaymentLedger
      * @param  string  $customerId  PortOne 고객 ID
      * @param  int  $amount  결제 금액(원)
      * @param  string  $orderName  주문명
+     * @param  int|null  $billingKeyId  빌링키 결제면 결제할 빌링키 기록의 키, 브라우저 결제면 null
      * @return Payment 생성된 PENDING 결제 레코드
      */
-    public function createPending(Model $billable, string $customerId, int $amount, string $orderName): Payment
+    public function createPending(Model $billable, string $customerId, int $amount, string $orderName, ?int $billingKeyId = null): Payment
     {
         while (true) {
             $paymentId = (string) Str::uuid();
@@ -267,6 +268,7 @@ class PaymentLedger
                     'status' => 'PENDING',
                     'cancelled_amount' => 0,
                     'paid_at' => null,
+                    'billing_key_id' => $billingKeyId,
                 ]);
             } catch (QueryException $exception) {
                 $paymentIdExists = DB::table('portone_payments')

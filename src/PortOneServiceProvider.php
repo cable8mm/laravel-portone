@@ -26,6 +26,7 @@ class PortOneServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/portone.php', 'portone');
         $this->app->bind(PaymentGateway::class, PortOneGateway::class);
+        $this->app->bind(BillingKeyGateway::class, PortOneGateway::class);
     }
 
     /**
@@ -54,6 +55,8 @@ class PortOneServiceProvider extends ServiceProvider
                 '2026_10_16_000000_backfill_paid_amount_on_portone_payments_table.php',
                 '2026_11_11_000000_create_portone_webhooks_table.php',
                 '2026_11_11_000001_add_receipt_url_to_portone_payments_table.php',
+                '2026_11_12_000000_create_portone_billing_keys_table.php',
+                '2026_11_12_000001_add_billing_key_to_portone_payments_table.php',
             ]), 'portone-migrations');
 
             $this->publishes([

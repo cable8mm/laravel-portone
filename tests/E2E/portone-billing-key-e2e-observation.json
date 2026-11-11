@@ -1,0 +1,52 @@
+{
+	"recordedAt": "2026-11-11T05:51:08+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"issuance": {
+		"issueId": "bkb7d25a6bdee2c8aefc86f930a54e9b19",
+		"recordStatusAfterCompletion": "ISSUED",
+		"billingKeyEvents": [
+			{
+				"event": "Cable8mm\\LaravelPortone\\Events\\BillingKeyIssued",
+				"issueId": "bkb7d25a6bdee2c8aefc86f930a54e9b19",
+				"source": "call",
+				"webhookId": null,
+				"recordStatus": "ISSUED"
+			},
+			{
+				"event": "Cable8mm\\LaravelPortone\\Events\\BillingKeyDeleted",
+				"issueId": "bkb7d25a6bdee2c8aefc86f930a54e9b19",
+				"source": "webhook",
+				"webhookId": "msg-01a1c928-fa4a-3ba8-a813-9437e8b4deb9",
+				"recordStatus": "DELETED"
+			}
+		]
+	},
+	"charge": {
+		"paymentId": "57d91bda-168e-4db6-80c4-088667b7a184",
+		"amount": 100,
+		"recordStatus": "PAID",
+		"portOneStatus": "PAID",
+		"billingKeyIdLinked": true
+	},
+	"deletion": {
+		"by": "BillingKeyGateway::deleteBillingKey() (the EL-075 request) without the record write",
+		"deletedEvent": {
+			"event": "Cable8mm\\LaravelPortone\\Events\\BillingKeyDeleted",
+			"issueId": "bkb7d25a6bdee2c8aefc86f930a54e9b19",
+			"source": "webhook",
+			"webhookId": "msg-01a1c928-fa4a-3ba8-a813-9437e8b4deb9",
+			"recordStatus": "DELETED"
+		},
+		"webhookBody": "{\"type\":\"BillingKey.Deleted\",\"timestamp\":\"2026-11-11T05:51:08.333870318Z\",\"data\":{\"billingKey\":\"[REDACTED]\",\"storeId\":\"[PORTONE_STORE_ID]\"}}",
+		"finalRecordStatus": "DELETED",
+		"repeatDelete": "Cable8mm\\LaravelPortone\\Exceptions\\InvalidBillingKeyException"
+	},
+	"webhookTypesReceived": [
+		"BillingKey.Ready",
+		null,
+		"Transaction.Paid",
+		"BillingKey.Issued",
+		"BillingKey.Deleted"
+	],
+	"secretsRecorded": false
+}

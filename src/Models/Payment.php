@@ -7,6 +7,7 @@ namespace Cable8mm\LaravelPortone\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -36,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $paid_at
  * @property string|null $receipt_url PortOne 영수증 URL(receiptUrl). 그 레코드에 마지막으로 쓴 PortOne 조회가 알려 준 값이며,
  *                                    영수증 URL이 없는 조회는 이전 값을 그대로 둔다
+ * @property int|null $billing_key_id 빌링키 결제(chargeBillingKey())로 만든 레코드면 결제한 빌링키 기록, 브라우저 결제면 null
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
@@ -55,6 +57,16 @@ class Payment extends Model
             'paid_amount' => 'integer',
             'paid_at' => 'datetime',
         ];
+    }
+
+    /**
+     * 이 결제가 결제한 빌링키 기록. 브라우저 결제면 없다.
+     *
+     * @return BelongsTo<BillingKey, $this>
+     */
+    public function billingKey(): BelongsTo
+    {
+        return $this->belongsTo(BillingKey::class);
     }
 
     /**

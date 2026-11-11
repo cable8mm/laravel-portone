@@ -16,6 +16,7 @@ use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidPaymentStatusException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidRefundAmountException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
+use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
 use Illuminate\Support\Carbon;
 
@@ -267,5 +268,18 @@ class PaymentLifecycle
             'EXPIRED' => new PaymentExpired($payment, $source),
             default => null,
         };
+    }
+
+    /**
+     * PortOne 빌링키 조회 결과가 이 기록의 고객에게 발급된 빌링키인지 판단한다.
+     *
+     * T-045 관측: 발급 뒤 getBillingKeyInfo는 status ISSUED와 발급 때 보낸 customer.id를 돌려준다.
+     *
+     * @param  BillingKey  $record  확인할 PENDING 또는 FAILED 빌링키 기록
+     * @param  GatewayBillingKey  $info  PortOne 빌링키 조회 결과
+     */
+    public function isIssuedFor(BillingKey $record, GatewayBillingKey $info): bool
+    {
+        return $info->status === 'ISSUED' && $info->customerId === $record->customer_id;
     }
 }

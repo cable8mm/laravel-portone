@@ -29,7 +29,7 @@ final class RecordWebhookExchange
                     'webhook-signature' => $request->headers->get('webhook-signature'),
                     'webhook-timestamp' => $request->headers->get('webhook-timestamp'),
                 ],
-                'body' => $request->getContent(),
+                'body' => self::redactedBody($request->getContent()),
                 'response' => [
                     'status' => $response->getStatusCode(),
                     'body' => $response->getContent(),
@@ -38,5 +38,21 @@ final class RecordWebhookExchange
         }
 
         return $response;
+    }
+
+    /**
+     * BillingKey webhooks carry the billing key in data.billingKey; the recording never keeps it.
+     */
+    private static function redactedBody(string $body): string
+    {
+        $decoded = json_decode($body, true);
+
+        if (! is_array($decoded) || ! is_array($decoded['data'] ?? null) || ! array_key_exists('billingKey', $decoded['data'])) {
+            return $body;
+        }
+
+        $decoded['data']['billingKey'] = '[REDACTED]';
+
+        return json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
 }
