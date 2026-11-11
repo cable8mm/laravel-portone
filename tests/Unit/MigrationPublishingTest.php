@@ -40,10 +40,12 @@ class MigrationPublishingTest extends TestCase
             'add_billing_key_to_portone_payments_table.php',
             'add_paid_amount_to_portone_payments_table.php',
             'add_receipt_url_to_portone_payments_table.php',
+            'add_subscription_to_portone_payments_table.php',
             'backfill_paid_amount_on_portone_payments_table.php',
             'create_portone_billing_keys_table.php',
             'create_portone_customers_table.php',
             'create_portone_payments_table.php',
+            'create_portone_subscriptions_table.php',
             'create_portone_webhooks_table.php',
         ], $names);
         $this->assertFileExists($this->app->databasePath('migrations/2026_01_02_030405_create_portone_customers_table.php'));
@@ -58,7 +60,7 @@ class MigrationPublishingTest extends TestCase
         $this->publishMigrations();
         $this->publishMigrations();
 
-        $this->assertCount(8, $this->publishedPortOneMigrations());
+        $this->assertCount(10, $this->publishedPortOneMigrations());
     }
 
     /**

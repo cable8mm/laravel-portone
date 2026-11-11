@@ -18,8 +18,10 @@ use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
+use Cable8mm\LaravelPortone\Models\Subscription;
 use Cable8mm\LaravelPortone\PaymentLedger;
 use Cable8mm\LaravelPortone\PaymentOperations;
+use Cable8mm\LaravelPortone\SubscriptionOperations;
 use Cable8mm\PortonePhp\Exception\PortOneException;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -202,7 +204,7 @@ trait Billable
      * @param  string  $reason  PortOne에 전달할 삭제 사유
      * @return BillingKey DELETED 빌링키 기록
      *
-     * @throws InvalidBillingKeyException 내 범위에 ISSUED 기록이 없을 때
+     * @throws InvalidBillingKeyException 내 범위에 ISSUED 기록이 없거나, ACTIVE·PAST_DUE 구독이 그 기록으로 결제할 때
      * @throws ConfigurationException API Secret이 설정되지 않았을 때
      * @throws PortOneException PortOne API 호출이 실패했을 때 (원문 그대로 전달)
      */
@@ -232,5 +234,38 @@ trait Billable
     public function chargeBillingKey(string $issueId, int $amount, string $orderName): Payment
     {
         return app(PaymentOperations::class)->chargeBillingKey($this, $issueId, $amount, $orderName);
+    }
+
+    /**
+     * ISSUED 빌링키로 첫 기간을 결제하고, PAID가 되면 구독을 시작한다.
+     *
+     * 구독 기록은 ACTIVE이고, 현재 기간은 첫 결제 시각부터 기간 하나이다. 이후 기간은 portone:charge-subscriptions가 결제한다.
+     *
+     * @param  string  $issueId  결제할 빌링키 기록의 Issue ID
+     * @param  string  $name  구독 이름(빈 문자열 불가)
+     * @param  int  $amount  기간마다 결제할 금액(원, 0보다 커야 함)
+     * @param  string  $orderName  주문명(빈 문자열 불가)
+     * @param  string  $interval  기간: <n>d(일), <n>m(월), <n>y(년), n은 1 이상
+     * @return Subscription ACTIVE 구독 기록
+     *
+     * @throws \InvalidArgumentException 기간·금액·이름·주문명이 규칙에 맞지 않을 때(PortOne 요청 없음)
+     * @throws InvalidBillingKeyException 내 범위에 ISSUED 기록이 없을 때
+     * @throws PaymentNotPaidException PortOne이 첫 결제를 결제 완료로 표시하지 않았을 때(구독 기록 없음)
+     * @throws ConfigurationException API Secret이 설정되지 않았을 때
+     * @throws PortOneException payWithBillingKey가 실패했을 때 (원문 그대로 전달, 구독 기록 없음)
+     */
+    public function subscribe(string $issueId, string $name, int $amount, string $orderName, string $interval): Subscription
+    {
+        return app(SubscriptionOperations::class)->subscribe($this, $issueId, $name, $amount, $orderName, $interval);
+    }
+
+    /**
+     * 이 모델의 구독 기록 관계(최신순)를 반환한다.
+     *
+     * @return MorphMany<Subscription, $this> 생성일 내림차순 구독 기록 관계
+     */
+    public function subscriptions(): MorphMany
+    {
+        return app(SubscriptionOperations::class)->subscriptions($this);
     }
 }
