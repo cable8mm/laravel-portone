@@ -674,7 +674,7 @@
 - FR-110: After PortOne accepts the cancellation request of FR-109, the Package MUST set status to DUPLICATE_CANCELLED, paid_amount and cancelled_amount to the total paid amount, and paid_at to the current time.
 - FR-111: When the cancellation request of FR-109 fails, the Package MUST set status to DUPLICATE, paid_amount to the total paid amount, and paid_at to the current time.
 - FR-112: The checks of FR-109 MUST run under the exclusive access of the Billable model, so that two payments of the same Billable model completed at the same time cannot both become PAID. EL-005 MUST throw the exception of ERR-020 after FR-110 or FR-111; EL-032 and FR-101 MUST finish as after FR-069 or FR-070 (FR-072 and FR-101).
-- FR-164: FR-109 through FR-112 MUST NOT apply to a Payment record linked to a Subscription record or created by EL-079 for the first period; such a record becomes PAID by FR-023 even when its Billable model returns true from EL-069.
+- FR-164: FR-109 through FR-112 MUST NOT apply to a Payment record linked to a Subscription record or created by EL-079 for the first period; such a record becomes PAID by FR-023 even when its Billable model returns true from EL-069, and it is never the other Payment record of FR-109: only Payment records not linked to a Subscription record count.
 
 ### Receipt
 
@@ -964,4 +964,4 @@
 - AC-111: After vendor:publish with EL-059 the files of SCR-014 exist; the Inertia controller renders the three pages with the same values as the Blade views; the React checkout posts to prepare and calls requestPayment with the response unchanged (FR-150 to FR-154).
 - AC-112: The billing-key stub flow issues a billing key through requestIssueBillingKey and the completed action marks it ISSUED; a failure redirect touches no record (FR-155 to FR-159, ERR-022).
 - AC-113: model:prune for the Webhook model deletes only processed records older than EL-056 (FR-102).
-- AC-114: For a Billable model whose EL-069 returns true and that has a PAID record, the first charge of EL-079 and each renewal of EL-085 become PAID without a cancellation request (FR-164).
+- AC-114: For a Billable model whose EL-069 returns true and that has a PAID record, the first charge of EL-079 and each renewal of EL-085 become PAID without a cancellation request; with only PAID subscription records, an ordinary payment becomes PAID, and a second ordinary payment is still cancelled (FR-109, FR-164).
