@@ -192,6 +192,7 @@ class PaymentLedger
 
     /**
      * 같은 Billable 참조에 이 레코드 말고 이미 결제된(PAID·PARTIALLY_CANCELLED·CANCELLED) 레코드가 있는지 확인한다.
+     * 구독에 연결된 결제 레코드는 세지 않는다(FR-164).
      *
      * withBillableExclusiveAccess() 안에서 부르며, 커밋된 최신 값을 읽도록 잠금 조회를 쓴다.
      *
@@ -203,6 +204,8 @@ class PaymentLedger
             ->where('billable_type', $payment->billable_type)
             ->where('billable_id', $payment->billable_id)
             ->whereKeyNot($payment->getKey())
+            // FR-164: payments of subscriptions never count as the single payment.
+            ->whereNull('subscription_id')
             ->whereIn('status', ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'])
             ->lockForUpdate()
             ->exists();

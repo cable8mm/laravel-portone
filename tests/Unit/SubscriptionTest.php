@@ -504,6 +504,7 @@ class SubscriptionTest extends TestCase
         $key = $this->issuedKey($user, self::KEY);
         $this->chargesSucceed();
 
+        // With an ordinary PAID payment, the first charge and a renewal still become PAID.
         $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
         $this->travelTo($subscription->next_charge_at);
         $this->runCharge($subscription);
@@ -521,12 +522,30 @@ class SubscriptionTest extends TestCase
         $this->app->make(PaymentOperations::class)->expire($attempt->billable_type, $attempt->billable_id, $attempt->payment_id);
         $this->assertSame('PAID', $attempt->fresh()->status);
         $this->payments->assertNothingCancelled();
+    }
+
+    public function test_subscription_payments_do_not_count_against_ordinary_payments(): void
+    {
+        $user = SingleSubscriptionUser::query()->create();
+        $key = $this->issuedKey($user, self::KEY);
+        $this->chargesSucceed();
+        $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+        $this->travelTo($subscription->next_charge_at);
+        $this->runCharge($subscription);
+        $this->assertSame(2, Payment::query()->where('subscription_id', $subscription->id)->where('status', 'PAID')->count());
+
+        // Only PAID subscription payments exist, so the first ordinary payment becomes PAID.
+        $first = $user->preparePayment(100, 'Order A');
+        $this->payments->payment($first->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+        $this->assertSame('PAID', $user->completePayment($first->payment_id)->status);
+        $this->payments->assertNothingCancelled();
 
         // A second ordinary payment of the same model is still cancelled as a duplicate.
         $second = $user->preparePayment(100, 'Order B');
         $this->payments->payment($second->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
         $this->caught(fn () => $user->completePayment($second->payment_id));
         $this->assertSame('DUPLICATE_CANCELLED', $second->fresh()->status);
+        $this->payments->assertCancelled($second->payment_id);
     }
 
     public function test_deleting_a_billing_key_charged_by_an_active_or_past_due_subscription_is_refused(): void
