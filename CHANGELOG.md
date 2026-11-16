@@ -1,5 +1,30 @@
 # Release Notes
 
+## v0.7.2 - 2026-11-16
+
+v0.7.2는 Laravel React 스타터 킷(Inertia + React + TypeScript)용 체크아웃 스텁을 추가합니다. 호환성이 깨지는 변경은 없습니다.
+
+### 추가
+
+- `php artisan vendor:publish --tag=portone-stubs-react`로 다음 파일을 발행합니다.
+  
+  - `resources/js/pages/portone/checkout.tsx`: 주문서, 결제 버튼, 상태 표시(`initial`·`loading`·`error`)
+  - `resources/js/pages/portone/completed.tsx`: 리다이렉트 복귀 화면(주문 완료 또는 결제 실패)
+  - `app/Http/Controllers/PortOneCheckoutController.php`: Blade 스텁과 같은 액션을 `Inertia::render`로 렌더
+  - `routes/portone.php`: Blade 스텁과 같은 라우트 파일
+  
+- 컨트롤러와 라우트는 `portone-stubs`와 같은 경로에 발행되므로 둘 중 하나만 쓰세요.
+  
+- 애플리케이션에 `inertiajs/inertia-laravel`, `react`, `@inertiajs/react`, `@portone/browser-sdk`가 있어야 합니다.
+  
+- React 스텁은 카드 결제만 제공합니다. 빌링키 등록 페이지는 v0.8.0에서 추가됩니다.
+  
+
+### 참고
+
+- PC 크롬에서 `127.0.0.1`·`localhost`로 띄운 앱을 결제하면, 크롬의 로컬 네트워크 접근 검사 때문에 KCP 결제창이 승인 뒤 "결제가 진행중입니다"에서 멈출 수 있습니다(결제 자체는 `PAID`). README "화면 확인"을 참고하세요.
+- `portone-stubs`(Blade) 발행 파일은 v0.7.0과 같습니다.
+
 ## v0.7.0 - 2026-11-11
 
 v0.7.0은 웹훅 기록과 중복 처리 방지, 상태 변경마다 한 번만 발송되는 결제 이벤트, 한 번만 결제되는 모델(`allowsOnlyOnePaidPayment()`)의 중복 결제 자동 취소, PortOne 영수증 URL(`receipt_url`) 저장, 빌링키 발급·확인·삭제와 빌링키 결제(`chargeBillingKey()`)를 추가합니다. 테스트용 `FakePaymentGateway`에서 영수증 URL을 지정할 수 있습니다. 구독과 빌링키·React 스텁은 이 버전에 포함되지 않습니다.
