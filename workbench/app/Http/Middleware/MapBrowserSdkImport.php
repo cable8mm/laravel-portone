@@ -20,7 +20,8 @@ final class MapBrowserSdkImport
     {
         $response = $next($request);
 
-        if ($request->route()?->getName() !== 'portone.checkout') {
+        // An Inertia visit answers with JSON; the React pages are bundled with the SDK.
+        if ($request->route()?->getName() !== 'portone.checkout' || $request->hasHeader('X-Inertia')) {
             return $response;
         }
 
