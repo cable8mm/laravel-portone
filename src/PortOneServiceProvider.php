@@ -66,6 +66,14 @@ class PortOneServiceProvider extends ServiceProvider
                 __DIR__.'/../stubs/app/Http/Controllers/PortOneCheckoutController.php' => $this->app->path('Http/Controllers/PortOneCheckoutController.php'),
                 __DIR__.'/../stubs/routes/portone.php' => $this->app->basePath('routes/portone.php'),
             ], 'portone-stubs');
+
+            // The Inertia React stubs share the route file and the controller path with the Blade stubs.
+            $this->publishes([
+                __DIR__.'/../stubs/react/resources/js/pages/portone/checkout.tsx' => $this->app->resourcePath('js/pages/portone/checkout.tsx'),
+                __DIR__.'/../stubs/react/resources/js/pages/portone/completed.tsx' => $this->app->resourcePath('js/pages/portone/completed.tsx'),
+                __DIR__.'/../stubs/react/app/Http/Controllers/PortOneCheckoutController.php' => $this->app->path('Http/Controllers/PortOneCheckoutController.php'),
+                __DIR__.'/../stubs/routes/portone.php' => $this->app->basePath('routes/portone.php'),
+            ], 'portone-stubs-react');
         }
     }
 

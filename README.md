@@ -27,6 +27,7 @@ Laravel Cashier 스타일의 인터페이스로 어떤 Eloquent 모델에도 결
 - 버려진 결제 대기 건을 PortOne에 확인해 만료(`EXPIRED`)하고 결과를 이벤트로 알림, 보관 기간 뒤 정리
 - 테스트용 가짜 게이트웨이(`FakePaymentGateway`)와 서명된 웹훅 도우미, 로컬 웹훅 재전송 명령(`portone:webhook-replay`)
 - 수정 가능한 체크아웃 출발 파일(뷰·스크립트·컨트롤러·라우트) 발행
+- Laravel React 스타터 킷용 Inertia React 체크아웃 출발 파일(TSX 페이지·컨트롤러·라우트) 발행 (`portone-stubs-react`, v0.7.2)
 
 ## 요구 사항
 
@@ -317,6 +318,27 @@ php artisan vendor:publish --tag=portone-stubs
    npm run dev   # 개발 서버 (프로덕션은 npm run build)
    ```
 
+#### Inertia React 스텁 (Laravel React 스타터 킷)
+
+Laravel React 스타터 킷(Inertia + React + TypeScript)을 쓰는 애플리케이션은 블레이드 스텁 대신 React 스텁을 발행합니다 (v0.7.2부터).
+
+```bash
+php artisan vendor:publish --tag=portone-stubs-react
+```
+
+| 발행 파일                                            | 설명                                                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `resources/js/pages/portone/checkout.tsx`            | 블레이드 주문서와 같은 상태(`initial`·`loading`·`error`)와 흐름의 React 페이지                   |
+| `resources/js/pages/portone/completed.tsx`           | 리다이렉트 복귀 화면 (결제 성공 시 주문 완료, 실패 시 실패 안내)                                 |
+| `app/Http/Controllers/PortOneCheckoutController.php` | 블레이드 스텁과 같은 액션이 뷰 대신 `Inertia::render('portone/checkout' \| 'portone/completed')` |
+| `routes/portone.php`                                 | 블레이드 스텁과 같은 라우트 파일                                                                 |
+
+- 컨트롤러와 라우트는 `portone-stubs`와 같은 경로에 발행되므로 둘 중 하나만 씁니다.
+- 애플리케이션에 `inertiajs/inertia-laravel`, `react`, `@inertiajs/react`, `@portone/browser-sdk`가 있어야 합니다. 스타터 킷에는 앞의 셋이 들어 있으니 SDK만 설치합니다 (`npm install @portone/browser-sdk`).
+- 스타터 킷은 `resources/js/pages/**/*.tsx`를 자동으로 찾으므로 `vite.config.js`에 엔트리를 더할 필요가 없습니다.
+- 주문서는 `prepare` 라우트(JSON 응답)에 Inertia 방문이 아닌 `fetch`로 요청하고, 페이지 prop `csrfToken`을 `X-CSRF-TOKEN` 헤더로 보냅니다.
+- v0.7.2의 React 스텁은 카드 결제만 제공합니다. 빌링키 등록 페이지(`billing-key.tsx`)는 v0.8.0에서 추가됩니다.
+
 ### 3. 환경 변수 설정
 
 브라우저 결제창에는 `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`가, 서버 검증에는 `PORTONE_API_SECRET`이 필요합니다. `.env`에 값을 채웁니다 (전체 항목은 [설정](#1-환경-변수) 참고).
@@ -340,6 +362,8 @@ PORTONE_CHANNEL_KEY=
 5. 주문 완료 화면은 내 결제이면서 결제된 적 있는 건(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`)만 보여 주고, 결제 전·알 수 없는 건은 `404`
 
 > 로컬에서 모바일 흐름을 확인할 때는 `redirectUrl`이 휴대폰에서 닿는 주소여야 합니다. `127.0.0.1` 대신 ngrok 공개 URL이나 LAN 호스트로 serve하세요.
+
+> PC 크롬에서 `127.0.0.1`·`localhost`로 띄운 앱을 결제하면, 크롬의 로컬 네트워크 접근 검사(Local Network Access) 때문에 승인 뒤 KCP 결제창이 "결제가 진행중입니다"에서 멈추고 `redirectUrl`로 돌아오지 않을 수 있습니다(크롬 157에서 확인, 결제 자체는 `PAID`). ngrok 공개 URL로 serve하거나, 개발용 크롬을 `--disable-features=LocalNetworkAccessChecks`로 실행하세요. 로컬 주소로 띄울 때만 생기는 현상으로 보이며, 공개 도메인 운영 환경에서는 확인하지 않았습니다.
 
 ### 5. 화면 커스터마이징
 

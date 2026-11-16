@@ -53,4 +53,5 @@ jobs:
       - run: composer test
       - run: npm ci
       - run: npm run check
+      - run: npm run typecheck
       - run: npm test

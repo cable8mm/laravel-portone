@@ -565,7 +565,7 @@
 
 - [ ] T-049 Inertia React stubs
   - Satisfies: PRODUCT_SPEC.md SCR-014 (EL-087 to EL-091), EL-059, FR-150 to FR-154, FLOW-008, AC-111; TECH_STACK.md section 1 and section 4; ARCHITECTURE.md SF-16, CMP-28, RD-46
-  - Depends on: T-048
+  - Depends on: T-048, T-053
   - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
   - External boundary: yes (browser payment and billing-key windows)
   - Acceptance criteria:
@@ -603,3 +603,18 @@
     - A completion and a cancellation sync through EL-049 store the set receipt URL in receipt_url.
     - README documents setting the receipt URL on EL-049.
     - Unit tests and static checks pass.
+
+- [X] T-053 Inertia React checkout stubs and release v0.7.2
+  - Satisfies: PRODUCT_SPEC.md SCR-014 (EL-087, EL-088, EL-090, EL-091), EL-059, FR-150 to FR-153, FLOW-008; TECH_STACK.md section 1, section 4, and section 6; ARCHITECTURE.md SF-16, CMP-28
+  - Depends on: T-050
+  - External boundary: yes (browser payment window)
+  - Acceptance criteria:
+    - vendor:publish with EL-059 publishes the checkout and completed TSX pages, the Inertia controller, and the route file; EL-024 publishes what it published in v0.7.0.
+    - The Inertia controller has the checkout actions of EL-029 and renders the two pages with the same values the Blade views receive.
+    - The React checkout page offers the card payment only, as the v0.7.0 Blade checkout does.
+    - The billing-key page, actions, and routes (EL-089, FR-154 to FR-160) are not part of this task; T-049 adds them in v0.8.0.
+    - Vitest with @testing-library/react covers the states and calls of each page; the TypeScript check runs in CI.
+    - A Workbench Inertia app completes a live payment through the published React pages.
+    - README documents the Inertia React stubs.
+    - CHANGELOG.md is not edited by hand.
+    - Tag v0.7.2 is released after CI passes; it adds no breaking change to v0.7.0.

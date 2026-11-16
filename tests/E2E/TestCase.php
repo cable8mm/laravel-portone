@@ -10,6 +10,7 @@ use Dotenv\Dotenv;
 use Illuminate\Support\Facades\Route;
 use Laravel\Dusk\Browser;
 use Orchestra\Testbench\Concerns\WithWorkbench;
+use Orchestra\Testbench\Dusk\Options;
 use Orchestra\Testbench\Dusk\TestCase as DuskTestCase;
 use Workbench\App\Http\Middleware\MapBrowserSdkImport;
 use Workbench\App\Models\User;
@@ -39,7 +40,16 @@ abstract class TestCase extends DuskTestCase
     ];
 
     /** @var list<string> */
-    private array $createdFiles = [];
+    protected array $createdFiles = [];
+
+    public static function setUpBeforeClass(): void
+    {
+        // The served app is a local address; Chrome's Local Network Access checks keep the PortOne
+        // payment iframe from finishing against it, so the redirect return never happens (T-053).
+        Options::addArgument('--disable-features=LocalNetworkAccessChecks');
+
+        parent::setUpBeforeClass();
+    }
 
     protected function getPackageProviders($app): array
     {
@@ -186,7 +196,7 @@ abstract class TestCase extends DuskTestCase
         self::assertNotFalse(file_put_contents($path, implode("\n", $lines).PHP_EOL, LOCK_EX));
     }
 
-    private function publishCheckoutStubs(): void
+    protected function publishCheckoutStubs(): void
     {
         $this->artisan('vendor:publish', [
             '--tag' => 'portone-stubs',
@@ -213,7 +223,7 @@ abstract class TestCase extends DuskTestCase
      * Package configures no bundler, so the entry is copied as-is behind a
      * manifest and its SDK import is resolved by MapBrowserSdkImport.
      */
-    private function buildCheckoutEntry(): void
+    protected function buildCheckoutEntry(): void
     {
         $sdk = package_path('node_modules/@portone/browser-sdk/dist');
         self::assertFileExists($sdk.'/v2.js', 'Run npm ci to install @portone/browser-sdk.');
