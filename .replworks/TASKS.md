@@ -628,3 +628,15 @@
     - The completion, expiry, duplicate, billing-key, webhook, event, refund, and checkout-stub tests also run with immutable dates.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.3 is released after CI passes; it adds no breaking change to v0.7.2.
+
+- [X] T-055 Buyer name in the checkout stubs and release v0.7.4
+  - Satisfies: PRODUCT_SPEC.md FR-047, EL-052
+  - Depends on: T-054; cable8mm/portone-php T-069 (BrowserPaymentRequest customerName, v0.8.0)
+  - External boundary: no (`customer.fullName` is a field of the documented browser SDK `customer` object; replworks/digikey T-067 live-verified it on the KCP test channel on 2026-11-17)
+  - Acceptance criteria:
+    - The Blade and Inertia React checkout controllers pass the authenticated user's name to BrowserPaymentRequest as customerName, so the prepare response carries `customer.fullName`.
+    - A user without a name gets `customer` with customerId only.
+    - The Package requires cable8mm/portone-php ^0.8.0.
+    - README documents the buyer name in the checkout flow.
+    - CHANGELOG.md is not edited by hand.
+    - Tag v0.7.4 is released after CI passes; it adds no breaking change to v0.7.3.
