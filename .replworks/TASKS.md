@@ -543,7 +543,7 @@
     - Unit tests and static checks pass.
 
 - [X] T-047 Subscriptions
-  - Satisfies: PRODUCT_SPEC.md Outputs (Payment record fields subscription and for_subscription), SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, FR-164 to FR-167, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-066, AC-102, AC-106 to AC-110, AC-114; ARCHITECTURE.md SF-12, SF-15, CMP-24 to CMP-27, AR-01, AR-06, AR-14, RD-45, RD-49 to RD-52
+  - Satisfies: PRODUCT_SPEC.md Outputs (Payment record fields subscription and for_subscription), SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, FR-164 to FR-167, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-066, AC-102, AC-106 to AC-110, AC-114, AC-115; ARCHITECTURE.md SF-12, SF-15, CMP-24 to CMP-27, AR-01, AR-06, AR-14, RD-45, RD-49 to RD-53
   - Depends on: T-046
   - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
   - External boundary: yes
