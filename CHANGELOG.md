@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.7.3 - 2026-11-17
+
+v0.7.3은 `Date::use(CarbonImmutable::class)`를 쓰는 애플리케이션(Laravel 스타터 킷 기본값)에서 결제 확정이 실패하던 문제를 고칩니다. 호환성이 깨지는 변경은 없습니다.
+
+### 수정
+
+- 브라우저 복귀, `Transaction.Paid` 웹훅, 만료 확인의 결제 확정과 `portone:expire-pending`, 중복 결제 취소, 빌링키 발급 확인·삭제가 `CarbonImmutable`을 받으면 `TypeError`(HTTP 500)가 나던 문제를 고쳤습니다. 날짜 타입을 `Carbon\CarbonInterface`로 바꿨습니다.
+- 위 흐름의 테스트를 불변 날짜(`CarbonImmutable`)로도 실행합니다.
+
 ## v0.7.2 - 2026-11-16
 
 v0.7.2는 Laravel React 스타터 킷(Inertia + React + TypeScript)용 체크아웃 스텁을 추가합니다. 호환성이 깨지는 변경은 없습니다.
