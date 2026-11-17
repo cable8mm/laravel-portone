@@ -1,0 +1,97 @@
+{
+	"recordedAt": "2026-11-17T16:06:46+00:00",
+	"client": "cable8mm/portone-php through cable8mm/laravel-portone",
+	"channel": "NHN KCP test (PORTONE_E2E_CHANNEL_KEY)",
+	"interval": "1m",
+	"amount": 100,
+	"retryAfter": "1,3,5",
+	"start": {
+		"subscription": {
+			"status": "ACTIVE",
+			"cancel_at_period_end": false,
+			"current_period_start": "2026-11-17T16:06:44.000000Z",
+			"current_period_end": "2026-12-17T16:06:44.000000Z",
+			"next_charge_at": "2026-12-17T16:06:44.000000Z",
+			"failed_attempts": 0
+		},
+		"firstPayment": {
+			"recordStatus": "PAID",
+			"portOneStatus": "PAID",
+			"portOneTotal": 100
+		}
+	},
+	"deleteWhileActive": {
+		"result": "Cable8mm\\LaravelPortone\\Exceptions\\InvalidBillingKeyException",
+		"recordStatus": "ISSUED",
+		"portOneKeyStatus": "ISSUED"
+	},
+	"renewal": {
+		"forcedDueTime": "2026-12-17T16:06:44+00:00",
+		"subscription": {
+			"status": "ACTIVE",
+			"current_period_start": "2026-12-17T16:06:44.000000Z",
+			"current_period_end": "2027-01-17T16:06:44.000000Z",
+			"next_charge_at": "2027-01-17T16:06:44.000000Z",
+			"failed_attempts": 0
+		},
+		"payment": {
+			"recordStatus": "PAID",
+			"portOneStatus": "PAID",
+			"portOneTotal": 100
+		}
+	},
+	"refusedRenewal": {
+		"by": "BillingKeyGateway::deleteBillingKey() (the EL-075 request) without the record write, then EL-084 at the next due time",
+		"billingKeyRecordStatusAtCharge": "ISSUED",
+		"attemptPayment": {
+			"recordStatus": "PENDING",
+			"portOneLookup": "PAYMENT_NOT_FOUND"
+		},
+		"subscription": {
+			"status": "PAST_DUE",
+			"current_period_end": "2027-01-17T16:06:44.000000Z",
+			"next_charge_at": "2027-01-18T16:06:44.000000Z",
+			"failed_attempts": 1
+		}
+	},
+	"cancelPastDue": {
+		"status": "ENDED",
+		"cancel_at_period_end": true,
+		"ended_at": "2027-01-17T16:06:44.000000Z"
+	},
+	"events": [
+		{
+			"event": "PaymentCompleted",
+			"status": "PAID",
+			"source": "charge"
+		},
+		{
+			"event": "SubscriptionStarted",
+			"status": "ACTIVE"
+		},
+		{
+			"event": "PaymentCompleted",
+			"status": "PAID",
+			"source": "charge"
+		},
+		{
+			"event": "SubscriptionRenewed",
+			"status": "ACTIVE"
+		},
+		{
+			"event": "SubscriptionRenewalFailed",
+			"status": "PAST_DUE",
+			"attempt": 1,
+			"nextChargeAt": "2027-01-18T16:06:44+00:00"
+		},
+		{
+			"event": "SubscriptionCancelled",
+			"status": "ENDED"
+		},
+		{
+			"event": "SubscriptionEnded",
+			"status": "ENDED"
+		}
+	],
+	"secretsRecorded": false
+}

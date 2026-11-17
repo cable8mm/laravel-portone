@@ -101,7 +101,8 @@ class PortOneSubscriptionTest extends TestCase
             self::fail('Deleting a key charged by an ACTIVE subscription must be refused.');
         } catch (InvalidBillingKeyException) {
         }
-        self::assertSame('ISSUED', $issued->fresh()->status);
+        $recordAfterRefusal = $issued->fresh()->status;
+        self::assertSame('ISSUED', $recordAfterRefusal);
         $keyAfterRefusal = $this->app->make(BillingKeyGateway::class)->billingKeyInfo($plainKey);
         self::assertSame('ISSUED', $keyAfterRefusal->status);
 
@@ -156,7 +157,7 @@ class PortOneSubscriptionTest extends TestCase
             ],
             'deleteWhileActive' => [
                 'result' => InvalidBillingKeyException::class,
-                'recordStatus' => $issued->fresh()->status,
+                'recordStatus' => $recordAfterRefusal,
                 'portOneKeyStatus' => $keyAfterRefusal->status,
             ],
             'renewal' => [
