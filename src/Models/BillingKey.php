@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 
 /**
  * 빌링키 기록 Eloquent 모델. 빌링키 발급 1건이며, 한 Billable 모델이 소유한다.
@@ -22,10 +22,10 @@ use Illuminate\Support\Carbon;
  * @property string $issue_name
  * @property string|null $billing_key 암호화한 빌링키, 발급 전에는 null
  * @property string $status PENDING, ISSUED, FAILED, DELETED 중 하나
- * @property Carbon|null $issued_at
- * @property Carbon|null $deleted_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property CarbonInterface|null $issued_at
+ * @property CarbonInterface|null $deleted_at
+ * @property CarbonInterface $created_at
+ * @property CarbonInterface $updated_at
  */
 class BillingKey extends Model
 {

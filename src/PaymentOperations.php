@@ -17,9 +17,9 @@ use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -615,7 +615,7 @@ class PaymentOperations
      * 조회에 영수증 URL이 없으면 receipt_url을 그대로 둔다(FR-113).
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
+     * @param  array{status: string, paid_at: CarbonInterface, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $outcome  저장할 절대값
      * @param  PaymentEventSource  $source  결제 이벤트의 source
      * @param  GatewayPayment|null  $lookup  이 저장이 반영하는 PortOne 조회 결과, 조회 없이 쓰면(환불) null
      * @return Payment 갱신된 결제 레코드

@@ -480,7 +480,7 @@ class PaymentCompletionTest extends TestCase
         }
     }
 
-    private function migratePackageTables(): void
+    protected function migratePackageTables(): void
     {
         foreach (glob(dirname(__DIR__, 2).'/database/migrations/*.php') ?: [] as $migration) {
             $this->artisan('migrate', [
@@ -497,7 +497,7 @@ class PaymentCompletionTest extends TestCase
         });
     }
 
-    private function gatewayMock(): PaymentGateway&MockObject
+    protected function gatewayMock(): PaymentGateway&MockObject
     {
         $gateway = $this->createMock(PaymentGateway::class);
         $this->app->instance(PaymentGateway::class, $gateway);
@@ -556,7 +556,7 @@ class PaymentCompletionTest extends TestCase
         $this->assertNotNull($payment->paid_at);
     }
 
-    private function billable(int $key): CompletionTestBillableModel
+    protected function billable(int $key): CompletionTestBillableModel
     {
         $billable = new CompletionTestBillableModel;
         $billable->setRawAttributes(['id' => $key]);

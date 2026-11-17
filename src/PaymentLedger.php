@@ -6,13 +6,13 @@ namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Models\Payment;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -213,10 +213,10 @@ class PaymentLedger
      *
      * 만료 명령 전용인 유일한 범위 밖 조회이며, 각 레코드의 Billable 참조와 결제 ID만 돌려준다.
      *
-     * @param  Carbon  $createdBefore  이 시각보다 먼저 만들어진 레코드만 고른다
+     * @param  CarbonInterface  $createdBefore  이 시각보다 먼저 만들어진 레코드만 고른다
      * @return Collection<int, Payment> billable_type·billable_id·payment_id만 채운 결제 레코드
      */
-    public function stalePending(Carbon $createdBefore): Collection
+    public function stalePending(CarbonInterface $createdBefore): Collection
     {
         return Payment::query()
             ->where('status', 'PENDING')
@@ -229,7 +229,7 @@ class PaymentLedger
      * 미리 계산된 결과 값을 레코드에 그대로 쓴다. 증가분이 아닌 절대값이다.
      *
      * @param  Payment  $payment  갱신할 결제 레코드
-     * @param  array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
+     * @param  array{status: string, paid_at: CarbonInterface, paid_amount: int, cancelled_amount?: int}|array{status: string, cancelled_amount: int}|array{status: string, paid_amount: int, cancelled_amount?: int}|array{status: string}  $values  저장할 절대값
      * @return Payment 갱신된 결제 레코드
      */
     public function update(Payment $payment, array $values): Payment
