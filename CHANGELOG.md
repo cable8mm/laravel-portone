@@ -1,5 +1,24 @@
 # Release Notes
 
+## v0.8.0 - 2026-11-17
+
+Subscriptions on billing keys. `Billable::subscribe()` charges the first period and starts a subscription. Schedule `portone:charge-subscriptions` to renew due subscriptions, retry refused renewals (`PORTONE_SUBSCRIPTION_RETRY_AFTER`, default `1,3,5` days) and end cancelled ones. A billing key that an active subscription charges cannot be deleted. A renewal never charges a period twice, even after a failed lookup.
+
+Billing-key registration pages ship as Blade stubs (`--tag=portone-stubs`) and as Inertia React stubs (`--tag=portone-stubs-react`). Until v0.9.0 the stubs offer card payments only.
+
+Requires `cable8mm/portone-php` `^0.8.0`. To upgrade from v0.7.x, publish and run the three new migrations, set `PORTONE_BILLING_CHANNEL_KEY`, schedule `portone:charge-subscriptions`, and republish the stubs if you use them. The README's "v0.7.x에서 v0.8.0으로" section lists every step.
+
+### What's Changed
+
+* feat: subscriptions (T-047) by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/67
+* feat: billing-key Blade stubs (T-048) by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/68
+* feat: Inertia React billing-key stub (T-049) by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/69
+* docs(tasks): move easy payments to v0.9.0 (T-056) by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/70
+* fix: never charge a subscription period twice after a failed lookup by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/71
+* docs: README and release v0.8.0 (T-051) by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/72
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.7.4...v0.8.0
+
 ## v0.7.4 - 2026-11-17
 
 The checkout stubs send the signed-in user's name as `customer.fullName` (FR-047). KCP's receipt lookup asks for the buyer name and amount. A user without a name gets `customerId` only.
