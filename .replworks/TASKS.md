@@ -502,7 +502,7 @@
 
 - [ ] T-043 Observe easy payments limited to card funding
   - Satisfies: PRODUCT_SPEC.md External Systems "Easy payment methods"
-  - Blocked by: a test channel with the easy-payment providers to offer (human step)
+  - Blocked by: a test channel with the easy-payment providers to offer (human step); moved to v0.9.0 (T-056)
   - External boundary: yes
   - Acceptance criteria:
     - For each offered provider, a live requestPayment with payMethod EASY_PAY, the provider, and availablePayMethods [CARD] is run; the funding options shown and the lookup response (method fields) are recorded.
@@ -511,7 +511,7 @@
 
 - [ ] T-044 Payment methods in the checkout
   - Satisfies: PRODUCT_SPEC.md EL-053, EL-054, SCR-006, FR-047 to FR-050, FR-115, FR-116, FR-117, FR-156 (EASY_PAY on the billing-key pages), ERR-021, AC-046, AC-047, AC-099; ARCHITECTURE.md CMP-11, CMP-13, RD-23
-  - Depends on: T-043, T-049
+  - Depends on: T-043, T-049 (moved to v0.9.0, T-056)
   - External boundary: yes (browser payment window)
   - Acceptance criteria:
     - The Blade checkout and the Inertia React checkout page each show one button per EL-053 entry; prepare sets payMethod and easyPay by FR-116 and rejects other values with 422.
@@ -588,12 +588,11 @@
     - Tag v0.7.0 is released after CI passes.
 
 - [ ] T-051 README and release v0.8.0
-  - Satisfies: PRODUCT_SPEC.md Purpose (subscriptions, billing-key and Inertia React stubs, easy-payment methods), External Systems "Easy payment methods"; TECH_STACK.md section 6
-  - Depends on: T-043, T-044, T-047, T-048, T-049, T-050
+  - Satisfies: PRODUCT_SPEC.md Purpose (subscriptions, billing-key and Inertia React stubs); TECH_STACK.md section 6
+  - Depends on: T-047, T-048, T-049, T-050
   - External boundary: no
   - Acceptance criteria:
-    - README documents subscriptions, the billing-key Blade stubs, and the Inertia React stubs.
-    - README documents the payment methods of EL-053 and EL-054, including easy payments limited to card funding, for both stub variants.
+    - README documents subscriptions, the billing-key Blade stubs, and the Inertia React stubs, and states that the stubs offer card only until v0.9.0 (T-056).
     - CHANGELOG.md is not edited by hand.
     - Tag v0.8.0 is released after CI passes.
 
@@ -643,3 +642,12 @@
     - README documents the buyer name in the checkout flow.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.4 is released after CI passes; it adds no breaking change to v0.7.3.
+
+- [ ] T-056 README and release v0.9.0
+  - Satisfies: PRODUCT_SPEC.md Purpose (easy-payment methods), External Systems "Easy payment methods"; TECH_STACK.md section 6
+  - Depends on: T-043, T-044, T-051
+  - External boundary: no
+  - Acceptance criteria:
+    - README documents the payment methods of EL-053 and EL-054, including easy payments limited to card funding, for both stub variants and the billing-key pages.
+    - CHANGELOG.md is not edited by hand.
+    - Tag v0.9.0 is released after CI passes.
