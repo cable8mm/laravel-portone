@@ -575,6 +575,56 @@ class SubscriptionTest extends TestCase
         $this->assertSame([BillingKeyDeleted::class], array_map(get_class(...), $this->events));
     }
 
+    public function test_subscribe_without_an_api_secret_sends_no_request_and_creates_no_record(): void
+    {
+        $user = SubscriptionUser::query()->create();
+        $key = $this->issuedKey($user, self::KEY);
+        $this->gateway->configured = false;
+
+        $this->assertInstanceOf(ConfigurationException::class, $this->caught(fn () => $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m')));
+
+        $this->assertSame([], $this->gateway->requests);
+        $this->assertSame([0, 0], [Payment::query()->count(), Subscription::query()->count()]);
+        $this->assertSame([], $this->events);
+    }
+
+    public function test_a_key_deleted_by_webhook_fails_each_renewal_until_another_key_is_referenced(): void
+    {
+        $user = SubscriptionUser::query()->create();
+        $key = $this->issuedKey($user, self::KEY);
+        $second = $this->issuedKey($user, self::OTHER_KEY);
+        $this->chargesSucceed();
+        $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+
+        // FR-166: BillingKey.Deleted applies although an ACTIVE subscription charges the key. After deletion
+        // getBillingKeyInfo reports DELETED with the issuance values (T-045 steps.afterDeletion).
+        $this->gateway->info(self::KEY, 'DELETED', $key->customer_id, $key->issue_id);
+        $this->app->make(PaymentOperations::class)->applyBillingKeyWebhook('BillingKey.Deleted', self::KEY);
+        $this->assertSame('DELETED', $key->fresh()->status);
+        $this->assertSame('ACTIVE', $subscription->fresh()->status);
+        $this->gateway->requests = [];
+        $this->events = [];
+
+        // EL-085 refuses the DELETED record (ERR-024) without a request and counts a failed renewal (FR-139).
+        $this->travelTo($subscription->next_charge_at);
+        $this->runCharge($subscription);
+        $pastDue = $subscription->fresh();
+        $this->assertSame(['PAST_DUE', 1], [$pastDue->status, $pastDue->failed_attempts]);
+        $this->assertSame([], $this->gateway->requests);
+        $this->assertSame([SubscriptionRenewalFailed::class], array_map(get_class(...), $this->events));
+
+        // EL-083 on the PAST_DUE record references another ISSUED key; the retry renews with it.
+        $pastDue->changeBillingKey($second->issue_id);
+        $this->events = [];
+        $this->travelTo($pastDue->next_charge_at);
+        $this->runCharge($subscription);
+
+        $renewed = $subscription->fresh();
+        $this->assertSame(['ACTIVE', 0, '2026-03-28 10:00:00'], [$renewed->status, $renewed->failed_attempts, $renewed->current_period_end->toDateTimeString()]);
+        $this->assertSame([['payWithBillingKey', Payment::query()->latest('id')->firstOrFail()->payment_id, self::OTHER_KEY, 'Pro monthly', 100]], $this->gateway->charges());
+        $this->assertSame([PaymentCompleted::class, SubscriptionRenewed::class], array_map(get_class(...), $this->events));
+    }
+
     public function test_subscription_events_are_dispatched_after_commit_and_discarded_on_rollback(): void
     {
         $user = SubscriptionUser::query()->create();
