@@ -5,21 +5,35 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use Cable8mm\LaravelPortone\Exceptions\AmountMismatchException;
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotFoundException;
+use Cable8mm\LaravelPortone\Exceptions\BillingKeyNotIssuedException;
 use Cable8mm\LaravelPortone\Exceptions\ConfigurationException;
 use Cable8mm\LaravelPortone\Exceptions\DuplicatePaymentException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotFoundException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\Payment;
+use Cable8mm\PortonePhp\Browser\BillingKeyRedirectResult;
+use Cable8mm\PortonePhp\Browser\BrowserBillingKeyRequest;
 use Cable8mm\PortonePhp\Browser\BrowserPaymentRequest;
 use Cable8mm\PortonePhp\Browser\RedirectResult;
 use Cable8mm\PortonePhp\Exception\PortOneException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PortOneCheckoutController
 {
+    /** The name shown for a card registration; replace it with your own. */
+    private const BILLING_KEY_ISSUE_NAME = 'Card registration';
+
+    /** The billing-key method sent to the browser SDK. */
+    private const BILLING_KEY_METHOD = 'CARD';
+
+    /** The session flash key of the billing-key result. */
+    private const BILLING_KEY_ISSUED = 'portone.billing_key_issued';
+
     public function show(Request $request): Response
     {
         $product = $this->product($request);
@@ -123,6 +137,100 @@ class PortOneCheckoutController
                 'status' => $payment->status,
             ],
             'failed' => $failed,
+        ]);
+    }
+
+    public function billingKey(): Response
+    {
+        $storeId = config('portone.store_id');
+        $channelKey = config('portone.billing_channel_key');
+        $missingConfiguration = blank($storeId) || blank($channelKey);
+
+        return Inertia::render('portone/billing-key', [
+            'storeId' => $storeId,
+            'channelKey' => $channelKey,
+            'prepareUrl' => route('portone.billing-key.prepare'),
+            'billingKeyUrl' => route('portone.billing-key'),
+            'csrfToken' => csrf_token(),
+            'missingConfiguration' => $missingConfiguration,
+            'state' => $missingConfiguration ? 'error' : 'initial',
+            'statusText' => $missingConfiguration ? 'Error' : 'Idle',
+        ]);
+    }
+
+    public function prepareBillingKey(): JsonResponse
+    {
+        $billingKey = auth()->user()->prepareBillingKey(self::BILLING_KEY_ISSUE_NAME);
+        $issue = $billingKey->issueParameters();
+
+        $browser = new BrowserBillingKeyRequest(
+            storeId: (string) config('portone.store_id'),
+            channelKey: (string) config('portone.billing_channel_key'),
+            billingKeyMethod: self::BILLING_KEY_METHOD,
+            issueId: $issue['issueId'],
+            issueName: $issue['issueName'],
+            redirectUrl: route('portone.billing-key.completed', ['issueId' => $billingKey->issue_id]),
+            customerId: $issue['customerId'],
+            forceRedirect: true,
+        );
+
+        return response()->json($browser->toArray());
+    }
+
+    public function billingKeyCompleted(Request $request, string $issueId): Response|RedirectResponse
+    {
+        // An Inertia page carries its URL, and the redirect query carries the billing key (FR-160):
+        // handle the query, then render the result from the same path without it.
+        if ($request->query() === []) {
+            return $this->billingKeyResult($issueId, issued: $request->session()->get(self::BILLING_KEY_ISSUED) === true);
+        }
+
+        return redirect()
+            ->route('portone.billing-key.completed', ['issueId' => $issueId])
+            ->with(self::BILLING_KEY_ISSUED, $this->completeBillingKey($request, $issueId));
+    }
+
+    /**
+     * Whether the redirect return issued the billing key of the Issue ID.
+     */
+    private function completeBillingKey(Request $request, string $issueId): bool
+    {
+        try {
+            $redirect = BillingKeyRedirectResult::fromQuery($request->query());
+        } catch (\InvalidArgumentException) {
+            // A return without a billing key or an error code is not a successful issuance.
+            return false;
+        }
+
+        // A failure query also carries a billing key that was never issued; leave every record as it is.
+        if ($redirect->isFailure() || $redirect->billingKey === null) {
+            return false;
+        }
+
+        try {
+            auth()->user()->completeBillingKey($issueId, $redirect->billingKey);
+        } catch (BillingKeyNotFoundException|BillingKeyNotIssuedException|ConfigurationException|PortOneException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * The billing-key page after the redirect return; it never receives the billing key itself.
+     */
+    private function billingKeyResult(string $issueId, bool $issued): Response
+    {
+        return Inertia::render('portone/billing-key', [
+            'storeId' => null,
+            'channelKey' => null,
+            'prepareUrl' => route('portone.billing-key.prepare'),
+            'billingKeyUrl' => route('portone.billing-key'),
+            'csrfToken' => csrf_token(),
+            'missingConfiguration' => false,
+            'state' => $issued ? 'issued' : 'failed',
+            'statusText' => $issued ? 'Issued' : 'Failed',
+            'issueId' => $issueId,
         ]);
     }
 
