@@ -138,7 +138,7 @@ v0.8.0은 구독과 빌링키 등록 스텁을 더합니다. 기존 공개 API�
 4. **구독을 쓰면 새 명령을 스케줄에 등록:** 패키지는 스케줄을 등록하지 않습니다. `portone:charge-subscriptions`를 앱의 스케줄러에 넣고
    큐 워커를 띄우세요([구독](#구독)). 구독을 쓰지 않으면 필요 없습니다.
 5. **`Billable`에 새 메서드:** `subscribe()`, `subscriptions()`가 추가되었습니다. 모델에 같은 이름의 메서드가 이미 있으면 모델 쪽이 트레이트 메서드를
-   가려 패키지 동작이 바뀌므로 이름을 바꾸세요. 같은 이름의 메서드가 있는 다른 트레이트(예: Laravel Cashier의 `Billable`의 `subscriptions()`)와 함께 쓰면
+   가려 패키지 동작이 바뀌므로 이름을 바꾸세요. 같은 이름의 메서드가 있는 다른 트레이트와 함께 쓰면
    PHP 트레이트 충돌 오류가 납니다.
 6. **빌링키 등록 스텁을 쓰려면 다시 발행:** 이미 발행한 컨트롤러·라우트 파일은 앱 것이므로 바뀌지 않습니다. `--force` 없는 `vendor:publish`는 이미 있는 파일을 건너뛰므로
    새 파일(블레이드: `billing-key.blade.php`·`portone-billing-key.js`, React: `billing-key.tsx`)만 복사됩니다. 컨트롤러의 액션 3개(`billingKey`·`prepareBillingKey`·`billingKeyCompleted`)와
