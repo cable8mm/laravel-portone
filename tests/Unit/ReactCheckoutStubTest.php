@@ -124,7 +124,7 @@ class ReactCheckoutStubTest extends TestCase
             'orderName' => 'Order A',
             'totalAmount' => 10000,
             'redirectUrl' => route('portone.checkout.completed', ['paymentId' => $payment->payment_id]),
-            'customer' => ['customerId' => $billable->portOneId()],
+            'customer' => ['customerId' => $billable->portOneId(), 'fullName' => '홍길동'],
             'forceRedirect' => true,
         ]);
         $this->assertSame('PENDING', $payment->status);
@@ -261,7 +261,7 @@ class ReactCheckoutStubTest extends TestCase
     private function billable(int $key): ReactCheckoutBillableUser
     {
         $billable = new ReactCheckoutBillableUser;
-        $billable->setRawAttributes(['id' => $key]);
+        $billable->setRawAttributes(['id' => $key, 'name' => '홍길동']);
 
         return $billable;
     }

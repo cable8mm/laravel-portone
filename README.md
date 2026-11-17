@@ -356,7 +356,7 @@ PORTONE_CHANNEL_KEY=
 체크아웃 흐름 (단일 리다이렉트 방식: PC·모바일 동일):
 
 1. 구매자가 `Start payment` 클릭 → `POST portone.checkout.prepare`(상품 ID만 전송) → `PENDING` 레코드 생성
-2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (`prepare` 응답값 + `CARD`, `KRW`, `redirectUrl`, `forceRedirect: true`) → 브라우저가 포트원으로 이동했다가 `redirectUrl`(`GET portone.checkout.completed/{paymentId}?paymentId=...`)로 복귀
+2. `@portone/browser-sdk/v2`의 `requestPayment` 호출 (`prepare` 응답값 + `CARD`, `KRW`, `redirectUrl`, `forceRedirect: true`, 로그인 사용자 `name`을 담은 `customer.fullName`) → 브라우저가 포트원으로 이동했다가 `redirectUrl`(`GET portone.checkout.completed/{paymentId}?paymentId=...`)로 복귀
 3. 복귀 시 `completed` 액션이 서버에서 결제를 확정(`completePayment`)하고 주문 완료 화면을 렌더. 실패 복귀(`?code=`)나 확정 실패면 실패 화면, 레코드는 `PENDING` 유지
 4. 준비 실패·SDK 호출 실패·결제창을 닫은 뒤 뒤로가기는 주문서의 `Error` 상태로 끝남
 5. 주문 완료 화면은 내 결제이면서 결제된 적 있는 건(`PAID`·`PARTIALLY_CANCELLED`·`CANCELLED`)만 보여 주고, 결제 전·알 수 없는 건은 `404`

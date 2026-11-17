@@ -54,7 +54,7 @@ class CheckoutPrepareActionTest extends TestCase
         config(['portone.api_secret' => null]);
         config(['portone.store_id' => 'store-123', 'portone.channel_key' => 'channel-456']);
         $billable = new CheckoutBillableUser;
-        $billable->setRawAttributes(['id' => 101]);
+        $billable->setRawAttributes(['id' => 101, 'name' => '홍길동']);
         $this->actingAs($billable);
 
         $response = $this->post(route('portone.checkout.prepare'), [
@@ -72,7 +72,7 @@ class CheckoutPrepareActionTest extends TestCase
             'orderName' => 'Order A',
             'totalAmount' => 10000,
             'redirectUrl' => route('portone.checkout.completed', ['paymentId' => $paymentId]),
-            'customer' => ['customerId' => $billable->portOneId()],
+            'customer' => ['customerId' => $billable->portOneId(), 'fullName' => '홍길동'],
             'forceRedirect' => true,
         ]);
         $this->assertSame(1, Payment::query()->count());
@@ -81,6 +81,21 @@ class CheckoutPrepareActionTest extends TestCase
         $this->assertSame(10000, Payment::query()->sole()->amount);
         $this->assertSame($billable->getMorphClass(), Payment::query()->sole()->billable_type);
         $this->assertSame('101', Payment::query()->sole()->billable_id);
+    }
+
+    public function test_prepare_without_a_user_name_sends_only_the_customer_id(): void
+    {
+        $this->migratePackageTables();
+        $this->publishAndIncludeRoutes();
+        config(['portone.store_id' => 'store-123', 'portone.channel_key' => 'channel-456']);
+        $billable = new CheckoutBillableUser;
+        $billable->setRawAttributes(['id' => 101]);
+        $this->actingAs($billable);
+
+        $response = $this->post(route('portone.checkout.prepare'), ['product' => 1]);
+
+        $response->assertOk();
+        $this->assertSame(['customerId' => $billable->portOneId()], $response->json('customer'));
     }
 
     public function test_prepare_failure_propagates_without_wrapping(): void

@@ -52,6 +52,7 @@ class PortOneCheckoutController
             redirectUrl: route('portone.checkout.completed', ['paymentId' => $payment->payment_id]),
             customerId: $checkout['customerId'],
             forceRedirect: true,
+            customerName: auth()->user()->name,
         );
 
         return response()->json($browser->toArray());
