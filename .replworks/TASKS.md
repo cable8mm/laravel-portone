@@ -541,7 +541,7 @@
     - The EL-075 refusal of a key charged by an ACTIVE or PAST_DUE subscription (FR-123 second sentence, that part of ERR-024 and AC-102) is covered by T-047, which adds the Subscription record.
     - Unit tests and static checks pass.
 
-- [ ] T-047 Subscriptions
+- [X] T-047 Subscriptions
   - Satisfies: PRODUCT_SPEC.md Outputs (Payment record fields subscription and for_subscription), SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, FR-164 to FR-167, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-066, AC-102, AC-106 to AC-110, AC-114; ARCHITECTURE.md SF-12, SF-15, CMP-24 to CMP-27, AR-01, AR-06, AR-14, RD-45, RD-49 to RD-52
   - Depends on: T-046
   - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
