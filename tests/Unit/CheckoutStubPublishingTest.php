@@ -140,6 +140,8 @@ class CheckoutStubPublishingTest extends TestCase
             'resources/views/portone/checkout.blade.php',
             'resources/views/portone/completed.blade.php',
             'resources/js/portone-checkout.js',
+            'resources/views/portone/billing-key.blade.php',
+            'resources/js/portone-billing-key.js',
             'app/Http/Controllers/PortOneCheckoutController.php',
             'routes/portone.php',
         ] as $path) {

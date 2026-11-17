@@ -1,9 +1,9 @@
 {
-	"recordedAt": "2026-11-16T23:09:11+00:00",
+	"recordedAt": "2026-11-17T17:33:27+00:00",
 	"publishedStubs": "portone-stubs-react",
 	"scenarios": {
 		"completedPayment": {
-			"paymentId": "98bb8769-f4c3-4fac-bcd6-b8b0edbac101",
+			"paymentId": "ae3d84d4-04c5-443a-950d-7616920a6d1f",
 			"totalAmount": 10000,
 			"paymentStatus": "PAID",
 			"completedPage": "portone/completed (Inertia)",
@@ -17,6 +17,16 @@
 			"servedFrom": "http://127.0.0.1:8001",
 			"portOneStatusAfterPayer": "PAID (lookup through portone:payment)",
 			"redirectReturn": "not performed: after approval the KCP iframe kept showing an in-progress message, no TRANSACTION_OVER reached the page, and the page stayed on /portone/checkout in Loading; the redirect URL was then opened by hand in the same browser session"
+		},
+		"issuedBillingKey": {
+			"channel": "NHN KCP test (PORTONE_BILLING_CHANNEL_KEY, or PORTONE_E2E_CHANNEL_KEY when unset)",
+			"issueId": "bkb5e94a89cd4e854b0e5d6543ba5e9b7a",
+			"pageState": "issued",
+			"pageUrlQuery": null,
+			"recordStatus": "ISSUED",
+			"recordStatusAfterCleanup": "DELETED",
+			"billingKeyPage": "portone/billing-key (Inertia)"
 		}
-	}
+	},
+	"secretsRecorded": false
 }
