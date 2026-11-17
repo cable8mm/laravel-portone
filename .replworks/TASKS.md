@@ -573,7 +573,7 @@
   - External boundary: yes (browser payment and billing-key windows)
   - Acceptance criteria:
     - vendor:publish with EL-059 publishes the three TSX pages, the Inertia controller, and the route file.
-    - The React checkout page offers the card payment only, and the React billing-key page registers a card only; payment-method selection (EL-053) and the EASY_PAY parts of FR-117 and FR-156 are added by T-044 in v0.8.0.
+    - The React checkout page offers the card payment only, and the React billing-key page registers a card only; payment-method selection (EL-053) and the EASY_PAY parts of FR-117 and FR-156 are added by T-044 in v0.9.0 (T-056).
     - Vitest with @testing-library/react covers the states and calls of each page; the TypeScript check passes.
     - A Workbench Inertia app completes a live payment and a live billing-key issuance through the published React pages.
     - Unit tests and static checks pass.
@@ -587,7 +587,7 @@
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.0 is released after CI passes.
 
-- [ ] T-051 README and release v0.8.0
+- [X] T-051 README and release v0.8.0
   - Satisfies: PRODUCT_SPEC.md Purpose (subscriptions, billing-key and Inertia React stubs); TECH_STACK.md section 6
   - Depends on: T-047, T-048, T-049, T-050
   - External boundary: no
