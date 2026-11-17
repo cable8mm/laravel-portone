@@ -16,12 +16,15 @@ final class MapBrowserSdkImport
 {
     public const SDK_URL = '/build/portone-browser-sdk/v2.js';
 
+    /** The routes whose pages load a published script. */
+    private const PAGES = ['portone.checkout', 'portone.billing-key', 'portone.billing-key.completed'];
+
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
         // An Inertia visit answers with JSON; the React pages are bundled with the SDK.
-        if ($request->route()?->getName() !== 'portone.checkout' || $request->hasHeader('X-Inertia')) {
+        if (! in_array($request->route()?->getName(), self::PAGES, true) || $request->hasHeader('X-Inertia')) {
             return $response;
         }
 

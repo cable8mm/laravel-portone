@@ -67,6 +67,8 @@ class PortOneServiceProvider extends ServiceProvider
                 __DIR__.'/../stubs/resources/views/portone/checkout.blade.php' => $this->app->resourcePath('views/portone/checkout.blade.php'),
                 __DIR__.'/../stubs/resources/views/portone/completed.blade.php' => $this->app->resourcePath('views/portone/completed.blade.php'),
                 __DIR__.'/../stubs/resources/js/portone-checkout.js' => $this->app->resourcePath('js/portone-checkout.js'),
+                __DIR__.'/../stubs/resources/views/portone/billing-key.blade.php' => $this->app->resourcePath('views/portone/billing-key.blade.php'),
+                __DIR__.'/../stubs/resources/js/portone-billing-key.js' => $this->app->resourcePath('js/portone-billing-key.js'),
                 __DIR__.'/../stubs/app/Http/Controllers/PortOneCheckoutController.php' => $this->app->path('Http/Controllers/PortOneCheckoutController.php'),
                 __DIR__.'/../stubs/routes/portone.php' => $this->app->basePath('routes/portone.php'),
             ], 'portone-stubs');

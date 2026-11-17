@@ -510,12 +510,13 @@
     - The [UNVERIFIED] mark is cleared only after human confirmation.
 
 - [ ] T-044 Payment methods in the checkout
-  - Satisfies: PRODUCT_SPEC.md EL-053, EL-054, SCR-006, FR-047 to FR-050, FR-115, FR-116, ERR-021, AC-046, AC-047, AC-099; ARCHITECTURE.md CMP-11, CMP-13, RD-23
+  - Satisfies: PRODUCT_SPEC.md EL-053, EL-054, SCR-006, FR-047 to FR-050, FR-115, FR-116, FR-117, FR-156 (EASY_PAY on the billing-key pages), ERR-021, AC-046, AC-047, AC-099; ARCHITECTURE.md CMP-11, CMP-13, RD-23
   - Depends on: T-043, T-049
   - External boundary: yes (browser payment window)
   - Acceptance criteria:
     - The Blade checkout and the Inertia React checkout page each show one button per EL-053 entry; prepare sets payMethod and easyPay by FR-116 and rejects other values with 422.
     - The stub script passes the prepare response to requestPayment unchanged.
+    - The Blade and the Inertia React billing-key pages offer EASY_PAY by FR-117 and FR-156 for each provider confirmed by T-043, and a live easy-payment billing-key issuance of each such provider reaches the Issued state.
     - A live card payment and a live easy payment of each provider confirmed by T-043 complete through the stubs.
     - Unit tests (PHPUnit, Vitest) and static checks pass.
 
@@ -554,7 +555,7 @@
     - A live subscription is started, renewed once by EL-085 with a forced due time, and fails a renewal with a refused billing key into PAST_DUE; the observation is recorded.
     - Unit tests and static checks pass.
 
-- [ ] T-048 Billing-key stubs (Blade)
+- [X] T-048 Billing-key stubs (Blade)
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-092, EL-093, billing-key routes), EL-057, FR-040, FR-117, FR-155 to FR-160, ERR-022, AC-112; ARCHITECTURE.md CMP-29
   - Depends on: T-046
   - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
@@ -562,6 +563,7 @@
   - Acceptance criteria:
     - vendor:publish with EL-024 also publishes the billing-key view and script and their routes and actions.
     - A live run registers a card through the published Blade page and reaches the Issued state; a closed window reaches the Failed state.
+    - The billing-key page registers a card only; the EASY_PAY parts of FR-117 and FR-156 are added by T-044.
     - Unit tests (PHPUnit, Vitest) and static checks pass.
 
 - [ ] T-049 Inertia React stubs
@@ -571,7 +573,7 @@
   - External boundary: yes (browser payment and billing-key windows)
   - Acceptance criteria:
     - vendor:publish with EL-059 publishes the three TSX pages, the Inertia controller, and the route file.
-    - The React checkout page offers the card payment only; payment-method selection (EL-053) is added by T-044 in v0.8.0.
+    - The React checkout page offers the card payment only, and the React billing-key page registers a card only; payment-method selection (EL-053) and the EASY_PAY parts of FR-117 and FR-156 are added by T-044 in v0.8.0.
     - Vitest with @testing-library/react covers the states and calls of each page; the TypeScript check passes.
     - A Workbench Inertia app completes a live payment and a live billing-key issuance through the published React pages.
     - Unit tests and static checks pass.

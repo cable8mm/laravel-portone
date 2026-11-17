@@ -1,0 +1,57 @@
+{
+	"recordedAt": "2026-11-17T17:06:00+00:00",
+	"channel": "NHN KCP test (PORTONE_BILLING_CHANNEL_KEY, or PORTONE_E2E_CHANNEL_KEY when unset)",
+	"publishedStubs": true,
+	"secretsRecorded": false,
+	"scenarios": {
+		"issued": {
+			"issueId": "bk049b9a5efb71769857cf0461b6f74abe",
+			"pageState": "issued",
+			"redirectQuery": {
+				"keys": [
+					"billingKey"
+				]
+			},
+			"prepareResponseKeys": [
+				"storeId",
+				"channelKey",
+				"billingKeyMethod",
+				"issueId",
+				"issueName",
+				"redirectUrl",
+				"customer",
+				"forceRedirect"
+			],
+			"recordStatus": "ISSUED",
+			"recordStatusAfterCleanup": "DELETED"
+		},
+		"closedWindow": {
+			"issueId": "bk6fc3829eb0894094723eb052b5000134",
+			"pageState": "failed",
+			"redirectQuery": {
+				"keys": [
+					"billingKey",
+					"code",
+					"message",
+					"pgCode",
+					"pgMessage"
+				],
+				"code": "FAILURE_TYPE_PG",
+				"message": "[3001] \uc0ac\uc6a9\uc790 \uacb0\uc81c \ucde8\uc18c",
+				"pgCode": "3001",
+				"pgMessage": "\uc0ac\uc6a9\uc790 \uacb0\uc81c \ucde8\uc18c"
+			},
+			"prepareResponseKeys": [
+				"storeId",
+				"channelKey",
+				"billingKeyMethod",
+				"issueId",
+				"issueName",
+				"redirectUrl",
+				"customer",
+				"forceRedirect"
+			],
+			"recordStatus": "PENDING"
+		}
+	}
+}

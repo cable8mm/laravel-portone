@@ -43,8 +43,8 @@ class PortOneBillingKeyTest extends TestCase
     {
         parent::defineEnvironment($app);
 
-        // EL-057 billing_channel_key is added to the configuration file by T-048. Until then the live test uses
-        // the KCP test channel that issued billing keys in T-045 (PORTONE_E2E_CHANNEL_KEY).
+        // EL-057 billing_channel_key (PORTONE_BILLING_CHANNEL_KEY); when it is unset the live test uses the KCP
+        // test channel that issued billing keys in T-045 (PORTONE_E2E_CHANNEL_KEY).
         $app['config']->set('portone.billing_channel_key', self::env('PORTONE_BILLING_CHANNEL_KEY') ?? self::env('PORTONE_E2E_CHANNEL_KEY'));
     }
 

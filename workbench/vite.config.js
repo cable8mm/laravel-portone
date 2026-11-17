@@ -28,6 +28,7 @@ export default defineConfig({
       input: [
         "resources/css/app.css",
         "resources/js/portone-checkout.js",
+        "resources/js/portone-billing-key.js",
         "resources/js/inertia.tsx",
       ],
       publicDirectory: path.relative(root, path.join(application, "public")),
