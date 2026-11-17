@@ -13,7 +13,7 @@ use Cable8mm\LaravelPortone\Events\SubscriptionRenewed;
 use Cable8mm\LaravelPortone\Events\SubscriptionResumed;
 use Cable8mm\LaravelPortone\Exceptions\InvalidSubscriptionStatusException;
 use Cable8mm\LaravelPortone\Models\Subscription;
-use Illuminate\Support\Carbon;
+use Carbon\CarbonInterface;
 
 /**
  * 구독 기록의 상태 규칙을 담은 순수 판단 모음. 저장·시계·PortOne을 다루지 않는다.
@@ -56,10 +56,10 @@ class SubscriptionLifecycle
     /**
      * 시각에 기간을 더한다. 월·년은 말일을 넘기지 않는다(1월 31일 + 1m = 2월 말일).
      *
-     * @param  Carbon  $from  시작 시각(바꾸지 않는다)
+     * @param  CarbonInterface  $from  시작 시각(바꾸지 않는다)
      * @param  string  $interval  검사를 통과한 기간
      */
-    public function addInterval(Carbon $from, string $interval): Carbon
+    public function addInterval(CarbonInterface $from, string $interval): CarbonInterface
     {
         [$count, $unit] = $this->parseInterval($interval) ?? throw new \InvalidArgumentException('Invalid subscription interval.');
         $to = $from->copy();
@@ -74,11 +74,11 @@ class SubscriptionLifecycle
     /**
      * 첫 기간 결제가 PAID가 된 구독 기록의 값(FR-131).
      *
-     * @param  Carbon  $paidAt  첫 기간 결제의 paid_at
+     * @param  CarbonInterface  $paidAt  첫 기간 결제의 paid_at
      * @param  string  $interval  검사를 통과한 기간
      * @return array<string, mixed> 저장할 값
      */
-    public function start(Carbon $paidAt, string $interval): array
+    public function start(CarbonInterface $paidAt, string $interval): array
     {
         $periodEnd = $this->addInterval($paidAt, $interval);
 
@@ -97,9 +97,9 @@ class SubscriptionLifecycle
      * 결제할 때가 된 구독인지 판단한다(FR-134, FR-135): ACTIVE 또는 PAST_DUE이고 next_charge_at이 지금보다 늦지 않다.
      *
      * @param  Subscription  $subscription  구독 기록
-     * @param  Carbon  $now  현재 시각
+     * @param  CarbonInterface  $now  현재 시각
      */
-    public function isDue(Subscription $subscription, Carbon $now): bool
+    public function isDue(Subscription $subscription, CarbonInterface $now): bool
     {
         return in_array($subscription->status, ['ACTIVE', 'PAST_DUE'], true)
             && $subscription->next_charge_at->lessThanOrEqualTo($now);
@@ -108,10 +108,10 @@ class SubscriptionLifecycle
     /**
      * 해지 예약된 구독을 기간 끝에 끝낸다(FR-136).
      *
-     * @param  Carbon  $now  현재 시각
+     * @param  CarbonInterface  $now  현재 시각
      * @return Outcome
      */
-    public function end(Carbon $now): array
+    public function end(CarbonInterface $now): array
     {
         return ['values' => ['status' => 'ENDED', 'ended_at' => $now], 'events' => [SubscriptionEnded::class]];
     }
@@ -145,11 +145,11 @@ class SubscriptionLifecycle
      * 실패 횟수가 재시도 대기 목록 수를 넘지 않으면 PAST_DUE와 그 위치의 대기 뒤 다시 결제, 넘으면 EXPIRED이다.
      *
      * @param  Subscription  $subscription  구독 기록
-     * @param  Carbon  $now  현재 시각
+     * @param  CarbonInterface  $now  현재 시각
      * @param  list<int>  $retryAfterDays  재시도마다 기다릴 일수(EL-058)
      * @return Outcome
      */
-    public function fail(Subscription $subscription, Carbon $now, array $retryAfterDays): array
+    public function fail(Subscription $subscription, CarbonInterface $now, array $retryAfterDays): array
     {
         $attempts = $subscription->failed_attempts + 1;
 
@@ -174,12 +174,12 @@ class SubscriptionLifecycle
      * 해지 예약(FR-141). PAST_DUE는 재시도를 기다리지 않고 바로 끝낸다. 이미 해지 예약된 ACTIVE 구독은 바꾸지 않는다(null).
      *
      * @param  Subscription  $subscription  구독 기록
-     * @param  Carbon  $now  현재 시각
+     * @param  CarbonInterface  $now  현재 시각
      * @return Outcome|null 바꿀 것이 없으면 null
      *
      * @throws InvalidSubscriptionStatusException ACTIVE·PAST_DUE가 아닐 때
      */
-    public function cancel(Subscription $subscription, Carbon $now): ?array
+    public function cancel(Subscription $subscription, CarbonInterface $now): ?array
     {
         return match (true) {
             $subscription->status === 'PAST_DUE' => [

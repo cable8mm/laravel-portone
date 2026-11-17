@@ -16,11 +16,11 @@ use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Subscription;
 use Cable8mm\PortonePhp\Exception\PortOneException;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -119,10 +119,10 @@ class SubscriptionOperations
      *
      * portone:charge-subscriptions 전용이다. 기록을 바꾸지 않고 PortOne에 요청하지 않는다.
      *
-     * @param  Carbon  $now  현재 시각
+     * @param  CarbonInterface  $now  현재 시각
      * @return list<int> 구독 기록의 키
      */
-    public function dueIds(Carbon $now): array
+    public function dueIds(CarbonInterface $now): array
     {
         return array_values(Subscription::query()
             ->whereIn('status', ['ACTIVE', 'PAST_DUE'])

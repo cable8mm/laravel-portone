@@ -7,10 +7,10 @@ namespace Cable8mm\LaravelPortone\Models;
 use Cable8mm\LaravelPortone\Exceptions\InvalidBillingKeyException;
 use Cable8mm\LaravelPortone\Exceptions\InvalidSubscriptionStatusException;
 use Cable8mm\LaravelPortone\SubscriptionOperations;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Support\Carbon;
 
 /**
  * 구독 기록 Eloquent 모델. 한 Billable 모델이 소유하며, 그 모델의 빌링키 기록 하나로 기간마다 결제한다.
@@ -28,13 +28,13 @@ use Illuminate\Support\Carbon;
  * @property string $interval 기간: <n>d, <n>m, <n>y
  * @property string $status ACTIVE, PAST_DUE, ENDED, EXPIRED 중 하나
  * @property bool $cancel_at_period_end 현재 기간이 끝나면 끝낼지
- * @property Carbon $current_period_start
- * @property Carbon $current_period_end
- * @property Carbon $next_charge_at 다음 결제(갱신 또는 재시도) 시각
+ * @property CarbonInterface $current_period_start
+ * @property CarbonInterface $current_period_end
+ * @property CarbonInterface $next_charge_at 다음 결제(갱신 또는 재시도) 시각
  * @property int $failed_attempts 연속으로 실패한 갱신 결제 횟수
- * @property Carbon|null $ended_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property CarbonInterface|null $ended_at
+ * @property CarbonInterface $created_at
+ * @property CarbonInterface $updated_at
  */
 class Subscription extends Model
 {

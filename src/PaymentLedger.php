@@ -263,10 +263,10 @@ class PaymentLedger
      * 구독 기록에 연결된 PENDING 결제 중 주어진 시각 이후에 만든 것의 결제 ID를 만든 순서대로 반환한다.
      *
      * @param  int  $subscriptionId  구독 기록의 키
-     * @param  Carbon  $createdFrom  이 시각 이후(같은 시각 포함)에 만든 레코드만
+     * @param  CarbonInterface  $createdFrom  이 시각 이후(같은 시각 포함)에 만든 레코드만
      * @return list<string> 결제 ID
      */
-    public function pendingSubscriptionPaymentIds(int $subscriptionId, Carbon $createdFrom): array
+    public function pendingSubscriptionPaymentIds(int $subscriptionId, CarbonInterface $createdFrom): array
     {
         return array_values(Payment::query()
             ->where('subscription_id', $subscriptionId)

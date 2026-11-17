@@ -477,13 +477,13 @@ class PaymentOperations
      * PAID가 된 레코드가 있으면 그것을, 모두 미결제면 null을 반환한다.
      *
      * @param  int  $subscriptionId  구독 기록의 키
-     * @param  Carbon  $periodStart  갱신할 기간의 시작 시각(구독의 current_period_end)
+     * @param  CarbonInterface  $periodStart  갱신할 기간의 시작 시각(구독의 current_period_end)
      * @return Payment|null PAID가 된 결제 레코드, 없으면 null
      *
      * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
      * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
-    public function completeSubscriptionPeriod(int $subscriptionId, Carbon $periodStart): ?Payment
+    public function completeSubscriptionPeriod(int $subscriptionId, CarbonInterface $periodStart): ?Payment
     {
         foreach ($this->payments->pendingSubscriptionPaymentIds($subscriptionId, $periodStart) as $paymentId) {
             try {
