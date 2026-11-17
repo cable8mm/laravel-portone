@@ -566,7 +566,7 @@
     - The billing-key page registers a card only; the EASY_PAY parts of FR-117 and FR-156 are added by T-044.
     - Unit tests (PHPUnit, Vitest) and static checks pass.
 
-- [ ] T-049 Inertia React stubs
+- [X] T-049 Inertia React stubs
   - Satisfies: PRODUCT_SPEC.md SCR-014 (EL-087 to EL-091), EL-059, FR-150 to FR-154, FLOW-008, AC-111; TECH_STACK.md section 1 and section 4; ARCHITECTURE.md SF-16, CMP-28, RD-46
   - Depends on: T-048, T-053
   - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
