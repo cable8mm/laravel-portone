@@ -89,6 +89,15 @@ abstract class TestCase extends DuskTestCase
         $this->publishCheckoutStubs();
         $this->buildCheckoutEntry();
         $this->migrateFreshDatabase();
+
+        // A destroyed test application is not collected at once, so its PDO would keep the SQLite file and its WAL
+        // open into the next test, whose migrate:fresh empties the file under it; the next connection then waits on
+        // that stale WAL until busy_timeout and fails with "database is locked". Close every connection first.
+        $this->beforeApplicationDestroyed(function (): void {
+            foreach (array_keys($this->app['db']->getConnections()) as $name) {
+                $this->app['db']->disconnect($name);
+            }
+        });
     }
 
     protected function tearDown(): void
