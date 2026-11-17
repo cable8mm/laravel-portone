@@ -587,7 +587,7 @@
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.0 is released after CI passes.
 
-- [ ] T-051 README and release v0.8.0
+- [X] T-051 README and release v0.8.0
   - Satisfies: PRODUCT_SPEC.md Purpose (subscriptions, billing-key and Inertia React stubs); TECH_STACK.md section 6
   - Depends on: T-047, T-048, T-049, T-050
   - External boundary: no
