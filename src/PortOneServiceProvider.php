@@ -60,6 +60,7 @@ class PortOneServiceProvider extends ServiceProvider
                 '2026_11_12_000001_add_billing_key_to_portone_payments_table.php',
                 '2026_11_13_000000_create_portone_subscriptions_table.php',
                 '2026_11_13_000001_add_subscription_to_portone_payments_table.php',
+                '2026_11_13_000002_add_for_subscription_to_portone_payments_table.php',
             ]), 'portone-migrations');
 
             $this->publishes([

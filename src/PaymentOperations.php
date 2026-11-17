@@ -207,8 +207,8 @@ class PaymentOperations
 
             $outcome = $this->lifecycle->complete($payment, $gatewayPayment, now());
 
-            // FR-164: a Payment record of a subscription is never cancelled as a duplicate.
-            if ($singlePayment !== null && $payment->subscription_id === null && $this->payments->hasOtherPaid($payment)) {
+            // FR-164: a Payment record of a subscription is never cancelled as a duplicate, whichever completion runs.
+            if ($singlePayment !== null && ! $payment->for_subscription && $this->payments->hasOtherPaid($payment)) {
                 $failure = $this->cancelDuplicate($payment, $gatewayPayment, $source);
 
                 return $payment;
@@ -267,7 +267,7 @@ class PaymentOperations
 
             $outcome = $this->lifecycle->expire($payment, $gatewayPayment, now());
 
-            if ($outcome !== null && $outcome['status'] === 'PAID' && $singlePayment && $payment->subscription_id === null && $this->payments->hasOtherPaid($payment)) {
+            if ($outcome !== null && $outcome['status'] === 'PAID' && $singlePayment && ! $payment->for_subscription && $this->payments->hasOtherPaid($payment)) {
                 $cancellationFailure = $this->cancelDuplicate($payment, $gatewayPayment, PaymentEventSource::Expiry)->getPrevious();
 
                 return;
@@ -426,7 +426,8 @@ class PaymentOperations
      * @param  int  $amount  결제 금액(원, 0보다 커야 함)
      * @param  string  $orderName  주문명(빈 문자열 불가)
      * @param  int|null  $subscriptionId  구독 갱신 결제면 레코드를 만들 때 연결할 구독 기록의 키
-     * @param  bool  $forSubscription  구독 첫 기간 결제면 true. 구독 결제는 중복 결제 규칙을 적용하지 않는다(FR-164)
+     * @param  bool  $forSubscription  구독 첫 기간 결제면 true. 갱신 결제($subscriptionId)와 함께 레코드의 for_subscription이 되며,
+     *                                 그런 레코드에는 어느 경로로 확정되든 중복 결제 규칙을 적용하지 않는다(FR-164)
      * @return Payment 확정된 결제 레코드
      *
      * @throws \InvalidArgumentException 금액이 0 이하이거나 주문명이 비었을 때
@@ -445,26 +446,16 @@ class PaymentOperations
             throw new \InvalidArgumentException('Payment order name must not be empty.');
         }
 
-        [$payment, $billingKey] = $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($billable, $amount, $orderName, $subscriptionId): array {
+        [$payment, $billingKey] = $this->billingKeys->withExclusiveAccess($billable, $issueId, function (?BillingKey $record) use ($billable, $amount, $orderName, $subscriptionId, $forSubscription): array {
             $billingKey = $this->issuedKey($record);
             // ERR-028: 요청을 보낼 수 없으면 결제 레코드도 만들지 않는다.
             $this->billingKeyGateway->assertConfigured();
             $customerId = $this->customers->ensureId($billable);
 
-            return [$this->payments->createPending($billable, $customerId, $amount, $orderName, $record->id, $subscriptionId), $billingKey];
+            return [$this->payments->createPending($billable, $customerId, $amount, $orderName, $record->id, $subscriptionId, $forSubscription || $subscriptionId !== null), $billingKey];
         });
 
         $this->billingKeyGateway->payWithBillingKey($payment->payment_id, $billingKey, $orderName, $amount);
-
-        if ($forSubscription || $subscriptionId !== null) {
-            $paymentId = $payment->payment_id;
-
-            return $this->completeLocked(
-                null,
-                fn (Closure $operation): Payment => $this->payments->withExclusiveAccessByPaymentId($paymentId, $operation),
-                PaymentEventSource::Charge,
-            );
-        }
 
         return $this->completeByPaymentId($payment->payment_id, PaymentEventSource::Charge);
     }

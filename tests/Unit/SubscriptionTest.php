@@ -29,6 +29,7 @@ use Cable8mm\LaravelPortone\PortOneServiceProvider;
 use Cable8mm\LaravelPortone\SubscriptionLifecycle;
 use Cable8mm\LaravelPortone\SubscriptionOperations;
 use Cable8mm\LaravelPortone\Testing\FakePaymentGateway;
+use Cable8mm\LaravelPortone\Testing\InteractsWithPortOneWebhooks;
 use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\Model;
@@ -58,6 +59,8 @@ use Throwable;
  */
 class SubscriptionTest extends TestCase
 {
+    use InteractsWithPortOneWebhooks;
+
     private const KEY = 'billing-key-00000000-0000-0000-0000-000000000001';
 
     private const OTHER_KEY = 'billing-key-00000000-0000-0000-0000-000000000002';
@@ -79,6 +82,7 @@ class SubscriptionTest extends TestCase
     protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+        $app['config']->set('portone.webhook_secret', 'dGVzdC1zZWNyZXQ=');
     }
 
     protected function setUp(): void
@@ -575,6 +579,56 @@ class SubscriptionTest extends TestCase
         $this->assertSame([BillingKeyDeleted::class], array_map(get_class(...), $this->events));
     }
 
+    public function test_a_first_period_record_completed_first_by_another_path_is_never_a_duplicate(): void
+    {
+        foreach ($this->otherCompletions() as $path => $complete) {
+            $user = SingleSubscriptionUser::query()->create();
+            $order = $user->preparePayment(100, 'Order A');
+            $this->payments->payment($order->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+            $this->assertSame('PAID', $user->completePayment($order->payment_id)->status);
+            $key = $this->issuedKey($user, self::KEY);
+
+            // PortOne accepts the charge, and another completion reaches the record before EL-079 completes it.
+            $this->gateway->onCharge = function (string $paymentId) use ($complete): void {
+                $this->payments->payment($paymentId, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+                $complete($paymentId);
+            };
+
+            $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+
+            $first = Payment::query()->where('subscription_id', $subscription->id)->sole();
+            $this->assertSame(['PAID', true, 'ACTIVE'], [$first->status, $first->for_subscription, $subscription->status], $path);
+            $this->assertSame('PAID', $order->fresh()->status, $path);
+            $this->payments->assertNothingCancelled();
+        }
+    }
+
+    public function test_a_first_period_record_paid_without_its_subscription_is_not_the_other_paid_record(): void
+    {
+        foreach ($this->otherCompletions() as $path => $complete) {
+            $user = SingleSubscriptionUser::query()->create();
+            $key = $this->issuedKey($user, self::KEY);
+
+            // FR-167: another completion makes the first-period record PAID, then EL-079 stops before the Subscription record exists.
+            $this->gateway->onCharge = function (string $paymentId) use ($complete): void {
+                $this->payments->payment($paymentId, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+                $complete($paymentId);
+
+                throw new \RuntimeException('worker crashed');
+            };
+            $this->assertSame('worker crashed', $this->caught(fn () => $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m'))?->getMessage(), $path);
+            $first = Payment::query()->where('billable_id', (string) $user->getKey())->sole();
+            $this->assertSame(['PAID', true, null], [$first->status, $first->for_subscription, $first->subscription_id], $path);
+
+            // The ordinary payment is the first that counts, so it becomes PAID.
+            $order = $user->preparePayment(100, 'Order A');
+            $this->assertFalse($order->for_subscription);
+            $this->payments->payment($order->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+            $this->assertSame('PAID', $user->completePayment($order->payment_id)->status, $path);
+            $this->payments->assertNothingCancelled();
+        }
+    }
+
     public function test_subscribe_without_an_api_secret_sends_no_request_and_creates_no_record(): void
     {
         $user = SubscriptionUser::query()->create();
@@ -654,6 +708,35 @@ class SubscriptionTest extends TestCase
         $this->events = [];
 
         return $issued;
+    }
+
+    /**
+     * The completions that can reach a Payment record before EL-079 completes it: EL-005, EL-032 (expiry), FR-101 (a
+     * Transaction.Paid webhook), and EL-042.
+     *
+     * @return array<string, \Closure(string): void>
+     */
+    private function otherCompletions(): array
+    {
+        $owner = static fn (string $paymentId): Payment => Payment::query()->where('payment_id', $paymentId)->sole();
+
+        return [
+            'EL-005' => function (string $paymentId) use ($owner): void {
+                $this->assertSame('PAID', SingleSubscriptionUser::query()->findOrFail($owner($paymentId)->billable_id)->completePayment($paymentId)->status);
+            },
+            'EL-032' => function (string $paymentId) use ($owner): void {
+                $payment = $owner($paymentId);
+                $this->app->make(PaymentOperations::class)->expire($payment->billable_type, $payment->billable_id, $paymentId);
+                $this->assertSame('PAID', $payment->fresh()->status);
+            },
+            'FR-101' => function (string $paymentId) use ($owner): void {
+                $this->postPortOneWebhook('Transaction.Paid', $paymentId)->assertOk();
+                $this->assertSame('PAID', $owner($paymentId)->status);
+            },
+            'EL-042' => function (string $paymentId): void {
+                $this->assertSame('PAID', $this->app->make(PaymentOperations::class)->completeByPaymentId($paymentId)->status);
+            },
+        ];
     }
 
     private function chargesSucceed(): void

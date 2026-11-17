@@ -38,6 +38,7 @@ class MigrationPublishingTest extends TestCase
         $names = $this->publishedNames();
         $this->assertSame([
             'add_billing_key_to_portone_payments_table.php',
+            'add_for_subscription_to_portone_payments_table.php',
             'add_paid_amount_to_portone_payments_table.php',
             'add_receipt_url_to_portone_payments_table.php',
             'add_subscription_to_portone_payments_table.php',
@@ -60,7 +61,7 @@ class MigrationPublishingTest extends TestCase
         $this->publishMigrations();
         $this->publishMigrations();
 
-        $this->assertCount(10, $this->publishedPortOneMigrations());
+        $this->assertCount(11, $this->publishedPortOneMigrations());
     }
 
     /**

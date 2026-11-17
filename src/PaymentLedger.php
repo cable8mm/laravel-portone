@@ -192,7 +192,7 @@ class PaymentLedger
 
     /**
      * 같은 Billable 참조에 이 레코드 말고 이미 결제된(PAID·PARTIALLY_CANCELLED·CANCELLED) 레코드가 있는지 확인한다.
-     * 구독에 연결된 결제 레코드는 세지 않는다(FR-164).
+     * 구독 결제 레코드(for_subscription)는 세지 않는다(FR-164).
      *
      * withBillableExclusiveAccess() 안에서 부르며, 커밋된 최신 값을 읽도록 잠금 조회를 쓴다.
      *
@@ -205,7 +205,7 @@ class PaymentLedger
             ->where('billable_id', $payment->billable_id)
             ->whereKeyNot($payment->getKey())
             // FR-164: payments of subscriptions never count as the single payment.
-            ->whereNull('subscription_id')
+            ->where('for_subscription', false)
             ->whereIn('status', ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED'])
             ->lockForUpdate()
             ->exists();
@@ -287,9 +287,10 @@ class PaymentLedger
      * @param  string  $orderName  주문명
      * @param  int|null  $billingKeyId  빌링키 결제면 결제할 빌링키 기록의 키, 브라우저 결제면 null
      * @param  int|null  $subscriptionId  구독 갱신 결제면 그 구독 기록의 키, 아니면 null
+     * @param  bool  $forSubscription  구독 첫 기간 결제나 갱신 결제면 true(FR-164)
      * @return Payment 생성된 PENDING 결제 레코드
      */
-    public function createPending(Model $billable, string $customerId, int $amount, string $orderName, ?int $billingKeyId = null, ?int $subscriptionId = null): Payment
+    public function createPending(Model $billable, string $customerId, int $amount, string $orderName, ?int $billingKeyId = null, ?int $subscriptionId = null, bool $forSubscription = false): Payment
     {
         while (true) {
             $paymentId = (string) Str::uuid();
@@ -307,6 +308,7 @@ class PaymentLedger
                     'paid_at' => null,
                     'billing_key_id' => $billingKeyId,
                     'subscription_id' => $subscriptionId,
+                    'for_subscription' => $forSubscription,
                 ]);
             } catch (QueryException $exception) {
                 $paymentIdExists = DB::table('portone_payments')
