@@ -461,21 +461,31 @@ class PaymentOperations
     }
 
     /**
-     * 구독 기간의 PENDING 결제 레코드를 먼저 확정한다(FR-137). 갱신 결제 직후 중단된 작업을 다시 실행할 때 두 번 결제하지 않기 위해서다.
+     * 구독 기간의 결제를 찾거나 PENDING 결제 레코드를 먼저 확정한다(FR-137, RD-53). 다시 실행할 때 한 기간을 두 번 결제하지 않기 위해서다.
      *
-     * 구독 기록에 연결되고 기간 시작 시각 이후에 만든 PENDING 레코드를 만든 순서대로 completeByPaymentId()의 규칙(source charge)으로
+     * 구독 기록에 연결되고 기간 시작 시각 이후에 만든 레코드 중 이미 결제된 것(PAID, PARTIALLY_CANCELLED, CANCELLED,
+     * AMOUNT_MISMATCH)이 있으면 PortOne에 묻지 않고 그것을 반환한다. 이전 실행의 조회가 실패한 뒤 웹훅이나 EL-032가 확정한
+     * 레코드가 그렇다. PaymentCompleted는 확정한 경로가 이미 보냈으므로 다시 보내지 않는다.
+     *
+     * 없으면 PENDING 레코드를 만든 순서대로 completeByPaymentId()의 규칙(source charge)으로
      * 확정한다. PortOne이 결제를 모르는 레코드(PAYMENT_NOT_FOUND, 결제 요청이 결제를 만들지 못한 경우)는 미결제로 본다.
      * PAID가 된 레코드가 있으면 그것을, 모두 미결제면 null을 반환한다.
      *
      * @param  int  $subscriptionId  구독 기록의 키
      * @param  CarbonInterface  $periodStart  갱신할 기간의 시작 시각(구독의 current_period_end)
-     * @return Payment|null PAID가 된 결제 레코드, 없으면 null
+     * @return Payment|null 이 기간의 결제 레코드, 없으면 null
      *
      * @throws AmountMismatchException 실결제액이 결제 금액과 다를 때
      * @throws DuplicatePaymentException 한 번만 결제되는 모델에 이미 결제된 레코드가 있을 때
      */
     public function completeSubscriptionPeriod(int $subscriptionId, CarbonInterface $periodStart): ?Payment
     {
+        $paid = $this->payments->paidSubscriptionPayment($subscriptionId, $periodStart);
+
+        if ($paid !== null) {
+            return $paid;
+        }
+
         foreach ($this->payments->pendingSubscriptionPaymentIds($subscriptionId, $periodStart) as $paymentId) {
             try {
                 $payment = $this->completeLocked(
