@@ -1,5 +1,17 @@
 # Release Notes
 
+## v0.7.4 - 2026-11-17
+
+The checkout stubs send the signed-in user's name as `customer.fullName` (FR-047). KCP's receipt lookup asks for the buyer name and amount. A user without a name gets `customerId` only.
+
+Requires `cable8mm/portone-php` `^0.8.0`. Apps that already published the stubs can add `customerName: auth()->user()->name` to their `BrowserPaymentRequest` in `prepare`. No breaking changes to v0.7.3.
+
+### What's Changed
+
+* feat: send the buyer name from the checkout stubs by [@replworks-bot](https://github.com/replworks-bot) in https://github.com/cable8mm/laravel-portone/pull/66
+
+**Full Changelog**: https://github.com/cable8mm/laravel-portone/compare/v0.7.3...v0.7.4
+
 ## v0.7.3 - 2026-11-17
 
 v0.7.3은 `Date::use(CarbonImmutable::class)`를 쓰는 애플리케이션(Laravel 스타터 킷 기본값)에서 결제 확정이 실패하던 문제를 고칩니다. 호환성이 깨지는 변경은 없습니다.
