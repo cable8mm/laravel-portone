@@ -7,7 +7,7 @@
 - The Package MUST NOT require laravel/framework.
 - Eloquent ORM and Laravel migrations: as provided by the illuminate/\* version in use.
 - illuminate/console and illuminate/queue: ^12.0 || ^13.0; required for the expiry command (EL-031) and the expiry job (EL-032).
-- cable8mm/portone-php: ^0.7.0 (Webhook\WebhookSigner is required by EL-050 and EL-051; Browser\RedirectResult, Browser\BrowserPaymentRequest, Browser\BrowserBillingKeyRequest, Browser\BillingKeyRedirectResult, the Payment amount accessors, and Payment receiptUrl are required by the Core and the stubs; BillingKeyClient and PaymentClient payWithBillingKey are required by the billing-key components)
+- cable8mm/portone-php: ^0.8.0 (Webhook\WebhookSigner is required by EL-050 and EL-051; Browser\RedirectResult, Browser\BrowserPaymentRequest with customerName, Browser\BrowserBillingKeyRequest, Browser\BillingKeyRedirectResult, the Payment amount accessors, and Payment receiptUrl are required by the Core and the stubs; BillingKeyClient and PaymentClient payWithBillingKey are required by the billing-key components)
 - illuminate/http: ^12.0 || ^13.0; required for the HTTP request of the webhook replay command (EL-051)
 - Composer: PSR-4 autoload, Laravel package discovery through composer.json extra.laravel.providers
 - orchestra/testbench: ^10.0 || ^11.0, including Workbench
@@ -66,6 +66,7 @@
 - The expiry job MUST implement Illuminate\Contracts\Queue\ShouldQueue and MUST use the Application's default queue connection.
 - The prunable definition (EL-035) MUST use Laravel's MassPrunable model trait so that model:prune can select it.
 - Configuration values MUST be read through config().
+- The per-record lock of a Subscription record (RD-51) MUST be a Laravel atomic cache lock (Cache::lock) on the Application's default cache store, which MUST support atomic locks; the lock TTL is 300 seconds, and a caller waits at most 120 seconds and then fails with Illuminate\Contracts\Cache\LockTimeoutException.
 - The stub script MUST be an ES module.
 - The stub script MUST import PortOne from @portone/browser-sdk/v2 (verify).
 - The published checkout view MUST load the stub script with Laravel Vite; the Application is responsible for building its published resources/js/portone-checkout.js entry.

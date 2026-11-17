@@ -541,22 +541,23 @@
     - The EL-075 refusal of a key charged by an ACTIVE or PAST_DUE subscription (FR-123 second sentence, that part of ERR-024 and AC-102) is covered by T-047, which adds the Subscription record.
     - Unit tests and static checks pass.
 
-- [ ] T-047 Subscriptions
-  - Satisfies: PRODUCT_SPEC.md SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-102, AC-106 to AC-110; ARCHITECTURE.md SF-15, CMP-24 to CMP-27, RD-45
+- [X] T-047 Subscriptions
+  - Satisfies: PRODUCT_SPEC.md Outputs (Payment record fields subscription and for_subscription), SCR-013 (EL-078 to EL-086), EL-058, FR-065, FR-123, FR-131 to FR-144, FR-164 to FR-167, ERR-024, ERR-026 to ERR-028, FLOW-007, AC-066, AC-102, AC-106 to AC-110, AC-114; ARCHITECTURE.md SF-12, SF-15, CMP-24 to CMP-27, AR-01, AR-06, AR-14, RD-45, RD-49 to RD-52
   - Depends on: T-046
-  - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
+  - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
   - External boundary: yes
   - Acceptance criteria:
     - A migration adds the Subscription record table and the subscription reference of Payment records.
     - Renewal, retry with EL-058, expiry, cancel at period end, resume, and billing-key change follow SCR-013; a re-run after a crash never charges a period twice.
     - EL-075 refuses a billing key charged by an ACTIVE or PAST_DUE Subscription record with InvalidBillingKeyException, sends no request, and changes no record (FR-123, ERR-024, AC-102).
+    - Payment records created by EL-079 and EL-085 have for_subscription true from creation; the duplicate-payment rules do not apply to them whichever completion completes them, and they do not count as another paid payment (FR-164, AC-114).
     - A live subscription is started, renewed once by EL-085 with a forced due time, and fails a renewal with a refused billing key into PAST_DUE; the observation is recorded.
     - Unit tests and static checks pass.
 
 - [ ] T-048 Billing-key stubs (Blade)
   - Satisfies: PRODUCT_SPEC.md SCR-006 (EL-092, EL-093, billing-key routes), EL-057, FR-040, FR-117, FR-155 to FR-160, ERR-022, AC-112; ARCHITECTURE.md CMP-29
   - Depends on: T-046
-  - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
+  - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
   - External boundary: yes (browser billing-key window)
   - Acceptance criteria:
     - vendor:publish with EL-024 also publishes the billing-key view and script and their routes and actions.
@@ -566,7 +567,7 @@
 - [ ] T-049 Inertia React stubs
   - Satisfies: PRODUCT_SPEC.md SCR-014 (EL-087 to EL-091), EL-059, FR-150 to FR-154, FLOW-008, AC-111; TECH_STACK.md section 1 and section 4; ARCHITECTURE.md SF-16, CMP-28, RD-46
   - Depends on: T-048, T-053
-  - Blocked by: KCP billing-key identity verification fails on the test channel with "[CTBE] 인증실패" (human step); moved to v0.8.0 (T-051)
+  - Blocked by: none (KCP billing-key issuance verified again on 2026-11-18 by PortOneBillingKeyTest)
   - External boundary: yes (browser payment and billing-key windows)
   - Acceptance criteria:
     - vendor:publish with EL-059 publishes the three TSX pages, the Inertia controller, and the route file.

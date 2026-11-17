@@ -64,6 +64,16 @@ abstract class TestCase extends DuskTestCase
         Dotenv::createImmutable(package_path())->safeLoad();
         $app['config']->set('portone', require package_path('config/portone.php'));
         $app['config']->set('auth.providers.users.model', User::class);
+
+        // The served app (browser requests and webhooks) and the test process write the same SQLite file at once.
+        // Writers take the lock when a transaction begins and wait for each other instead of failing with
+        // "database is locked"; WAL keeps readers from blocking the writer.
+        $app['config']->set('database.connections.sqlite.busy_timeout', 30_000);
+        $app['config']->set('database.connections.sqlite.journal_mode', 'wal');
+        $app['config']->set('database.connections.sqlite.transaction_mode', 'IMMEDIATE');
+        // An error page of the served app never echoes a request, so a BillingKey webhook body with the
+        // billing key cannot reach the webhook recording (FR-130).
+        $app['config']->set('app.debug', false);
     }
 
     protected function setUp(): void
