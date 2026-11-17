@@ -421,6 +421,7 @@ class WorkbenchSampleShopTest extends TestCase
             file_get_contents(workbench_path('routes/portone.php')),
         );
         $this->assertFileEquals(package_path('stubs/resources/js/portone-checkout.js'), workbench_path('resources/js/portone-checkout.js'));
+        $this->assertFileEquals(package_path('stubs/resources/js/portone-billing-key.js'), workbench_path('resources/js/portone-billing-key.js'));
     }
 
     /**

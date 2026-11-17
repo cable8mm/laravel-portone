@@ -35,6 +35,8 @@ abstract class TestCase extends DuskTestCase
         'resources/views/portone/checkout.blade.php',
         'resources/views/portone/completed.blade.php',
         'resources/js/portone-checkout.js',
+        'resources/views/portone/billing-key.blade.php',
+        'resources/js/portone-billing-key.js',
         'app/Http/Controllers/PortOneCheckoutController.php',
         'routes/portone.php',
     ];
@@ -229,9 +231,9 @@ abstract class TestCase extends DuskTestCase
     }
 
     /**
-     * Stand in for the Application's Vite build of the published entry: the
-     * Package configures no bundler, so the entry is copied as-is behind a
-     * manifest and its SDK import is resolved by MapBrowserSdkImport.
+     * Stand in for the Application's Vite build of the published entries: the
+     * Package configures no bundler, so the entries are copied as-is behind a
+     * manifest and their SDK import is resolved by MapBrowserSdkImport.
      */
     protected function buildCheckoutEntry(): void
     {
@@ -244,7 +246,6 @@ abstract class TestCase extends DuskTestCase
             mkdir($build, 0777, true);
         }
 
-        $entry = 'resources/js/portone-checkout.js';
         $sdkLink = $this->app->publicPath(dirname(ltrim(MapBrowserSdkImport::SDK_URL, '/')));
 
         if (is_link($sdkLink)) {
@@ -252,12 +253,18 @@ abstract class TestCase extends DuskTestCase
         }
 
         self::assertTrue(symlink($sdk, $sdkLink));
-        self::assertTrue(copy($this->app->basePath($entry), $build.'/portone-checkout.js'));
-        self::assertNotFalse(file_put_contents($build.'/manifest.json', json_encode([
-            $entry => ['file' => 'portone-checkout.js', 'src' => $entry, 'isEntry' => true],
-        ], JSON_THROW_ON_ERROR)));
+        $manifest = [];
+        $this->createdFiles[] = $sdkLink;
 
-        array_push($this->createdFiles, $sdkLink, $build.'/portone-checkout.js', $build.'/manifest.json');
+        foreach (['resources/js/portone-checkout.js', 'resources/js/portone-billing-key.js'] as $entry) {
+            $file = basename($entry);
+            self::assertTrue(copy($this->app->basePath($entry), $build.'/'.$file));
+            $manifest[$entry] = ['file' => $file, 'src' => $entry, 'isEntry' => true];
+            $this->createdFiles[] = $build.'/'.$file;
+        }
+
+        self::assertNotFalse(file_put_contents($build.'/manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR)));
+        $this->createdFiles[] = $build.'/manifest.json';
     }
 
     private function migrateFreshDatabase(): void
