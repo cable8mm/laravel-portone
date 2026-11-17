@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Cable8mm\LaravelPortone\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 
 /**
  * 웹훅 기록 Eloquent 모델. webhook-id 하나당 1건이다.
@@ -20,9 +20,9 @@ use Illuminate\Support\Carbon;
  * @property string $type
  * @property string $body 받은 그대로의 요청 본문
  * @property int $attempts 이 webhook-id를 받은 횟수
- * @property Carbon $received_at
- * @property Carbon|null $processed_at
- * @property Carbon|null $failed_at
+ * @property CarbonInterface $received_at
+ * @property CarbonInterface|null $processed_at
+ * @property CarbonInterface|null $failed_at
  * @property string|null $failure 마지막 처리 실패의 예외 클래스와 메시지
  */
 class Webhook extends Model

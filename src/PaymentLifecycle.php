@@ -18,7 +18,7 @@ use Cable8mm\LaravelPortone\Exceptions\InvalidRefundAmountException;
 use Cable8mm\LaravelPortone\Exceptions\PaymentNotPaidException;
 use Cable8mm\LaravelPortone\Models\BillingKey;
 use Cable8mm\LaravelPortone\Models\Payment;
-use Illuminate\Support\Carbon;
+use Carbon\CarbonInterface;
 
 /**
  * 결제 확정·환불·만료·취소 동기화의 상태 전이를 순수하게 계산하는 클래스.
@@ -32,13 +32,13 @@ class PaymentLifecycle
      *
      * @param  Payment  $payment  확정할 PENDING 또는 EXPIRED 결제 레코드
      * @param  GatewayPayment  $gatewayPayment  PortOne 조회 결과
-     * @param  Carbon  $paidAt  paid_at에 기록할 시각
-     * @return array{status: string, paid_at: Carbon, paid_amount: int} 저장할 확정 값
+     * @param  CarbonInterface  $paidAt  paid_at에 기록할 시각
+     * @return array{status: string, paid_at: CarbonInterface, paid_amount: int} 저장할 확정 값
      *
      * @throws PaymentNotPaidException PortOne 상태가 PAID가 아닐 때
      * @throws AmountMismatchException 실결제액을 알 수 없을 때(실결제액이 다르면 호출 전에 isAmountMismatch()로 걸러진다)
      */
-    public function complete(Payment $payment, GatewayPayment $gatewayPayment, Carbon $paidAt): array
+    public function complete(Payment $payment, GatewayPayment $gatewayPayment, CarbonInterface $paidAt): array
     {
         if ($gatewayPayment->status !== 'PAID') {
             throw new PaymentNotPaidException('PortOne has not marked the payment as paid.');
@@ -103,10 +103,10 @@ class PaymentLifecycle
      * 취소 성공이면 DUPLICATE_CANCELLED(실결제액 전액 취소), 실패면 DUPLICATE이며, 둘 다 paid_at을 기록한다.
      *
      * @param  GatewayPayment  $gatewayPayment  금액이 일치하는 PAID 조회 결과
-     * @param  Carbon  $paidAt  paid_at에 기록할 시각
-     * @return array{cancelled: array{status: string, paid_at: Carbon, paid_amount: int, cancelled_amount: int}, failed: array{status: string, paid_at: Carbon, paid_amount: int}} 취소 성공·실패 때 저장할 값
+     * @param  CarbonInterface  $paidAt  paid_at에 기록할 시각
+     * @return array{cancelled: array{status: string, paid_at: CarbonInterface, paid_amount: int, cancelled_amount: int}, failed: array{status: string, paid_at: CarbonInterface, paid_amount: int}} 취소 성공·실패 때 저장할 값
      */
-    public function duplicate(GatewayPayment $gatewayPayment, Carbon $paidAt): array
+    public function duplicate(GatewayPayment $gatewayPayment, CarbonInterface $paidAt): array
     {
         $paidAmount = (int) $gatewayPayment->totalAmount;
 
@@ -133,10 +133,10 @@ class PaymentLifecycle
      *
      * @param  Payment  $payment  확인할 PENDING 결제 레코드
      * @param  GatewayPayment  $gatewayPayment  만료 확인용 PortOne 조회 결과
-     * @param  Carbon  $paidAt  PAID일 때 paid_at에 기록할 시각
-     * @return array{status: string, paid_at: Carbon, paid_amount: int}|array{status: string}|null 저장할 값, 변경이 없으면 null
+     * @param  CarbonInterface  $paidAt  PAID일 때 paid_at에 기록할 시각
+     * @return array{status: string, paid_at: CarbonInterface, paid_amount: int}|array{status: string}|null 저장할 값, 변경이 없으면 null
      */
-    public function expire(Payment $payment, GatewayPayment $gatewayPayment, Carbon $paidAt): ?array
+    public function expire(Payment $payment, GatewayPayment $gatewayPayment, CarbonInterface $paidAt): ?array
     {
         if (! $gatewayPayment->found || in_array($gatewayPayment->status, ['READY', 'FAILED'], true)) {
             return ['status' => 'EXPIRED'];

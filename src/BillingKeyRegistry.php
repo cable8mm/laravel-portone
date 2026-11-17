@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Cable8mm\LaravelPortone;
 
 use Cable8mm\LaravelPortone\Models\BillingKey;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 
@@ -137,9 +137,9 @@ class BillingKeyRegistry
      *
      * @param  BillingKey  $record  잠금을 잡은 PENDING 또는 FAILED 기록
      * @param  string  $billingKey  PortOne이 발급을 확인해 준 평문 빌링키
-     * @param  Carbon  $issuedAt  issued_at에 기록할 시각
+     * @param  CarbonInterface  $issuedAt  issued_at에 기록할 시각
      */
-    public function markIssued(BillingKey $record, #[\SensitiveParameter] string $billingKey, Carbon $issuedAt): BillingKey
+    public function markIssued(BillingKey $record, #[\SensitiveParameter] string $billingKey, CarbonInterface $issuedAt): BillingKey
     {
         return $this->update($record, [
             'billing_key' => Crypt::encryptString($billingKey),
@@ -162,9 +162,9 @@ class BillingKeyRegistry
      * DELETED로 바꾼다.
      *
      * @param  BillingKey  $record  잠금을 잡은 ISSUED 기록
-     * @param  Carbon  $deletedAt  deleted_at에 기록할 시각
+     * @param  CarbonInterface  $deletedAt  deleted_at에 기록할 시각
      */
-    public function markDeleted(BillingKey $record, Carbon $deletedAt): BillingKey
+    public function markDeleted(BillingKey $record, CarbonInterface $deletedAt): BillingKey
     {
         return $this->update($record, ['status' => 'DELETED', 'deleted_at' => $deletedAt]);
     }

@@ -618,3 +618,13 @@
     - README documents the Inertia React stubs.
     - CHANGELOG.md is not edited by hand.
     - Tag v0.7.2 is released after CI passes; it adds no breaking change to v0.7.0.
+
+- [X] T-054 Immutable dates and release v0.7.3
+  - Satisfies: PRODUCT_SPEC.md Constraints; TECH_STACK.md section 1 and section 6
+  - Depends on: T-053
+  - External boundary: no
+  - Acceptance criteria:
+    - Completion, duplicate cancellation, expiry, and billing-key issuance and deletion accept CarbonImmutable from an Application that calls Date::use(CarbonImmutable::class); the Package types dates as CarbonInterface.
+    - The completion, expiry, duplicate, billing-key, webhook, event, refund, and checkout-stub tests also run with immutable dates.
+    - CHANGELOG.md is not edited by hand.
+    - Tag v0.7.3 is released after CI passes; it adds no breaking change to v0.7.2.
