@@ -260,6 +260,25 @@ class PaymentLedger
     }
 
     /**
+     * 구독 기록에 연결되고 주어진 시각 이후에 만든 결제 중 이미 결제된 것(PAID, PARTIALLY_CANCELLED, CANCELLED, AMOUNT_MISMATCH)을
+     * 하나 반환한다(FR-137, RD-53). AMOUNT_MISMATCH_CANCELLED는 Package가 취소했으므로 결제되지 않은 것으로 본다.
+     *
+     * @param  int  $subscriptionId  구독 기록의 키
+     * @param  CarbonInterface  $createdFrom  이 시각 이후(같은 시각 포함)에 만든 레코드만
+     * @return Payment|null 가장 먼저 만든 결제된 레코드, 없으면 null
+     */
+    public function paidSubscriptionPayment(int $subscriptionId, CarbonInterface $createdFrom): ?Payment
+    {
+        return Payment::query()
+            ->where('subscription_id', $subscriptionId)
+            ->whereIn('status', ['PAID', 'PARTIALLY_CANCELLED', 'CANCELLED', 'AMOUNT_MISMATCH'])
+            ->where('created_at', '>=', $createdFrom)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
      * 구독 기록에 연결된 PENDING 결제 중 주어진 시각 이후에 만든 것의 결제 ID를 만든 순서대로 반환한다.
      *
      * @param  int  $subscriptionId  구독 기록의 키

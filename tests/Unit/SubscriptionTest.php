@@ -30,6 +30,7 @@ use Cable8mm\LaravelPortone\SubscriptionLifecycle;
 use Cable8mm\LaravelPortone\SubscriptionOperations;
 use Cable8mm\LaravelPortone\Testing\FakePaymentGateway;
 use Cable8mm\LaravelPortone\Testing\InteractsWithPortOneWebhooks;
+use Cable8mm\PortonePhp\Exception\UnauthorizedException;
 use Cable8mm\PortonePhp\Exception\UnknownException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\Model;
@@ -40,11 +41,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 
 /**
  * T-047: subscriptions (SCR-013, EL-058, FR-065, FR-123, FR-131 to FR-144, FR-164, FR-165, ERR-024, ERR-026 to ERR-028, FLOW-007,
- * AC-102, AC-106 to AC-110).
+ * AC-102, AC-106 to AC-110, AC-115, RD-53).
  *
  * Every PortOne value below is traced to the T-045 observation (tools/probes/portone-billing-key-observation.json):
  * - getBillingKeyInfo after issuance: status ISSUED with customer.id and issueId equal to the issuance values (steps.billingKeyInfo).
@@ -54,6 +56,9 @@ use Throwable;
  *   FAILED with amount.total equal to the charged amount (steps.chargeFailure).
  * - payWithBillingKey on a deleted key is UnknownException HTTP 409 BILLING_KEY_ALREADY_DELETED and creates no payment,
  *   so getPayment is PAYMENT_NOT_FOUND (steps.afterDeletion).
+ *
+ * - A failed getPayment after an accepted charge uses the observed invalid-secret response, UnauthorizedException HTTP 401
+ *   UNAUTHORIZED (tools/probes/portone-payment-lookup-observation.json invalidApiSecret).
  *
  * The billing key and receipt URL path are placeholders because the observation redacts them.
  */
@@ -372,6 +377,100 @@ class SubscriptionTest extends TestCase
         $this->assertCount(2, $this->gateway->charges());
         $this->assertSame('PAID', $pending->fresh()->status);
         $this->assertSame(['ACTIVE', '2026-03-28 10:00:00'], [$subscription->fresh()->status, $subscription->fresh()->current_period_end->toDateTimeString()]);
+        $this->assertSame([PaymentCompleted::class, SubscriptionRenewed::class], array_map(get_class(...), $this->events));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function completionsAfterAFailedLookup(): array
+    {
+        return ['Transaction.Paid webhook' => ['FR-101'], 'expiry check' => ['EL-032']];
+    }
+
+    #[DataProvider('completionsAfterAFailedLookup')]
+    public function test_a_retry_renews_with_a_record_another_completion_paid_after_a_failed_lookup(string $path): void
+    {
+        $user = SubscriptionUser::query()->create();
+        $key = $this->issuedKey($user, self::KEY);
+        $this->chargesSucceed();
+        $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+        $renewal = $this->renewalWithFailedLookup($subscription);
+
+        // PortOne reports the charge paid; the webhook or the expiry check completes the record before the retry.
+        $this->payments->payment($renewal->payment_id, 'PAID', totalAmount: 100, cancelledAmount: 0, receiptUrl: self::RECEIPT);
+        $this->events = [];
+        if ($path === 'FR-101') {
+            $this->postPortOneWebhook('Transaction.Paid', $renewal->payment_id)->assertOk();
+        } else {
+            $this->app->make(PaymentOperations::class)->expire($renewal->billable_type, $renewal->billable_id, $renewal->payment_id);
+        }
+        $this->assertSame('PAID', $renewal->fresh()->status, $path);
+        $this->assertSame([PaymentCompleted::class], array_map(get_class(...), $this->events), $path);
+
+        $this->events = [];
+        $lookups = $this->payments->lookupCount();
+        $this->travelTo($subscription->fresh()->next_charge_at);
+        $this->runCharge($subscription);
+
+        $renewed = $subscription->fresh();
+        $this->assertCount(2, $this->gateway->charges(), $path);
+        $this->assertSame($lookups, $this->payments->lookupCount(), $path);
+        $this->assertSame(['ACTIVE', 0], [$renewed->status, $renewed->failed_attempts], $path);
+        $this->assertSame('2026-02-28 10:00:00', $renewed->current_period_start->toDateTimeString(), $path);
+        $this->assertSame('2026-03-28 10:00:00', $renewed->current_period_end->toDateTimeString(), $path);
+        $this->assertSame('2026-03-28 10:00:00', $renewed->next_charge_at->toDateTimeString(), $path);
+        $this->assertSame([SubscriptionRenewed::class], array_map(get_class(...), $this->events), $path);
+        // The first-period record and the one renewal record; the retry created none.
+        $this->assertSame(2, Payment::query()->where('subscription_id', $subscription->id)->count(), $path);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function paidPeriodStatuses(): array
+    {
+        return ['CANCELLED' => ['CANCELLED'], 'PARTIALLY_CANCELLED' => ['PARTIALLY_CANCELLED'], 'AMOUNT_MISMATCH' => ['AMOUNT_MISMATCH']];
+    }
+
+    #[DataProvider('paidPeriodStatuses')]
+    public function test_a_cancelled_or_mismatched_period_record_prevents_a_new_charge(string $status): void
+    {
+        $user = SubscriptionUser::query()->create();
+        $key = $this->issuedKey($user, self::KEY);
+        $this->chargesSucceed();
+        $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+        $renewal = $this->renewalWithFailedLookup($subscription);
+        // The payer was charged for the period; a refund or an uncancelled mismatch does not make it unpaid.
+        $renewal->forceFill(['status' => $status, 'paid_at' => now(), 'paid_amount' => 100])->save();
+
+        $this->events = [];
+        $this->travelTo($subscription->fresh()->next_charge_at);
+        $this->runCharge($subscription);
+
+        $this->assertCount(2, $this->gateway->charges(), $status);
+        $this->assertSame(['ACTIVE', 0, '2026-03-28 10:00:00'], [$subscription->fresh()->status, $subscription->fresh()->failed_attempts, $subscription->fresh()->current_period_end->toDateTimeString()], $status);
+        $this->assertSame([SubscriptionRenewed::class], array_map(get_class(...), $this->events), $status);
+    }
+
+    public function test_an_amount_mismatch_cancelled_period_record_is_charged_again(): void
+    {
+        $user = SubscriptionUser::query()->create();
+        $key = $this->issuedKey($user, self::KEY);
+        $this->chargesSucceed();
+        $subscription = $user->subscribe($key->issue_id, 'Pro', 100, 'Pro monthly', '1m');
+        $renewal = $this->renewalWithFailedLookup($subscription);
+        // The Package cancelled the mismatched payment itself, so the period is unpaid.
+        $renewal->forceFill(['status' => 'AMOUNT_MISMATCH_CANCELLED', 'paid_at' => now(), 'paid_amount' => 100, 'cancelled_amount' => 100])->save();
+
+        $this->chargesSucceed();
+        $this->events = [];
+        $this->travelTo($subscription->fresh()->next_charge_at);
+        $this->runCharge($subscription);
+
+        $this->assertCount(3, $this->gateway->charges());
+        $this->assertSame(['ACTIVE', 0], [$subscription->fresh()->status, $subscription->fresh()->failed_attempts]);
+        $this->assertSame('PAID', Payment::query()->latest('id')->firstOrFail()->status);
         $this->assertSame([PaymentCompleted::class, SubscriptionRenewed::class], array_map(get_class(...), $this->events));
     }
 
@@ -754,6 +853,27 @@ class SubscriptionTest extends TestCase
         $this->gateway->beforeFailure = function (string $paymentId): void {
             $this->payments->payment($paymentId, 'FAILED', totalAmount: 100, cancelledAmount: 0);
         };
+    }
+
+    /**
+     * Runs the due renewal with a payWithBillingKey that PortOne accepts and a follow-up lookup that fails with the observed
+     * invalid-secret response, so the run counts as a failed renewal and its record stays PENDING.
+     */
+    private function renewalWithFailedLookup(Subscription $subscription): Payment
+    {
+        $this->travelTo($subscription->next_charge_at);
+        $this->gateway->onCharge = function (string $paymentId): void {
+            $this->payments->failLookup($paymentId, new UnauthorizedException('Unauthorized', status: 401, errorType: 'UNAUTHORIZED'));
+        };
+        $this->runCharge($subscription);
+        $this->gateway->onCharge = null;
+
+        $pastDue = $subscription->fresh();
+        $this->assertSame(['PAST_DUE', 1], [$pastDue->status, $pastDue->failed_attempts]);
+        $renewal = Payment::query()->latest('id')->firstOrFail();
+        $this->assertSame(['PENDING', $subscription->id], [$renewal->status, $renewal->subscription_id]);
+
+        return $renewal;
     }
 
     private function pgRefusal(): UnknownException
